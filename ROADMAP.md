@@ -39,7 +39,7 @@ programs running (on a real terminal + headless snapshot tests).
 
 | # | Milestone | Delivers | Acceptance examples | Status |
 |---|-----------|----------|---------------------|--------|
-| **M1** | **Walking skeleton** | Driver (ANSI + headless) · screen buffer + diff renderer · `View`/`Group` · event loop · `Application`/`Program`/`Desktop`/`Background`/`StaticText` · minimal `MenuBar`+`StatusLine` | `tvguid01–03` | **In progress** — Plan 1 built & green; Plans 2 (driver/renderer) & 3 (views/app) **written in full**, ready to build |
+| **M1** | **Walking skeleton** | Driver (ANSI + headless) · screen buffer + diff renderer · `View`/`Group` · event loop · `Application`/`Program`/`Desktop`/`Background`/`StaticText` · minimal `MenuBar`+`StatusLine` | `tvguid01–03` | **Complete** — all three plans built & green; 173 tests passed, PHPStan max clean |
 | M2 | Windowing | `Window`, `Frame`, `ScrollBar`, `Scroller`, `ListViewer`; resize handling | `tvguid04–10` | **Spike plan written** |
 | M3 | Menus-deep + Dialogs | Pull-down menu navigation; `Dialog`, `Button`, `InputLine`, `CheckBoxes`, `RadioButtons`, `Label`, `ListBox`, `MessageBox`; `setData`/`getData` | `tvguid11–16` | **Spike plan written** |
 | M4 | Editor & files | `Validator` family; `Editor`/`FileEditor`/`EditWindow`/`Memo`; `FileDialog`/`ChDirDialog` | `validator.cc`, `tvedit.cc`, std dialogs | **Spike plan written** |
@@ -103,9 +103,10 @@ Most build tasks are sequential TDD and don't warrant multi-agent orchestration.
 
 ## Where we are
 
+- ✅ **M1 complete:** views & application built and green; tvguid01–03 run on a real terminal and pass headless snapshot tests. Next milestone: M2 (windowing — Window, Frame, ScrollBar, Scroller, ListViewer).
 - ✅ Reference-gathering complete (`docs/references/`, `examples/cpp/`).
 - ✅ Foundation design approved (`docs/superpowers/specs/2026-06-05-turbovision-foundation-design.md`).
-- ✅ **M1 Plan 1 built & green** and merged to `main`: Geometry, Drawing, Events (47 tests, PHPStan max clean), tag `m1-foundation-primitives`.
-- ✅ **All remaining plans written:** M1 Plan 2 (driver/renderer) & Plan 3 (views/app) in full TDD detail; M2–M6 as spike outlines.
-- ▶️ **Now:** M1 Plan 2 (driver & renderer) built and green; next is M1 Plan 3 (views & application).
+- ✅ **M1 Plan 1 built & green** and merged to `main`: Geometry, Drawing, Events (47 tests, PHPStan max clean).
+- ✅ **M1 Plan 2 built & green:** Drivers (ANSI + headless), EscapeDecoder, Rendering, Terminal\Screen.
+- ✅ **M1 Plan 3 built & green:** Views (State/View/Group/StaticText/Background/Desktop), Menus (MenuBar/StatusLine + definitions), Application (Program/Application), examples Guide01–03 with headless Feature tests. Full suite: 173 passed, PHPStan max clean.
 - 🛠️ Working directly on `main` (no feature branches by default).

@@ -36,12 +36,9 @@ final readonly class Attribute
     /** An ANSI SGR sequence that resets then applies this attribute. */
     public function toSgr(): string
     {
-        $fg = $this->fg->value;
-        $bg = $this->bg->value;
-
         $codes = [
-            $fg < 8 ? 30 + $fg : 90 + ($fg - 8),
-            $bg < 8 ? 40 + $bg : 100 + ($bg - 8),
+            $this->fg->value < 8 ? 30 + self::ansiCode($this->fg) : 90 + self::ansiCode($this->fg),
+            $this->bg->value < 8 ? 40 + self::ansiCode($this->bg) : 100 + self::ansiCode($this->bg),
         ];
 
         if ($this->blink) {
@@ -49,5 +46,21 @@ final readonly class Attribute
         }
 
         return "\e[0;" . implode(';', $codes) . 'm';
+    }
+
+    /**
+     * Map a CGA color index to its ANSI SGR colour code. CGA orders its low three
+     * bits R-G-B opposite to ANSI's B-G-R, so blue<->red (and cyan<->brown) must be
+     * swapped, otherwise Turbo Vision "blue" would render as red on a real terminal.
+     */
+    private static function ansiCode(Color $color): int
+    {
+        return match ($color->value & 0x07) {
+            1 => 4,  // CGA Blue  -> ANSI Blue
+            3 => 6,  // CGA Cyan  -> ANSI Cyan
+            4 => 1,  // CGA Red   -> ANSI Red
+            6 => 3,  // CGA Brown -> ANSI Yellow
+            default => $color->value & 0x07, // 0 Black, 2 Green, 5 Magenta, 7 Gray map straight
+        };
     }
 }

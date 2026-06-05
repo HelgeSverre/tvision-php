@@ -17,8 +17,8 @@ test('style mirrors Attribute::fromByte(byte)->toSgr()', function (): void {
 
     // 0x07 = light gray on black
     expect($enc->style(0x07))->toBe("\e[0;37;40m")
-        // 0x1F = white (15) on blue (1) -> bright fg
-        ->and($enc->style(0x1F))->toBe("\e[0;97;41m");
+        // 0x1F = white (15) on blue (CGA 1 -> ANSI 4 -> 44) -> bright fg
+        ->and($enc->style(0x1F))->toBe("\e[0;97;44m");
 });
 
 test('run combines move + style + text in order', function (): void {

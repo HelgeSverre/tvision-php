@@ -49,7 +49,7 @@ test('an attr change mid-run re-emits style but not a move', function (): void {
 
     expect($ansi)->toBe(
         "\e[1;1H" . "\e[0;37;40m" . 'a'  // run start: move + style + 'a'
-        . "\e[0;97;41m" . 'bc'           // attr changes: re-style, no move, 'bc'
+        . "\e[0;97;44m" . 'bc'           // attr changes: re-style, no move, 'bc'
     );
 });
 

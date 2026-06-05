@@ -40,3 +40,10 @@ test('screen-control helpers are exact constant strings', function (): void {
         ->and($enc->enableMouse())->toBe("\e[?1000h\e[?1006h")
         ->and($enc->disableMouse())->toBe("\e[?1006l\e[?1000l");
 });
+
+test('synchronized-output markers use DEC 2026 (atomic frames on modern terminals)', function (): void {
+    $enc = new AnsiEncoder();
+
+    expect($enc->beginSyncUpdate())->toBe("\e[?2026h")
+        ->and($enc->endSyncUpdate())->toBe("\e[?2026l");
+});

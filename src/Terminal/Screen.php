@@ -86,7 +86,10 @@ final class Screen
     {
         $ansi = $this->presenter->present($this->front, $this->back, $this->encoder);
         if ($ansi !== '') {
-            $this->driver->write($ansi);
+            // Wrap the frame so modern terminals present it atomically (no tearing).
+            $this->driver->write(
+                $this->encoder->beginSyncUpdate() . $ansi . $this->encoder->endSyncUpdate()
+            );
         }
         $this->front = $this->copyOf($this->back);
     }

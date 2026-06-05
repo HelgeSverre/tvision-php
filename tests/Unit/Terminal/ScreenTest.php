@@ -42,6 +42,20 @@ test('flush writes the diff then makes the next flush a no-op', function (): voi
     expect($driver->takeOutput())->toBe('');
 });
 
+test('flush wraps a non-empty frame in DEC 2026 synchronized-update markers', function (): void {
+    $driver = new HeadlessDriver(5, 1);
+    $screen = new Screen($driver);
+    $screen->init();
+
+    $screen->back()->put(0, 0, new Cell('X', 0x07));
+    $screen->flush();
+
+    $out = $driver->takeOutput();
+    expect($out)->toStartWith("\e[?2026h")  // begin sync
+        ->and($out)->toEndWith("\e[?2026l") // end sync
+        ->and($out)->toContain('X');
+});
+
 test('clear() blanks the back buffer', function (): void {
     $driver = new HeadlessDriver(3, 1);
     $screen = new Screen($driver);

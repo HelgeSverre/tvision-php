@@ -70,4 +70,20 @@ final class AnsiEncoder
     {
         return "\e[?1006l\e[?1000l";
     }
+
+    /**
+     * Begin a synchronized update (DEC private mode 2026). Modern terminals
+     * (Ghostty, kitty, WezTerm, recent xterm) buffer everything until the matching
+     * endSyncUpdate() and present the frame atomically — no tearing or flicker.
+     * Terminals that don't support it ignore the sequence harmlessly.
+     */
+    public function beginSyncUpdate(): string
+    {
+        return "\e[?2026h";
+    }
+
+    public function endSyncUpdate(): string
+    {
+        return "\e[?2026l";
+    }
 }

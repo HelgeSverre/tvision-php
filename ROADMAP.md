@@ -39,7 +39,7 @@ programs running (on a real terminal + headless snapshot tests).
 
 | # | Milestone | Delivers | Acceptance examples | Status |
 |---|-----------|----------|---------------------|--------|
-| **M1** | **Walking skeleton** | Driver (ANSI + headless) · screen buffer + diff renderer · `View`/`Group` · event loop · `Application`/`Program`/`Desktop`/`Background`/`StaticText` · minimal `MenuBar`+`StatusLine` | `tvguid01–03` | **In progress** (spec approved) |
+| **M1** | **Walking skeleton** | Driver (ANSI + headless) · screen buffer + diff renderer · `View`/`Group` · event loop · `Application`/`Program`/`Desktop`/`Background`/`StaticText` · minimal `MenuBar`+`StatusLine` | `tvguid01–03` | **In progress** — Plan 1/3 (foundation primitives) built & green; Plans 2–3 next |
 | M2 | Windowing | `Window`, `Frame`, `ScrollBar`, `Scroller`, `ListViewer`; resize handling | `tvguid04–10` | Planned |
 | M3 | Menus-deep + Dialogs | Pull-down menu navigation; `Dialog`, `Button`, `InputLine`, `CheckBoxes`, `RadioButtons`, `Label`, `ListBox`, `MessageBox`; `setData`/`getData` | `tvguid11–16` | Planned |
 | M4 | Editor & files | `Validator` family; `Editor`/`FileEditor`/`EditWindow`/`Memo`; `FileDialog`/`ChDirDialog` | `validator.cc`, `tvedit.cc`, std dialogs | Planned |
@@ -66,8 +66,23 @@ programs running (on a real terminal + headless snapshot tests).
 - **Object streaming (M6)** — port Borland's binary streamer vs idiomatic PHP
   serialization; decided in M6's own spec.
 
+## Where workflows / "ultracode" pay off (deferred parallel-heavy work)
+
+Most build tasks are sequential TDD and don't warrant multi-agent orchestration. These
+*do*, and should be run as workflows when we reach them:
+
+1. **Escape-sequence decoder corpus (Plan 2).** Fan out agents to build + adversarially
+   verify the terminal-input decoder against real byte sequences from xterm, kitty, tmux,
+   screen, Windows Terminal, iTerm — each emits different bytes for the same key.
+2. **Parallel example translation + faithfulness audit.** Translate the `tvguid*`/demo
+   programs concurrently, each cross-checked against its C++ original for divergence.
+3. **Whole-codebase faithfulness review** against `docs/references/source/` once enough
+   surface exists to audit.
+
 ## Where we are
 
 - ✅ Reference-gathering complete (`docs/references/`, `examples/cpp/`).
 - ✅ Foundation design approved (`docs/superpowers/specs/2026-06-05-turbovision-foundation-design.md`).
-- ▶️ **Now:** turning the M1 design into an implementation plan, then building M1.
+- ✅ M1 implementation plan written (`docs/superpowers/plans/2026-06-05-m1-foundation-primitives.md`).
+- ✅ **M1 Plan 1 built & green:** Geometry, Drawing, Events (47 tests, PHPStan max clean) on branch `feat/foundation-primitives`.
+- ▶️ **Next:** M1 Plan 2 (driver & renderer) — `Driver`/`AnsiDriver`/`HeadlessDriver`, escape decoder, ANSI encoder, diff presenter.

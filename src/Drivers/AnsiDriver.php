@@ -55,6 +55,26 @@ final class AnsiDriver implements Driver
         $this->encoder = new AnsiEncoder();
     }
 
+    /**
+     * True only for a real interactive terminal. Non-OS streams (php://memory,
+     * files, pipes) are rejected before posix_isatty() is called — calling it on
+     * a memory stream emits a warning that `@` does not suppress on PHP 8.5.
+     *
+     * @param resource $stream
+     */
+    private static function isTty($stream): bool
+    {
+        if (! \function_exists('posix_isatty') || ! \is_resource($stream)) {
+            return false;
+        }
+
+        if (stream_get_meta_data($stream)['stream_type'] !== 'STDIO') {
+            return false;
+        }
+
+        return @posix_isatty($stream);
+    }
+
     public function init(): void
     {
         if ($this->initialised) {
@@ -62,9 +82,7 @@ final class AnsiDriver implements Driver
         }
 
         // Validate the environment BEFORE mutating any terminal state.
-        if (! \function_exists('posix_isatty')
-            || ! @posix_isatty($this->stdin)
-            || ! @posix_isatty($this->stdout)) {
+        if (! self::isTty($this->stdin) || ! self::isTty($this->stdout)) {
             throw DriverException::notATty();
         }
 

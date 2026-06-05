@@ -18,7 +18,9 @@
   ],
   "require": {
     "php": ">=8.5",
-    "ext-mbstring": "*"
+    "ext-mbstring": "*",
+    "ext-posix": "*",
+    "ext-pcntl": "*"
   },
   "require-dev": {
     "pestphp/pest": "^3.0",

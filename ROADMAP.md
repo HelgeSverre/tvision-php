@@ -107,5 +107,5 @@ Most build tasks are sequential TDD and don't warrant multi-agent orchestration.
 - ✅ Foundation design approved (`docs/superpowers/specs/2026-06-05-turbovision-foundation-design.md`).
 - ✅ **M1 Plan 1 built & green** and merged to `main`: Geometry, Drawing, Events (47 tests, PHPStan max clean), tag `m1-foundation-primitives`.
 - ✅ **All remaining plans written:** M1 Plan 2 (driver/renderer) & Plan 3 (views/app) in full TDD detail; M2–M6 as spike outlines.
-- ▶️ **Next:** build M1 Plan 2 (driver & renderer) — `AnsiEncoder` → `EscapeDecoder` → `Driver`/`HeadlessDriver`/`AnsiDriver` → `DiffPresenter` → `Screen`, then Plan 3 (views & application) to reach `tvguid01–03` running.
+- ▶️ **Now:** M1 Plan 2 (driver & renderer) built and green; next is M1 Plan 3 (views & application).
 - 🛠️ Working directly on `main` (no feature branches by default).

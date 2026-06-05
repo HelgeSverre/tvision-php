@@ -24,3 +24,13 @@ test('mask constants match the original groupings', function (): void {
         ->and(EventMask::Keyboard)->toBe(0x0010)
         ->and(EventMask::Message)->toBe(0xFF00);
 });
+
+test('routing aliases match TView positionalEvents/focusedEvents', function (): void {
+    // positionalEvents = evMouse; focusedEvents = evKeyboard | evCommand
+    expect(EventMask::Positional)->toBe(0x000F)
+        ->and(EventMask::Focused)->toBe(0x0110)
+        ->and(EventType::KeyDown->inMask(EventMask::Focused))->toBeTrue()
+        ->and(EventType::Command->inMask(EventMask::Focused))->toBeTrue()
+        ->and(EventType::MouseDown->inMask(EventMask::Focused))->toBeFalse()
+        ->and(EventType::MouseDown->inMask(EventMask::Positional))->toBeTrue();
+});

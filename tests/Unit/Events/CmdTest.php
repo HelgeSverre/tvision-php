@@ -17,7 +17,9 @@ test('standard command codes match Turbo Vision', function (): void {
         ->and(Cmd::Ok)->toBe(10)
         ->and(Cmd::Cancel)->toBe(11)
         ->and(Cmd::Yes)->toBe(12)
-        ->and(Cmd::No)->toBe(13);
+        ->and(Cmd::No)->toBe(13)
+        ->and(Cmd::Prev)->toBe(8)
+        ->and(Cmd::Default)->toBe(14);
 });
 
 test('user commands begin at 100', function (): void {

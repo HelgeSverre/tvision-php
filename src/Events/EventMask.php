@@ -17,9 +17,12 @@ final class EventMask
     public const int Broadcast = 0x0200;
     public const int Message = 0xFF00;
 
-    /** Mouse events are routed to the subview under the pointer. */
+    /** Mouse events are routed to the subview under the pointer (positionalEvents). */
     public const int Positional = self::Mouse;
 
-    /** Keyboard events are routed to the focused subview chain. */
-    public const int Focused = self::Keyboard;
+    /**
+     * Keyboard AND command events are routed to the focused subview chain
+     * (focusedEvents = evKeyboard | evCommand, faithful to TView in views.h).
+     */
+    public const int Focused = self::Keyboard | self::Command;
 }

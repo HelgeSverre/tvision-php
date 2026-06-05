@@ -940,8 +940,8 @@ test('moveChar repeats a character N times', function (): void {
     $b = new DrawBuffer(6);
     $b->moveChar(1, '#', 0x07, 3);
 
-    expect(dbChars($b))->toBe(' ### ');
-    // length 6 -> trailing blank kept
+    expect(dbChars($b))->toBe(' ###  ');
+    // width 6 -> two trailing blanks kept
     expect($b->cells())->toHaveCount(6);
 });
 

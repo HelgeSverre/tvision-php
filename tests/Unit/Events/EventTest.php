@@ -8,6 +8,9 @@ use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
 use HelgeSverre\TurboVision\Events\MessageEvent;
+use HelgeSverre\TurboVision\Events\MouseEvent;
+use HelgeSverre\TurboVision\Events\EventMask;
+use HelgeSverre\TurboVision\Geometry\Point;
 
 test('nothing() is the empty event', function (): void {
     $e = Event::nothing();
@@ -49,4 +52,26 @@ test('isCommand() recognises a specific command, isKey() a specific key', functi
         ->and(Event::command(Cmd::Quit)->isCommand(Cmd::Cancel))->toBeFalse()
         ->and(Event::keyDown(new KeyDownEvent(Key::Enter->value))->isKey(Key::Enter))->toBeTrue()
         ->and(Event::keyDown(new KeyDownEvent(Key::Enter->value))->isKey(Key::Esc))->toBeFalse();
+});
+
+test('broadcast() carries a command that isCommand() also matches', function (): void {
+    $e = Event::broadcast(Cmd::Ok, info: 'ctx');
+
+    expect($e->what)->toBe(EventType::Broadcast)
+        ->and($e->what->inMask(EventMask::Message))->toBeTrue()
+        ->and($e->asMessage()?->command)->toBe(Cmd::Ok)
+        ->and($e->asMessage()?->info)->toBe('ctx')
+        ->and($e->isCommand(Cmd::Ok))->toBeTrue()   // isCommand matches Broadcast too
+        ->and($e->isCommand(Cmd::Cancel))->toBeFalse();
+});
+
+test('mouse() wraps a mouse payload exposed via asMouse()', function (): void {
+    $e = Event::mouse(EventType::MouseDown, new MouseEvent(new Point(7, 3), buttons: 1));
+
+    expect($e->what)->toBe(EventType::MouseDown)
+        ->and($e->asMouse())->toBeInstanceOf(MouseEvent::class)
+        ->and($e->asMouse()?->where)->toEqual(new Point(7, 3))
+        ->and($e->asMouse()?->buttons)->toBe(1)
+        ->and($e->asKey())->toBeNull()
+        ->and($e->asMessage())->toBeNull();
 });

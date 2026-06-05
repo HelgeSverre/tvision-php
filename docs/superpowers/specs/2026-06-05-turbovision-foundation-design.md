@@ -185,7 +185,9 @@ Root `HelgeSverre\TurboVision\`, concern-based sub-namespaces. **Bold** = exists
   (`KeyDownEvent|MouseEvent|MessageEvent`). Mutability is intentional and faithful:
   handlers consume an event via `clearEvent()` (sets `what = Nothing`) so it stops
   propagating. Helpers: `isKey()`, `isCommand()`, `clear()`.
-- **`KeyDownEvent`** — `(string $char, int $code, Key|null $key, int $modifiers)`.
+- **`KeyDownEvent`** — `(int $keyCode, string $char = '', int $modifiers = 0)`. The
+  combined TV key code is the identity; `$char` is the printable grapheme (`''` for
+  special keys); match against a `Key` via `KeyDownEvent::is(Key)`.
 - **`MouseEvent`** — `(Point $where, int $buttons, bool $double, int $wheel)`.
 - **`MessageEvent`** — `(int $command, mixed $info)`.
 - **`Key`** — enum of special key codes (faithful `kbXxx`: `Enter`, `Esc`, `Tab`, `F1`…,

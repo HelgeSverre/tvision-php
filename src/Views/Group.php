@@ -203,6 +203,15 @@ class Group extends View
         return $result;
     }
 
+    /** Enqueue an event for the modal/main loop; delegates up to the root Program. */
+    public function putEvent(Event $event): void
+    {
+        $owner = $this->owner;
+        if ($owner instanceof Group) {
+            $owner->putEvent($event);
+        }
+    }
+
     /**
      * Fetch the next event for a modal loop. Walks up to the owner if available;
      * otherwise polls the Screen directly (covers a Group that IS the root, e.g.,

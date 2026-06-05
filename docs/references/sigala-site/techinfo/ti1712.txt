@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1712
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/5
+
+    TITLE  :  Turbo Vision Dialog Box (Modal/Modeless) Examples
+
+
+
+
+  /*
+    The following code shows how to create modal and modeless
+    dialogs in Turbo Vision.  These dialogs are also made
+    resizable and zoomable.
+  */
+
+  #define Uses_TApplication
+  #define Uses_TButton
+  #define Uses_TDeskTop
+  #define Uses_TDialog
+  #define Uses_TEvent
+  #define Uses_TKeys
+  #define Uses_TMenu
+  #define Uses_TMenuBar
+  #define Uses_TMenuItem
+  #define Uses_TRect
+  #define Uses_TStaticText
+  #define Uses_TSubMenu
+  #include <tv.h>
+
+  #define cmOpen  100
+  #define cmOpen1 101
+  #define cmOpen2 102
+  #define cmMaybe 103
+
+
+  class TClassApp : public TApplication
+  {
+  public:
+
+    TClassApp();
+    static TMenuBar *initMenuBar( TRect r );
+    virtual void handleEvent( TEvent& event );
+  };
+
+  TClassApp::TClassApp() :
+    TApplication(),
+    TProgInit( initStatusLine, initMenuBar, initDeskTop )
+  {
+  }
+
+  TMenuBar *TClassApp::initMenuBar( TRect r )
+  {
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1712
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/5
+
+    TITLE  :  Turbo Vision Dialog Box (Modal/Modeless) Examples
+
+
+
+
+    r.b.y = r.a.y + 1;
+    TSubMenu &sub1 =
+      *new TSubMenu ("~F~ile", kbAltF, hcNoContext) +
+        *new TMenuItem ("E~x~it", cmQuit, kbAltX,
+                        hcNoContext, "Alt-X") +
+        *new TMenuItem ("~A~bout", cmOpen, kbAltF3,
+                        hcNoContext, "Alt-F3") +
+        *new TMenuItem ("~M~odeless", cmOpen1, kbAltF4,
+                        hcNoContext, "Alt-F4") +
+        *new TMenuItem ("M~o~dal", cmOpen2, kbAltF5,
+                        hcNoContext, "Alt-F5");
+
+    return new TMenuBar (r, new TMenu ((TMenuItem &) sub1));
+  }
+
+
+  class MyDialog  : public TDialog
+  {
+  public:
+    MyDialog (void);
+  };
+
+  MyDialog::MyDialog (void) :
+    TDialog (TRect (0, 0, 56, 18), "About"),
+    TWindowInit (initFrame)
+  {
+    insert (new TStaticText (TRect (2, 5, 20, 7),
+      "About MyDialog version 1.0"));
+
+    insert (new TButton (TRect (10, 14, 22, 16), "~O~K", cmOK,
+      bfDefault));
+  }
+
+
+  class MyDialog1 : public TDialog
+  {
+  public:
+    MyDialog1 (void);
+    virtual void handleEvent (TEvent &event);
+  };
+
+  MyDialog1::MyDialog1 (void) :
+    TDialog (TRect (0, 0, 56, 18), "Modeless"),
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1712
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/5
+
+    TITLE  :  Turbo Vision Dialog Box (Modal/Modeless) Examples
+
+
+
+
+    TWindowInit (initFrame)
+  {
+    flags |= wfGrow;  // Make window resizable.
+    flags |= wfZoom;  // Make window zoomable.
+
+    insert (new TStaticText (TRect (2, 5, 20, 7), "OK closes me"));
+
+    insert (new TButton (TRect (10, 14, 22, 16), "~O~K", cmOK,
+      bfDefault));
+  }
+
+  void MyDialog1::handleEvent (TEvent &event)
+  {
+    TDialog::handleEvent( event );
+
+    if( event.what == evCommand )
+    {
+      switch( event.message.command )
+      {
+        case cmOK:
+          close();
+          break;
+
+        default:
+          return;
+        }
+    }
+  }
+
+
+  class MyDialog2 : public TDialog
+  {
+  public:
+    MyDialog2 (void);
+    virtual void handleEvent (TEvent &event);
+  };
+
+  MyDialog2::MyDialog2 (void) :
+    TDialog (TRect (0, 0, 56, 18), "Maybe Modal"),
+    TWindowInit (initFrame)
+  {
+    flags |= wfGrow;  // Make window resizable.
+    flags |= wfZoom;  // Make window zoomable.
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1712
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/5
+
+    TITLE  :  Turbo Vision Dialog Box (Modal/Modeless) Examples
+
+
+
+
+    insert (new TStaticText (TRect (2, 5, 20, 7),
+      "Maybe closes me and returns cmMaybe"));
+
+    insert (new TButton (TRect (10, 14, 22, 16), "~M~aybe",
+      cmMaybe, bfDefault));
+  }
+
+  void MyDialog2::handleEvent (TEvent &event)
+  {
+    TDialog::handleEvent( event );
+
+    if (event.what == evCommand)
+    {
+      switch( event.message.command )
+      {
+        case cmMaybe:
+          endModal (event.message.command);
+          break;
+        default:
+          return;
+      }
+    }
+  }
+
+
+  void TClassApp::handleEvent( TEvent& event )
+  {
+    TApplication::handleEvent( event );
+
+    if (event.what == evCommand)
+    {
+      switch( event.message.command )
+      {
+        case cmOpen:
+          deskTop->execView (new MyDialog);
+          break;
+
+        case cmOpen1:
+          deskTop->insert (new MyDialog1);
+          break;
+
+        case cmOpen2:
+          deskTop->execView (new MyDialog2);
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1712
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/5
+
+    TITLE  :  Turbo Vision Dialog Box (Modal/Modeless) Examples
+
+
+
+
+          break;
+        default:
+          return;
+      }
+    }
+  }
+
+
+  int main()
+  {
+    TClassApp TCA;
+    TCA.run();
+    return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

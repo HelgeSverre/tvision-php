@@ -1,0 +1,726 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                         PAGE  :  1/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+  Two files are enclosed in this document:
+
+     TESTHELP.CPP
+     TEXTHELP.TXT
+
+  Run TVHC (Turbo Vision Help Compiler) on the TESTHELP.TXT file.
+  This will create two files:  TESTHELP.HLP and TESTHELP.H.  Then
+  compile the TESTHELP.CPP file as you would any other Turbo Vision
+  application.
+
+  **** BEGIN FILE: TESTHELP.CPP ****
+  //=============================================================
+  //  The following routines have been uploaded to the Borland
+  //  Forum BPROGB on CompuServe by the Technical Support staff.
+  //  They are provided as a courtesy and not as part of a Borland
+  //  product; and, as such, are provided without the assurance of
+  //  technical support or any specific guarantees.
+  //==============================================================
+  //  Turbo Vision - Context Sensitive Help
+  //
+  //  - This sample code demonstrates creating context sensitive
+  //    help.
+  //
+  //  - The Step to follow are:
+  //
+  //     1) Overload TApplication::getPalette to return a new
+  //        palette which contains palette entries for the help
+  //        system.
+  //
+  //     2) Overload TApplication::getEvent to handle the cmMyHelp
+  //        command.  Overloading getEvent allows the application
+  //        to help requests comming from any view.
+  //
+  //     3) Inherit from TStatusLine to create THintStatusline.
+  //
+  //     4) Create a  XXXX.txt file (see testhelp.txt).
+  //          a) compile XXXX.txt with tvhc.exe in the
+  //             borlandc\tvision\help subdirectory.  The
+  //             resulting file XXXX.hlp is the binary
+  //             file which Turbo Vision uses to access help
+  //             at runtime.
+  //
+  //==============================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                         PAGE  :  2/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+  #define Uses_TWindow
+  #define Uses_TMenuBox
+  #define Uses_TMenu
+  #define Uses_TKeys
+  #define Uses_TApplication
+  #define Uses_TEvent
+  #define Uses_TRect
+  #define Uses_TDeskTop
+  #define Uses_TMenuBar
+  #define Uses_TMenuItem
+  #define Uses_TSubMenu
+  #define Uses_TStatusLine
+  #define Uses_TStatusDef
+  #define Uses_TStatusItem
+  #define Uses_MsgBox
+  #define Uses_fpstream
+  #define Uses_TDialog
+  #define Uses_TButton
+  #define Uses_TStaticText
+  #define Uses_TRadioButtons
+  #define Uses_TSItem
+
+
+  #include <tv.h>
+  #include <help.h>
+
+  //
+  //these are the constants created by TVHC
+  //
+
+  #include "testhelp.h"
+
+  const int cmAbout     = 100;
+  const int cmMyHelp    = 101;
+  const int cmMySave    = 102;
+  const int cmMyOpen    = 103;
+
+  //
+  //This is the help file generated from testhelp.txt by TVHC
+  //
+  const char * HELPFILE = "testhelp.hlp";
+
+  //
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                         PAGE  :  3/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+  //Statusline hints help give the user information
+  //
+  class THintStatusLine: public TStatusLine
+  {
+
+  public:
+
+       THintStatusLine(TRect& r, TStatusDef& d)
+            : TStatusLine(r, d) {}
+       const char* hint(ushort);
+  };
+
+
+  //
+  //Here we return a hint depending on the current help context
+  //
+  const char* THintStatusLine::hint(ushort context)
+  {
+       switch (context)
+       {
+         case hcNoContext:
+           return "";
+
+         case hcExit:
+           return "Alt-X to Exit";
+
+         case hcSave:
+           return "Save a file";
+
+         case hcEdit:
+           return "Edit file";
+
+         case hcClose:
+           return "Close the current file";
+
+         case hcOpen:
+           return "Open a file";
+
+         case hcAbout:
+        return "View the About Box";
+
+         case hcHello:
+           return "Hello World";
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                         PAGE  :  4/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+         default:
+           return "";
+       }
+  }
+
+
+  class TMyApplication : public TApplication
+  {
+   public:
+       TMyApplication();
+       TPalette& getPalette() const;
+       void getEvent(TEvent&);
+       virtual void handleEvent(TEvent&);
+       static TMenuBar* initMenuBar(TRect);
+       static TStatusLine* initStatusLine(TRect);
+  };
+
+
+  TMyApplication::TMyApplication()
+       : TProgInit(initStatusLine,initMenuBar,initDeskTop)
+  {
+  }
+
+
+  TPalette& TMyApplication::getPalette() const
+  {
+       //
+       //We need to add palette entries for the help screen
+       //
+       static TPalette
+         color(cpColor cHelpColor,
+            sizeof(cpColor cHelpColor) - 1);
+
+       static TPalette
+         blackwhite(cpBlackWhite cHelpBlackWhite,
+              sizeof(cHelpBlackWhite) - 1);
+       static TPalette
+
+         monochrome(cpMonochrome cHelpMonochrome,
+                 sizeof(cHelpMonochrome) - 1);
+
+       static TPalette *palettes[] =
+       {
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                         PAGE  :  5/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+         &color,
+         &blackwhite,
+         &monochrome
+       };
+
+       return *(palettes [appPalette] );
+  }
+
+
+  //
+  //We use the Application getEvent to access help requests
+  //from any view.
+  //
+  void TMyApplication::getEvent(TEvent& event)
+  {
+       static Boolean helpInUse = False;
+
+       TProgram::getEvent(event);
+       if (event.what == evCommand)
+       {
+
+         switch (event.message.command)
+         {
+
+           case cmMyHelp:
+              if (helpInUse == True)
+                 return;
+
+              fpstream& helpStream = *new fpstream(HELPFILE,
+                     ios::in | ios::binary);
+              THelpFile* helpFile = new THelpFile(helpStream);
+
+              if (!helpStream)
+              {
+           messageBox("Could not open help file NEWHELP.HLP",
+                      mfError | mfOKButton);
+                    delete helpFile;
+              }
+              else
+              {
+                 helpInUse = True;
+                 TWindow* window =
+                 (TWindow*)validView(new THelpWindow(helpFile,
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                         PAGE  :  6/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+                              getHelpCtx() ) );
+                 if (window)
+                 {
+                    execView(window);
+                    destroy(window);
+                    helpInUse = False;
+                 }
+                 clearEvent(event);
+              }
+
+             break;
+         }
+       }
+
+  }
+
+
+  //
+  //Application handleEvent
+  //
+  void TMyApplication::handleEvent(TEvent &event)
+  {
+       TApplication::handleEvent(event);
+
+       if (event.what == evCommand)
+       {
+         switch (event.message.command)
+         {
+           case cmAbout:
+            TDialog *pd =
+               new TDialog(TRect(20,4,60,20), "About");
+            if( validView(pd) )
+            {
+               //
+               //assign help context to this view
+               //
+               pd->helpCtx = hcAboutBox;
+               //
+               //insert Statictext
+               //
+               pd->insert( new TStaticText(TRect(5,3,35,6),
+                   "\003TestHelp About Box\n\n\003Provided by"
+                   "\n\n\003Borland Technical Support"));
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                         PAGE  :  7/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+               TRadioButtons *rb =
+                      new TRadioButtons(TRect(7,7,32,9),
+                           new TSItem("One",
+                           new TSItem("Two",
+                           new TSItem("Three",
+                           new TSItem("Four", 0) ))));
+               //
+               //assign help context to the RadioButtons
+               //
+               rb->helpCtx = hcAboutRadio;
+               pd->insert(rb);
+
+               pd->insert(new TButton(TRect(15,10,25,12),
+                       "~O~k", cmOK, bfDefault) );
+               execView(pd);
+               destroy(pd);
+            }
+         }
+         clearEvent (event);
+       }
+  }
+
+
+  //
+  //Application MenuBar - this method of building a menu will
+  //      never produce the 'out of memory' problem generated
+  //      by nested menus.
+  //
+  TMenuBar* TMyApplication::initMenuBar(TRect r)
+  {
+       r.b.y = r.a.y + 1;
+
+      TSubMenu& sub1 =
+          *new TSubMenu("~๐~", kbAltSpace, hcNoContext ) +
+          *new TMenuItem("~A~bout...", cmAbout, 0, hcAbout, 0, 0)+
+          *new TMenuItem("E~x~it", cmQuit, kbAltX, hcExit, 0, 0);
+
+      TSubMenu& sub2 = *new TSubMenu( "~T~est", kbAltT, hcTest) +
+          *new TMenuItem( "~H~ello", cmOK, kbAltH, hcHello, 0, 0);
+
+      TSubMenu& sub3 = *new TSubMenu( "~F~ile", kbNoKey, hcFile)+
+          *new TMenuItem( "~S~ave", cmOK, kbAltS, hcSave, 0, 0) +
+          *new TMenuItem( "~E~dit", cmOK, kbAltE, hcEdit, 0, 0) +
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                         PAGE  :  8/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+          *new TMenuItem( "~O~pen", cmOK, kbAltO, hcOpen, 0, 0);
+
+      TMenuBar * menuBar =
+          new TMenuBar( r, new TMenu((TMenuItem &)
+            (sub1 + sub2 + sub3)));
+
+      return menuBar;
+  }
+
+
+  //
+  //Application statusline
+  //
+  TStatusLine* TMyApplication::initStatusLine(TRect r)
+  {
+       r.a.y = r.b.y - 1;
+
+       //standard statusline help
+       return new THintStatusLine( r,
+         *new TStatusDef(hcNoContext, hcEndStandard ) +
+           *new TStatusItem("~F1~ Help", kbF1, cmMyHelp) +
+           *new TStatusItem("~Alt+X~ Exit", kbAltX, cmQuit ) +
+
+       //statusline help for your about box
+         *new TStatusDef(hcAboutBox, hcAboutBox) +
+           *new TStatusItem("~F1~ Help", kbF1, cmMyHelp) +
+           *new TStatusItem("~Esc~ to Close Dialog", kbEsc,
+                cmClose));
+
+  }
+
+  int main()
+  {
+       TMyApplication *Myapp = new TMyApplication();
+       Myapp->deskTop->helpCtx = hcNoContext;
+       Myapp->run();
+       TProgram::destroy(Myapp);
+       return 0;
+  }
+  **** END FILE: TESTHELP.CPP ****
+  **** BEGIN FILE: TESTHELP.TXT ****
+  .topic Nocontext=0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                         PAGE  :  9/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+   ษออออออออออออออออออป
+   บ Test Help System บ
+   ศออออออออออออออออออผ
+  To create the boxes, use the IBM extended characters.  Generate
+  these characters by pressing 'Alt keycode,' for instance: to
+  generate ป hold down the Alt key and press (on the numeric key
+  pad) 187, then release the Alt key.
+
+  Short cut:
+   Notice .topic NoContext=0 and .topic Edit=1100 are the only
+   explicit assignments in this help file.  TVHC (Turbo Vision
+   Help Compiler) will automatically assign values to all other
+   topic contexts.  These values are placed into a XXXX.h file
+   which should be placed into your source file.  Thus, future
+   changes to the help file will only require recompiling the
+   help file and application, and no explicit changes to the
+   source code will be necessary.
+
+    Operations
+    ฿฿฿฿฿฿฿฿฿฿
+
+        {Edit}
+        {File Stuff:File}
+        {Exit}
+
+
+  .topic Edit=1000
+
+   ษออออออออออออออป
+   บ Edit Control บ
+   ศออออออออออออออผ
+
+  This is where you tell your users how to edit a file.
+
+
+
+
+  .topic File
+
+   ษออออออออออออออป
+   บ File Control บ
+   ศออออออออออออออผ
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                        PAGE  :  10/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+   File Operations:
+
+         {Open}
+         {Close}
+         {Save}
+         {What ever:What}
+
+
+  .topic Exit
+
+   ษออออออป
+   บ Exit บ
+   ศออออออผ
+
+  Use Alt-X to exit the testhelp.
+
+
+
+  .topic Open
+
+  Open a file with the open command.
+
+
+  .topic Close
+
+  Close a file to close it.
+
+
+  .topic Save
+
+  Save a file to save it.
+
+
+  .topic What
+
+  To do whatever to a file, talk about it here.
+
+
+  .topic About
+
+  TestHelp About
+
+  .topic Test
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1554
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  August 30, 1993                        PAGE  :  11/11
+
+    TITLE  :  Context sensitive help example (Turbo Vision)
+
+
+
+
+  This is a Test
+
+  .topic Hello
+
+  Hello World, Help!
+
+
+  .topic AboutRadio
+
+  Help for RadioButton ONE.
+
+  .topic radio2
+
+  Help for RadioButton TWO.
+
+  .topic radio3
+
+  Help for RadioButton THREE.
+
+  .topic radio4
+
+  Help for RadioButton FOUR.
+
+  .topic AboutBox
+
+  You are now in the TestHelp about box.  Turbo Vision knows this
+  because the TApplication::getEvent is overloaded and events can
+  be captured from any view... including this dialog box.
+
+
+  .topic EndStandard
+
+  ****************************************************************
+  this is the dummy help context which is the end of standard help
+  ****************************************************************
+
+  **** END FILE: TESTHELP.TXT ****
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+

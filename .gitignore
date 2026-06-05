@@ -1,0 +1,21 @@
+# Composer
+/vendor/
+composer.lock
+
+# Tooling caches
+.phpunit.result.cache
+.phpunit.cache/
+.php-cs-fixer.cache
+.phpstan.cache/
+/build/
+/coverage/
+
+# Turbo Vision runtime logs (TVLOG)
+*.tvlog
+/tmp/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp

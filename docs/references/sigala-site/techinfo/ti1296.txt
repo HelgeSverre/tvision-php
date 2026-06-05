@@ -1,0 +1,396 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1296
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/6
+
+    TITLE  :  Using Turbo Vision resource files.
+
+
+
+
+  Below is an example of two programs that demonstrates reading and
+  writing a resource file.  WRITE.CPP creates a new resource file
+  that contains a MenuBar and a customer dialog.  READ.CPP read the
+  resource file and uses the MenuBar and custom dialog.  Both
+  program use the ENTRY.H header file.
+
+  //
+  //   Write.cpp
+  //
+  //
+
+  #define Uses_fpstream
+  #define Uses_TStreamableClass
+  #define Uses_TResourceFile
+  #define Uses_TResourceCollection
+  #define Uses_TRect
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+  #define Uses_TMenuItem
+  #define Uses_TKeys
+  #include <tv.h>
+  #include <process.h>
+  #include <stdio.h>
+  #include "Entry.h"               // see source for ENTRY.H
+  bellow.
+
+  #define FileName "Resource.Sav"  // Name of the resource file.
+  //
+  //  __link() is used to register any Turbo Vision objects used.
+  //
+  __link(RResourceCollection);     // IMPORTANT:
+  __link(RResourceCollection)
+                                   // must appear in any program
+                                   // using resources.
+
+  __link(RMenuBar);
+  __link(RDialog);
+  __link(RFrame);
+  __link(RInputLine);
+  __link(RButton);
+
+
+  TResourceFile *MyRes;
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1296
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/6
+
+    TITLE  :  Using Turbo Vision resource files.
+
+
+
+
+  fpstream *S;
+
+  //
+  // The TStreamableClass is used to register any descendent of any
+  // Turbo Vision objects.
+  //
+  TStreamableClass RBaseState(TEntry::name,       // Registers the
+                                TEntry::build,    // TEntry object.
+                                 __DELTA(TEntry));
+
+  const char * const near TEntry::name = "TEntry";// The name of
+                                                  // the class
+                                                  // used in the
+                                                 //StreamableClass.
+
+  // The Setup() function create a stream object and then passes
+  // the object to the constructor of the TResourceFile object.
+  //
+  void Setup()
+  {
+     remove(FileName);               // Delete old resource file.
+     S = new fpstream(FileName, ios::out|ios::in|ios::binary);
+                                     // Create the resource file.
+     if (!S)
+     {
+       cout << "Error opening stream\n";
+       exit(1);
+     }
+     MyRes = new TResourceFile(S);   // Create the resource object.
+     if (!MyRes)
+     {
+       cout << "Error opening Res file.\n";
+       exit(1);
+     }
+     return;
+  }
+  //
+  // In the main a MenuBar and TEntry dialog box are created.  The
+  // two object are written the resource by using the MyRes->put()
+  // function.  The MenuBar and the Entry objects can then be
+  // loaded by another program.
+  //
+  int main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1296
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/6
+
+    TITLE  :  Using Turbo Vision resource files.
+
+
+
+
+  {
+     Setup();
+     TRect r(0, 0, 80, 1);
+     TMenuBar *Menu = new TMenuBar(r,     // Create the MenuBar.
+         *new TSubMenu( "~F~ile", kbAltF )+
+             *new TMenuItem( "~D~ialog", cmDialog, 0, hcNoContext, "")+
+             newLine()+
+             *new TMenuItem( "E~x~it", cmQuit, cmQuit, hcNoContext,
+                           "Alt-X" )+
+         *new TSubMenu( "~W~indow", kbAltW )+
+             *new TMenuItem( "~N~ext", cmNext,     kbF6,
+                           hcNoContext, "F6" )+
+             *new TMenuItem( "~Z~oom", cmZoom,     kbF5,
+                           hcNoContext, "F5" )
+         );
+     MyRes->put(Menu, "MenuBar"); // Place the MenuBar in the
+                                  // resource file. "MenuBar" is
+                                  // used as the name of the object
+                                  // it can be used by READ.CPP as
+                                  // the name in the get()
+                                  // function.  The name can be
+                                  // thought the key in a database
+                                  // of objects.
+     MyRes->flush();
+     TEntry *E = new TEntry(TRect(10, 5, 50, 15), "A Dialog", "Test
+                           String", 10);
+     MyRes->put(E, "Entry");     // Place the TEntry dialog box in
+                                 // the resource file.
+     MyRes->flush();
+     return 0;
+  }
+
+  #define Uses_TDialog
+  #define Uses_TRect
+  #define Uses_TInputLine
+  #define Uses_TButton
+
+  //
+  // Entry.h
+  // This header file define the TEntry dialog box object that is
+  // used be Read.cpp and Write.cpp.
+  //
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1296
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/6
+
+    TITLE  :  Using Turbo Vision resource files.
+
+
+
+
+  #include <TV.H>
+  #include <string.h>
+  const cmDialog = 101;
+
+  class TEntry: public TDialog
+  {
+    public:
+      TEntry(const TRect& bounds, const char *aTitle,
+        char *ADefault, int AAny);
+      ~TEntry()
+      {
+        delete Default;
+      }
+    private:
+      char *Default;
+      int Any;
+  //                     For Streaming
+  // The code bellow is for making any object that is a descendant
+  // of TStreamableClass streamable.  The code can be copied and
+  // placed into any other object as long as all occurrences of
+  // TEntry are changed to the name of the object that is being
+  // created.
+     public:
+        static TStreamable *build()
+         { return new TEntry(streamableInit); };
+       static const char * const near name;
+     protected:
+       TEntry(StreamableInit): TDialog(streamableInit),
+         TWindowInit(streamableInit) { };
+       virtual const char *streamableName() const {return name;}
+       virtual void *read(ipstream &S);
+       virtual void write(opstream &S);
+  };
+
+  //                     For Streaming
+  inline ipstream& operator >> ( ipstream& is, TEntry& cl )
+      { return is >> (TStreamable&)cl; }
+  inline ipstream& operator >> ( ipstream& is, TEntry*& cl )
+      { return is >> (void *&)cl; }
+  inline opstream& operator << ( opstream& os, TEntry& cl )
+      { return os << (TStreamable&)cl; }
+  inline opstream& operator << ( opstream& os, TEntry* cl )
+      { return os << (TStreamable *)cl; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1296
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/6
+
+    TITLE  :  Using Turbo Vision resource files.
+
+
+
+
+  //
+  // TEntry  constructor initializes some data members and insert
+  // the controls into the dialog.
+  //
+  TEntry::TEntry(const TRect& bounds, const char *aTitle,
+    char *ADefault, int AAny) :
+    TDialog(bounds, aTitle),
+    TWindowInit(&TEntry::initFrame),
+    Any(AAny)
+  {
+     insert(new TButton(TRect(14, 7, 23, 9), "~O~k", cmOK,
+                      bfDefault));
+     insert(new TInputLine(TRect(3, 4, 23, 5), 20));
+     Default = new char[strlen(ADefault) + 1];
+     strcpy(Default, ADefault);
+  }
+
+  //
+  // The read() function read any data members unique to this
+  // object from the stream S.  This function is called by Turbo
+  // Vision any time an object is read from disk. It is important
+  // to note that the order of data members read from the stream is
+  // the same order that they are written to the stream
+  // in write().
+  //
+  void *TEntry::read(ipstream &S)
+  {
+    TDialog::read(S);         // Always call ancestors read()
+                              // first.
+    Default = S.readString(); // S.readString() reads the string
+                              // from the
+                              // stream and allocates the
+                              // correct amount of memory to hold
+                              // the string.
+    S >> Any;                 // Any is an integer read in a
+                              // standard way.
+    return this;
+  }
+
+  //
+  // The write() function writes any data members unique to this
+  // object to the stream S. This function is called by Turbo
+  // Vision any time an object is written to disk. It is important
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1296
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  6/6
+
+    TITLE  :  Using Turbo Vision resource files.
+
+
+
+
+  // to note the order of data members written to the stream is the
+  // same order they are read from  the stream in read().
+  //
+  void TEntry::write(opstream &S)
+  {
+    TDialog::write(S);      // Always call ancestors write() first.
+    S.writeString(Default); // Writes the char * Default to the
+                            // stream.
+    S << Any;               // Any is an integer.
+  }
+
+  To compile the programs use BCC.EXE with the following options:
+
+  bcc -ml -Ic:\borlandc\tvision\include -Lc:\borlandc\tvision\lib
+    c:\borlandc\tvision\lib\tv.lib read.cpp
+  bcc -ml -Ic:\borlandc\tvision\include -Lc:\borlandc\tvision\lib
+    c:\borlandc\tvision\lib\tv.lib write.cpp
+
+  The above assumes that your C++ compiler is located in
+  c:\boarlandc\bin.
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

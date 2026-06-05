@@ -1,0 +1,198 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1720
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/3
+
+    TITLE  :  How to disable a button in Turbo Vision
+
+
+
+
+  /*  This code demonstrates how to disable a
+   *  button in Turbo Vision
+   */
+
+  program DisabledButtonDemo;
+
+  uses
+    App,
+    Dialogs,
+    Drivers,
+    Objects,
+    Views;
+
+  const
+    cmButton1 = 123;
+    cmButton2 = 124;
+
+  type
+    PDemo = ^TDemo;
+    TDemo = object (TApplication)
+      constructor Init;
+    end;
+
+    PMyDialog = ^TMyDialog;
+    TMyDialog = object (TDialog)
+      procedure HandleEvent (var Event: TEvent); virtual;
+    end;
+
+  constructor TDemo.Init;
+
+  var
+    D: PMyDialog;
+    R: TRect;
+
+  begin
+    TApplication.Init;
+    R.Assign (22,5,58,12);
+    D := New (PMyDialog,Init (R,'My Dialog'));
+    R.Assign (4,3,15,5);
+    D^.Insert (New (PButton,Init (R,'Button ~1~',cmButton1,
+       bfNormal)));
+    R.Assign (19,3,30,5);
+    D^.Insert (New (PButton,Init (R,'Button ~2~',cmButton2,
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1720
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/3
+
+    TITLE  :  How to disable a button in Turbo Vision
+
+
+
+
+       bfNormal)));
+    DeskTop^.ExecView (D);
+  end;
+
+  procedure TMyDialog.HandleEvent (var Event: TEvent);
+  begin
+
+    TDialog.HandleEvent (Event);
+
+    case Event.What of
+
+      evCommand:
+        case Event.Command of
+
+          cmButton1: begin
+
+            DisableCommands ([cmButton1]);
+            EnableCommands ([cmButton2]);
+            ClearEvent (Event);
+
+          end;
+
+          cmButton2: begin
+
+            DisableCommands ([cmButton2]);
+            EnableCommands ([cmButton1]);
+            ClearEvent (Event);
+
+          end;
+        end;
+    end;
+  end;
+
+  var
+    Demo: TDemo;
+
+  begin
+    Demo.Init;
+    Demo.Run;
+    Demo.Done;
+  end.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1720
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/3
+
+    TITLE  :  How to disable a button in Turbo Vision
+
+
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

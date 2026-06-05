@@ -1,0 +1,132 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1021
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  1/2
+
+    TITLE  :  How to extract text from a TEditor Buffer.
+
+
+
+
+  //
+  // This document shows how to copy the contents of an editor
+  // buffer into a separate data area, assuming you have a pointer
+  // to an editor.
+  //
+  // For more information on how these calculations were obtained,
+  // see the first few pages of the TEditor object documentation in
+  // the Class Reference section in the Turbo Vision User's Guide.
+  //
+
+  //
+  // unsigned edDataSize( TEditor *ed )
+  //
+  //   This function returns the length of the current editor
+  //   buffer. This is how much space would need to be available in
+  //   order to copy the editor buffer to another location.
+  //
+
+  inline unsigned edDataSize( TEditor *ed )
+  {
+      return( ed->bufLen );
+  }
+
+  //
+  // void edGetData( TEditor *ed, char *dest )
+  //
+  //   This function copies the data from the editor buffer into
+  //   the alternate buffer passed in.  The alternate buffer must
+  //   already have been allocated for at least as many bytes as
+  //   edDataSize() returns.
+  //
+
+  void edGetData( TEditor *ed, char *dest )
+  {
+      // Copy from beginning of buffer up to cursor.
+      memcpy( dest, ed->buffer, ed->curPtr );
+
+      // Copy from end of gap through to end of buffer.
+      memcpy( dest + ed->curPtr,
+              ed->buffer + ed->curPtr + ed->gapLen,
+              ed->bufLen - ed->curPtr
+            );
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1021
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  2/2
+
+    TITLE  :  How to extract text from a TEditor Buffer.
+
+
+
+
+  //
+  // char *copyEditor()
+  //
+  //   This function assumes that the current selected deskTop
+  //   window is a TEditWindow, extracts the editor from the
+  //   TEditWindow and copies the current editor buffer into an
+  //   extra buffer that has been allocated for this purpose.  It
+  //   is intended to demonstrate how one might use the functions
+  //   that are
+  //
+
+  char *TTestApp::copyEditor()
+  {
+      TFileEditor *ed = (TFileEditor *)
+        ((TEditWindow *) TProgram::deskTop->current )->editor;
+
+      unsigned len = edDataSize( ed );
+      char *buf = new char [ len + 1];  // Allocate buffer for data
+      if( buf != NULL )
+          edGetData( ed, buf );         // Copy data from editor to
+                                        //  buffer.
+      buf[ len ] = '\0';
+      return buf;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

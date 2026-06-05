@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                            NUMBER  : 1011
+  VERSION  :  3.0
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  1/5
+
+    TITLE  :  Modal and Modeless Dialog Boxes using Turbo Vision
+
+
+
+
+  //   This File provides an example of both Modal and Modeless
+  // Dialog Boxes using the Turbo Vision Library for C++.   The
+  // example also provides an implementation of 'Data Transfers' to
+  // and from Modeless Dialog Boxes.
+  //
+  // TOOLS: BC++ v3.00 + Turbo Vision Library (Large Memory Model)
+  //         ( or TC++ v1.x, TC++ v3.00 + TV.LIB )
+
+  #define Uses_TKeys
+  #define Uses_TRect
+  #define Uses_TEvent
+  #define Uses_TLabel
+  #define Uses_TButton
+  #define Uses_TInputLine
+  #define Uses_TDialog
+  #define Uses_TMenuBar
+  #define Uses_TMenu
+  #define Uses_TMenuItem
+  #define Uses_TStaticText
+  #define Uses_MsgBox
+  #define Uses_TDeskTop
+  #define Uses_TApplication
+  #include <tv.h>
+
+
+  const int cmModalBox    = 100;          // Command list.
+  const int cmModelessBox = 101;
+
+
+  class TMode : public TApplication
+  {
+  public:
+      TMode() : TProgInit( initStatusLine,
+                           initMenuBar,
+                           initDeskTop )
+      {}
+      void handleEvent( TEvent& event );
+      static TMenuBar *initMenuBar( TRect r );
+  };
+
+
+  class TModalBox : public TDialog
+  {
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1011
+  VERSION  :  3.0
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  2/5
+
+    TITLE  :  Modal and Modeless Dialog Boxes using Turbo Vision
+
+
+
+
+  public:
+      TModalBox();
+  };
+
+
+  class TModelessBox : public TDialog
+  {
+       // data struct to store data in.
+       static struct modelessData
+       {
+            char name[20];
+            char rank[20];
+       } data;
+
+  public:
+      TModelessBox();
+      virtual void handleEvent( TEvent& event );
+  };
+
+
+  //
+  // Code for main() function.
+  //
+  void main(void)
+  {
+      TMode modalApp;
+      modalApp.run();
+  }
+
+
+  //
+  // Code for the TMode object (Application object.)
+  //
+
+  TMenuBar *TMode::initMenuBar( TRect r )
+  {
+      r.b.y =  r.a.y + 1;
+
+      return (new TMenuBar( r, new TMenu(
+            *new TMenuItem( "~M~odal Dialog  ", cmModalBox,
+                           kbNoKey, hcNoContext, 0,
+            new TMenuItem( "Mode~L~ess Dialog", cmModelessBox,
+                           kbNoKey, hcNoContext, 0))
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1011
+  VERSION  :  3.0
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  3/5
+
+    TITLE  :  Modal and Modeless Dialog Boxes using Turbo Vision
+
+
+
+
+                           ))
+             );
+  }
+
+  void TMode::handleEvent( TEvent& event )
+  {
+      TView *t;
+
+      TApplication::handleEvent(event);
+
+      if (event.what == evCommand)
+          {
+          switch (event.message.command)
+              {
+              case cmModalBox:
+                   t = (TView *) validView( new TModalBox() );
+                   if( t )
+                   {
+                      // ExecView() a modal dialog box
+                      deskTop->execView( t );
+
+                      // Must destroy a modal dialog box
+                      destroy( t );
+                   }
+                   break;
+
+              case cmModelessBox:
+                   t = (TView *) validView( new TModelessBox() );
+                   if( t )
+                      // Insert() a modeless dialog box
+                      deskTop->insert( t );
+                   break;
+              }
+          }
+  }
+
+
+  //
+  // Code for the TModalBox object.
+  //
+
+  TModalBox::TModalBox() :
+      TDialog(TRect(0, 0, 46, 11), "About"),
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1011
+  VERSION  :  3.0
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  4/5
+
+    TITLE  :  Modal and Modeless Dialog Boxes using Turbo Vision
+
+
+
+
+      TWindowInit( initFrame )
+  {
+      insert( new TStaticText(TRect(3,2,43,10),
+          "\003Dialog Box Demo\n \n"
+          "\003Modal & Modeless Dialog Boxes\n \n"
+          "\003Copyright (C) 1992 Borland International" ));
+      insert(new TButton(TRect(18, 8, 28, 10), "~O~K",
+             cmOK, bfDefault));
+      options |= ofCentered;
+  }
+
+
+
+  //
+  // Code for the TModelessBox object.
+  //
+
+  TModelessBox::modelessData TModelessBox::data = { "", "" };
+
+  TModelessBox::TModelessBox() :
+      TDialog( TRect(0, 0, 35, 9), "Modeless Dialog" ),
+      TWindowInit( initFrame )
+  {
+      TInputLine *control = new TInputLine( TRect(10,2,32,3), 20);
+      insert(control);
+      insert( new TLabel( TRect(2,2,9,3), "~N~ame:", control) );
+
+      control = new TInputLine( TRect(10,4,32,5), 20);
+      insert(control);
+      insert( new TLabel( TRect(2,4,9,5), "~R~ank:", control) );
+
+      insert( new TButton( TRect(6,6,16,8), "~O~K", cmOK,
+                           bfDefault) );
+      insert( new TButton( TRect(19,6,29,8),
+                           "~C~ancel", cmCancel, bfNormal) );
+      selectNext( False );
+
+      options |= ofCentered;
+      setData(&data);                // Initialize dialog
+                                     // box data fields.
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1011
+  VERSION  :  3.0
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  5/5
+
+    TITLE  :  Modal and Modeless Dialog Boxes using Turbo Vision
+
+
+
+
+  void TModelessBox::handleEvent( TEvent& event )
+  {
+      if(event.what != evKeyBoard ||
+         event.keyDown.keyCode ! = kbEsc)
+          TDialog::handleEvent(event);  // Call base handleEvent().
+
+      if( event.what == evCommand )
+          {
+          switch( event.message.command )
+              {
+              case cmOK:
+              case cmYes:
+                   getData(&data);   // Retrieve data on OK or Yes.
+                                     // Drop through and close box.
+              case cmCancel:
+              case cmNo:
+                   close();          // Close dialog box.
+                   clearEvent(event);
+                   break;
+              }
+          }
+  }
+
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

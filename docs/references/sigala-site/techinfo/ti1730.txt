@@ -1,0 +1,396 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1730
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 21, 1993                         PAGE  :  1/6
+
+    TITLE  :  Inserting text into a Turbo Vision window
+
+
+
+
+  Of all the Turbo Vision demonstration programs none show how to
+  simply insert text into a window. What this TI does is take one
+  of the TV Guide demo programs and adds the code necessary to
+  insert text into a window. I used the earliest possible TV Guide
+  in order to help make the changes so the changes would be easy
+  to see.
+
+  Work through the TVGuide tutorials until you have finished
+  lesson four. Then you can apply the methods in this example to
+  insert text into your own programs. As you will see the process
+  is very simple, but is not as obvious the manual assumed.
+
+  Look for block comments with "FOR INSERTING TEXT" to find the
+  required additions.
+
+  /*---------------------------------------------------------*/
+  /*                                                         */
+  /*   Turbo Vision 1.0                                      */
+  /*   TVGUID04 Demo Source File                             */
+  /*                                                         */
+  /*   TI version demonstrates inserting text into           */
+  /*   the window.                                           */
+  /*                                                         */
+  /*   Copyright (c) 1991 by Borland International           */
+  /*                                                         */
+  /*---------------------------------------------------------*/
+
+  #include <stdlib.h>               // for random()
+
+  #define Uses_TEvent
+  #define Uses_TApplication
+  #define Uses_TKeys
+  #define Uses_TRect
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+  #define Uses_TMenuItem
+  #define Uses_TStatusLine
+  #define Uses_TStatusItem
+  #define Uses_TStatusDef
+  #define Uses_TDeskTop
+  #define Uses_TWindow
+  #include <tv.h>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1730
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 21, 1993                         PAGE  :  2/6
+
+    TITLE  :  Inserting text into a Turbo Vision window
+
+
+
+
+  const int cmMyFileOpen = 200; // assign new command values
+  const int cmMyNewWin   = 201;
+
+
+  class TMyApp : public TApplication
+  {
+
+  public:
+      TMyApp();
+      static TStatusLine *initStatusLine( TRect r );
+      static TMenuBar *initMenuBar( TRect r );
+      virtual void handleEvent( TEvent& event);
+      void myNewWindow();
+  };
+
+
+  static short winNumber = 0;         // initialize window number
+
+  class TDemoWindow : public TWindow  // define a new window class
+  {
+
+  public:
+
+     TDemoWindow( const TRect& r,
+                  const char *aTitle,
+                  short aNumber );
+      // declare a constructor
+
+      //   static TFrame *initFrame( TRect r );
+      // override needed only if you want a nonstandard frame
+      // Here we'll inherit TWindow::initFrame unchanged
+      // so TWindowInit will take &TDemoWindow::initFrame to give
+      // a standard frame
+  };
+
+  /*------------------------------------------- FOR INSERTING TEXT
+
+  In order to insert text you must create an interior for the text
+  to reside in. This is accomplished by deriving a class from
+  TView. TView has a virtual draw() function you will need to
+  supply a definition for.
+
+  --------------------------------------------------------------*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1730
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 21, 1993                         PAGE  :  3/6
+
+    TITLE  :  Inserting text into a Turbo Vision window
+
+
+
+
+  class MyInterior: public TView {
+    public:
+     MyInterior(const TRect& bounds);
+     virtual void draw();// Called when the view must be displayed
+  };
+
+  /*------------------------------------------- FOR INSERTING TEXT
+
+  The constructor for MyInterior is passed the coordinates of the
+  window the interior is for. The growmode is set and any options
+  desired.
+
+  --------------------------------------------------------------*/
+
+  MyInterior::MyInterior(const TRect& bounds) : TView(bounds) {
+     growMode = gfGrowHiX | gfGrowHiY;
+     options = options | ofFramed;
+  }
+
+  /*------------------------------------------- FOR INSERTING TEXT
+
+  Below is the definition of MyInterior::draw() this is the
+  function that will insert text into your window. The key points
+  in making this works is the call to TView::draw() that creates
+  the interior and writeLine(). The writeLine() places the
+  contents for the buffer you create with TDrawBuffer on the
+  screen.
+
+  --------------------------------------------------------------*/
+
+  void MyInterior::draw()
+  {
+     char *hstr = "Welcome to Turbo Vision";// The text to insert
+     ushort color = getColor(0x0301);// Maps the palette indices
+                                     // in the low and high bytes
+                                     // of color.
+
+     TView::draw();  // Called whenever the view must draw itself.
+                     // draw must cover entire area of the view.
+     TDrawBuffer b;  // defines the array for the draw buffer
+     b.moveStr(0, hstr, color );// moves the string to draw buffer
+     writeLine( 0, 0, 23, 1, b); // writes the buffer to screen
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1730
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 21, 1993                         PAGE  :  4/6
+
+    TITLE  :  Inserting text into a Turbo Vision window
+
+
+
+
+  TMyApp::TMyApp() :
+      TProgInit( &TMyApp::initStatusLine,
+                 &TMyApp::initMenuBar,
+                 &TMyApp::initDeskTop
+               )
+  {
+  }
+
+  TStatusLine *TMyApp::initStatusLine(TRect r)
+  {
+      r.a.y = r.b.y - 1;     // move top to 1 line above bottom
+      return new TStatusLine( r,
+          *new TStatusDef( 0, 0xFFFF ) +
+          // set range of help contexts
+              *new TStatusItem( 0, kbF10, cmMenu ) +
+              // define an item
+              *new TStatusItem( "~Alt-X~ Exit", kbAltX, cmQuit )+
+              // define an item
+              *new TStatusItem( "~Alt-F3~ Close", kbAltF3,cmClose)
+              // and another one
+          );
+  }
+
+  TMenuBar *TMyApp::initMenuBar( TRect r )
+  {
+
+      r.b.y = r.a.y + 1;  // set bottom line 1 line below top line
+      return new TMenuBar( r,
+          *new TSubMenu( "~F~ile", kbAltF )+
+              *new TMenuItem( "~O~pen", cmMyFileOpen, kbF3,
+                               hcNoContext, "F3" )+
+              *new TMenuItem( "~N~ew",  cmMyNewWin,   kbF4,
+                               hcNoContext, "F4" )+
+              newLine()+
+              *new TMenuItem( "E~x~it", cmQuit, cmQuit,
+                               hcNoContext, "Alt-X" )+
+          *new TSubMenu( "~W~indow", kbAltW )+
+              *new TMenuItem( "~N~ext", cmNext,     kbF6,
+                               hcNoContext, "F6" )+
+              *new TMenuItem( "~Z~oom", cmZoom,     kbF5,
+                               hcNoContext, "F5" )
+          );
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1730
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 21, 1993                         PAGE  :  5/6
+
+    TITLE  :  Inserting text into a Turbo Vision window
+
+
+
+
+  void TMyApp::handleEvent(TEvent& event)
+  {
+      TApplication::handleEvent(event); // act like base!
+      if( event.what == evCommand )
+          {
+          switch( event.message.command )
+              {
+              case cmMyNewWin:   // respond to additional commands
+                  myNewWindow();   // define action for cmMyNewWin
+                  break;
+              default:
+                  return;
+              }
+          clearEvent( event );       // clear event after handling
+          }
+  }
+
+  void TMyApp::myNewWindow()
+  {
+      TRect r( 0, 0, 26, 7 );     // set initial size and position
+      r.move( random(53), random(16) ); // randomly move around
+      TDemoWindow *window = new TDemoWindow ( r, "Demo Window",
+                                              ++winNumber);
+      deskTop->insert(window); // put window into desktop and draw
+  }
+
+
+  TDemoWindow::TDemoWindow( const TRect& r, const char *aTitle,
+                            short aNumber):
+                            TWindow( r, aTitle, aNumber),
+                            TWindowInit( &TDemoWindow::initFrame
+                          )
+  {
+
+  /*------------------------------------------- FOR INSERTING TEXT
+
+  The following three lines are added to the applications
+  constructor. The first two gets the size of the current Rect and
+  reduces the coordinate by one. Then the Rect is used to insert
+  the new interior.
+
+  --------------------------------------------------------------*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1730
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 21, 1993                         PAGE  :  6/6
+
+    TITLE  :  Inserting text into a Turbo Vision window
+
+
+
+
+      TRect curRect = getClipRect();
+      curRect.grow(-1, -1);
+      insert(new MyInterior(curRect) );
+  }
+
+  int main()
+  {
+      TMyApp myApp;
+      myApp.run();
+      return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

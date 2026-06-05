@@ -1,0 +1,198 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1013
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  1/3
+
+    TITLE  :  Making string lists using Turbo Vision
+
+
+
+
+
+       The sample code provided below constructs a string list with
+  two strings, writes it into a file, and then reads the strings
+  back out into a new string list.
+
+       There is a error in the example program listed in the Turbo
+  Vision manual regarding TStringList/TStrListMaker (end of Ch.9).
+  The listing in the manual creates an instance of TStrListMaker
+  which is streamed to the file "STR.LST".
+
+       There are two relevant overloaded operator<< ()'s that are
+  used by Turbo Vision for streaming:
+
+        .1  ostream& operator<< (ostream&, TStreamable *)
+    and .2  ostream& operator<< (ostream&, TStreamable &)
+
+  Given the line:
+       ops << myStringList
+
+  The first version will be called if 'myStringList' is a pointer,
+  and the second one will be called if the 'myStringList' is an
+  actual instance of the Object.  The code for the first version
+  properly treats new files by writing the appropriate header byte
+  into the file before streaming the object.  After writing the
+  header information, the first version of the operator actually
+  calls the second version to perform the real streaming.
+
+  The "ostream& operator<< (ostream&, TStreamable &)" version,
+  however,  does NOT write any header bytes into the stream which
+  results in an 'Abnormal Program Termination' message when the
+  stream is read back.
+
+  Therefore, always ensure that only pointers are used when
+  streaming to a new file: do NOT write actual object instances
+  into new files.
+
+  NOTE:  When compiling with version 3.1 of Borland C++, make sure
+  to apply the patch BC31P1.ZIP.  This patch fixes a problem with
+  overloading the global new operator, and this example program is
+  affected by this problem.
+
+
+  #define Uses_TStringList
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1013
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  2/3
+
+    TITLE  :  Making string lists using Turbo Vision
+
+
+
+
+  #define Uses_TStrListMaker
+  #define Uses_ofpstream
+  #define Uses_ifpstream
+  #include <tv.h>
+
+  #include <iostream.h>       // cout
+  #include <stdlib.h>         // exit()
+  #include <conio.h>          // getch()
+
+  __link(RStringList); // Register objects with the stream manager.
+
+
+  int main(void)
+  {
+  //
+  // Build string list with TStrListMaker object and
+  // write string list out to disk with the persistant object
+  // streams.
+  //
+      TStrListMaker *myStrings = new TStrListMaker(128, 128);
+
+      if( myStrings == 0 )
+          {
+          cout << "No memory allocated for TStrListMaker object."
+               << endl;
+          exit(-1);
+          }
+
+      myStrings->put( 1, "Do not pass GO!" );
+      myStrings->put( 2, "Do not collect $200." );
+
+      ofpstream *ops = new ofpstream( "STR.LST" );
+      if( ops )
+          *ops << myStrings;
+      else
+          {
+          cout << "Error opening output string file." << endl;
+          exit(-2);
+          }
+
+      delete ops;             // clean up file stream
+      delete myStrings;       // clean up string list maker object
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1013
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  3/3
+
+    TITLE  :  Making string lists using Turbo Vision
+
+
+
+
+  //
+  // Read string list back in from file into a TStringList
+  // object.  Print out one of the strings to display that it
+  // worked ok.
+  //
+      TStringList *myStringList;
+      char legend[128];
+      ifpstream *ifp = new ifpstream( "STR.LST" );
+
+      if( ifp )
+          *ifp >> myStringList;
+      else
+          {
+          cout << "Error opening input string file." << endl;
+          exit(-3);
+          }
+
+      myStringList->get( legend, 1 );
+      cout << "First string is \"" << legend << "\"" << endl;
+
+      delete ifp;             // clean up file stream
+      delete myStringList;    // cleanup string list object
+
+      cout << endl << "Holding output screen.  Any key to exit."
+           << endl;
+      getch();
+      return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

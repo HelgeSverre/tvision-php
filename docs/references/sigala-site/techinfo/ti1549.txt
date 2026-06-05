@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1549
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/5
+
+    TITLE  :  Switching between text video modes in Turbo Vision
+
+
+
+
+   *
+   * VIDEO.CPP
+   *
+   * Turbo Vision example that switches between the available
+   * video modes:  color 80x25 and 80x43/50
+   *               black & white 80x25 and 80x43/50
+   *               monochrome 80x25.
+   *
+   * Note:
+   *
+   *   There is an apparent problem involving Microsoft Mouse
+   *   drivers v7.04, 8.0, and 8.2 that affects the operability of
+   *   this program. In switching from Monochrome mode to Black &
+   *   White 25 line mode, the mouse will be left on the monochrome
+   *   monitor. This problem does not occur on any other mode
+   *   switches and does not occur when the Logitech 5.1 driver is
+   *   used. Switching to another mode first and then to BW80x25
+   *   will correct the display.
+   *
+   *  This code was written by Borland Technical Support.
+   *  It is provided as is with no warranties expressed or implied.
+   *
+   */
+
+  #define Uses_TRect
+  #define Uses_TKeys
+  #define Uses_TEvent
+  #define Uses_TDialog
+  #define Uses_TMenu
+  #define Uses_TMenuItem
+  #define Uses_TMenuBar
+  #define Uses_TDeskTop
+  #define Uses_TDisplay
+  #define Uses_TScreen
+  #define Uses_TApplication
+  #include <tv.h>
+
+
+  const int cmSetCO80x25 = 100;
+  const int cmSetCO80x50 = 101;
+  const int cmSetBW80x25 = 102;
+  const int cmSetBW80x50 = 103;
+  const int cmSetMono    = 104;
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1549
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/5
+
+    TITLE  :  Switching between text video modes in Turbo Vision
+
+
+
+
+  TMenuItem& operator +( TMenuItem& menuItem1,
+                         TMenuItem& menuItem2 );
+  extern TPoint shadowSize;
+  void clrscr();
+
+
+  /*
+   *
+   * Application Class
+   *
+   */
+  class TVideoApp : public TApplication
+  {
+
+  public:
+
+      TVideoApp() : TApplication(),
+                    TProgInit( initStatusLine,
+                               initMenuBar,
+                               initDeskTop ),
+                    mode( TScreen::getCrtMode() )
+                    { }
+      static TMenuBar *initMenuBar( TRect r );
+      virtual void handleEvent( TEvent& event );
+
+  protected:
+
+      ushort mode;
+
+  };
+
+
+  /*
+   *
+   * Menu bar
+   *
+   */
+  TMenuBar *TVideoApp::initMenuBar( TRect r )
+  {
+      r.b.y = r.a.y + 1;
+      return new TMenuBar( r, new TMenu(
+        *new TMenuItem("~V~ideo Mode", kbAltV, new TMenu(
+          *new TMenuItem( "~C~olor (25) ", cmSetCO80x25, kbAltC ) +
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1549
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/5
+
+    TITLE  :  Switching between text video modes in Turbo Vision
+
+
+
+
+          *new TMenuItem( "C~o~lor (43/50) ", cmSetCO80x50,
+                          kbAltO ) +
+          *new TMenuItem( "~B~lack & White (25)", cmSetBW80x25,
+                          kbAltB ) +
+          *new TMenuItem( "B~l~ack & White (43/50)", cmSetBW80x50,
+                          kbAltL ) +
+          *new TMenuItem( "~M~onochrome", cmSetMono, kbAltM )
+          ))
+        ));
+  }
+
+
+  /*
+   * TVideoApp::handleEvent
+   *
+   * Handle switching of the video modes.  This involves calling
+   * TProgram::setScreenMode with one of the enumerated types
+   * defined in TDisplay.  To get 43/50 line mode (43 on EGA, 50 on
+   * VGA), bitwise or TDisplay::smFont8x8 with the video mode.
+   * shadowSize is an external variable that determines how many
+   * characters are used for the width of the shadow of a window or
+   * button.  Modification of this variable is merely cosmetic as
+   * it only affects the appearance of the display.
+   */
+  void TVideoApp::handleEvent( TEvent& event )
+  {
+      TApplication::handleEvent( event );
+
+      if( event.what == evCommand )
+      {
+          switch( event.message.command )
+          {
+
+          case cmSetCO80x50:
+              mode = TDisplay::smCO80 | TDisplay::smFont8x8;
+              shadowSize.x = 2;
+              break;
+
+          case cmSetCO80x25:
+              mode = TDisplay::smCO80;
+              shadowSize.x = 1;
+              break;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1549
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/5
+
+    TITLE  :  Switching between text video modes in Turbo Vision
+
+
+
+
+          case cmSetBW80x50:
+              mode = TDisplay::smBW80 | TDisplay::smFont8x8;
+              shadowSize.x = 2;
+              break;
+
+          case cmSetBW80x25:
+              mode = TDisplay::smBW80;
+              shadowSize.x = 1;
+              break;
+
+          case cmSetMono:
+              mode = TDisplay::smMono;
+              break;
+
+          default:
+              return;
+
+          }
+          clrscr();
+          setScreenMode( mode );
+      }
+  }
+
+
+  /*
+   *
+   * MAIN
+   *
+   */
+  int main()
+  {
+      TVideoApp TB;
+      TB.run();
+      return 0;
+  }
+
+
+  /*
+   * global operator +
+   *
+   * Since the objects will always be in a linked list, and the
+   * operator+ is processd left-to-right, we will define the
+   * function as appending menuItem2 to menuItem1, and then return
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1549
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/5
+
+    TITLE  :  Switching between text video modes in Turbo Vision
+
+
+
+
+   * menuItem1.
+   */
+
+  TMenuItem& operator +( TMenuItem& menuItem1,
+                         TMenuItem& menuItem2 )
+  {
+      TMenuItem *p = &menuItem1;
+      while( p->next != NULL )
+          p = p->next;
+      p->next = &menuItem2;
+      return menuItem1;
+  }
+
+
+  /*
+   * clrscr()
+   *
+   * A simple clear screen function, because since Turbo Vision
+   * bypasses the RTL for it's screen access code, the RTL clrscr()
+   * function does not work properly.
+   */
+  void clrscr()
+  {
+      char far *scrbuf = TScreen::screenBuffer;
+
+      asm mov cx, 4096
+      asm xor ax, ax
+      asm les di, scrbuf
+      asm rep stosw
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+

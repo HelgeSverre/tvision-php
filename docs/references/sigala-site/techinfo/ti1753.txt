@@ -1,0 +1,198 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1753
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 13, 1994                         PAGE  :  1/3
+
+    TITLE  :  Using Turbo Vision 1.0x with Borland C++ 4.0
+
+
+
+
+  You can easily build Turbo Vision applications in the Borland C++
+  4.0 IDE and have full access to all the new features of the IDE
+  related to DOS programming.  The following instructions detail
+  the necessary changes, step by step, to your current Turbo Vision
+  project files so that you can continue your Turbo Vision
+  development with the new IDE.  If you have not already done so,
+  obtain TI 1752 about rebuilding the Turbo Vision library for use
+  with the new compiler.  Build the appropriate version of TV.LIB
+  and then return here to continue with these steps.  If you are
+  building an overlaid application, see the notes at the end of
+  this document in addition to the main instructions shown here.
+
+  1. Run the new Borland C++ 4.0 IDE, select Project | Open Project
+     and give it the name of the old .PRJ file.
+
+  2. Add TV.LIB library to your project.  It does not matter in
+     what order or where these libraries are placed in the
+     dependency list as long as they are immediate dependencies of
+     the target node (your executable file.)
+
+  3. Using TargetExpert (accessed via the local menu for the
+     project file target) set the fields to the following values:
+
+     Target Type:       Application [.exe]
+     Platform:                  DOS Standard
+     Target Model:              Large
+     Standard Libraries:
+        BGI:                       Unchecked
+        Class Library:       Unchecked
+        RTL:                       Checked
+
+     Also, select the appropriate type of floating point math
+     support for your application.  Now hit <OK> to save and close
+     this dialog.
+
+  4. Bring up the Project Notebook (via the Options | Project
+     menu).  If you have added a second target to the project,
+     bring up the Local Options dialog via the speed menu for the
+     appropriate target whose options you need to change.
+
+     a. Select Directories and set the include path to:
+
+        \BC4\INCLUDE;\BC4\TVISION\INCLUDE
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1753
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 13, 1994                         PAGE  :  2/3
+
+    TITLE  :  Using Turbo Vision 1.0x with Borland C++ 4.0
+
+
+
+
+        Include drive letters if necessary.
+
+     b. Set the Library path to:
+
+        \BC4\LIB
+
+        Again, include a drive letter if necessary.
+
+     c. Select C++ Options | Exception Handling/RTTI and turn off
+        all checkboxes on this page.  Turbo Vision objects are not
+        equipped to throw or catch exceptions, so the extra code
+        produced by these options is unnecessary.
+
+     That's all there is to modifying the project file.  At this
+     point, you should select Options | Save and save the new
+     project file.  Then select Project | Build All (or select
+     Build Node from the speed menu of the target you wish to
+     build.)  This will rebuild all object modules, thus ensuring
+     that no object modules remain that might have been compiled
+     with Borland C++ 3.1.  When it's done linking your program,
+     you'll now have your Turbo Vision project successfully built
+     with the new BC++ 4.0 IDE.
+
+  Overlaying Turbo Vision
+
+  If you are building an overlaid Turbo Vision application, make
+  the following adjustments to the steps above.  Make sure that
+  when you built the new Turbo Vision library, you specified
+  -DOVERLAY on the MAKE.EXE command line.
+
+     In step 2, add TVO.LIB and TVNO.LIB to your project instead of
+     TV.LIB.
+
+     In step 3, the platform should be set to <Dos Overlay> instead
+     of <Dos Standard>.
+
+     In addition to the option changes in step 4, make the
+     following changes to the Options | Project dialog pages:
+
+     d. Select C++ Options | Virtual Tables and set the radio
+        button to <Local>.
+
+     e. For each node in the project that should be overlaid, go to
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1753
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 13, 1994                         PAGE  :  3/3
+
+    TITLE  :  Using Turbo Vision 1.0x with Borland C++ 4.0
+
+
+
+
+        that nodes' speed menu and select Node Attributes. Check
+        the box marked <Overlay this module>.  Make sure you set
+        this option for TVO.LIB in addition to your own source
+        modules and make sure you do NOT set this option for
+        TVNO.LIB.
+
+     Note that compiling via assembler when overlaying Turbo Vision
+     code is no longer necessary.
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

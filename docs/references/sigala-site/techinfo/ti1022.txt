@@ -1,0 +1,462 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1022
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  December 3, 1992                         PAGE  :  1/7
+
+    TITLE  :  Initialization Order of Objects & Turbo Vision
+
+
+
+
+  INITIALIZATION ORDER OF GLOBAL OBJECTS BETWEEN SOURCE MODULES
+
+       The order of constructor calls for global objects is an
+  important consideration when writing large-scale C++ programs.
+  The Annotated C++ Reference Manual (ARM) by Ellis and Stroustrup
+  is the ANSI base document for C++.  It only specifies the order
+  for a given source module.  Any other initialization order is not
+  specified by the ARM and is therefore implementation dependent.
+  ( NOTE: section 3.4 of the ARM also mentions other issues related
+  to object initialization before the use of any function/object
+  defined in a given module - this document, however, discusses the
+  current implementation of Borland C++ 3.1 and it predecessors.)
+
+       According to Ellis and Stroustrup, the order of
+  initialization in a given module will always be in order of
+  declaration, in other words, top down and left to right.
+  Execution order of constructors and destructors between source
+  modules is not specified, except that destructors will be called
+  in reverse order from the constructors.  (See ARM section 3.4.)
+  The only exception to this rule is that it is guaranteed that the
+  I/O streams cout and cin will be constructed before any other
+  global constructor calls are made.
+
+  The effect of this provision is that if you have two modules, A
+  and B, and each has a global object that has a constructor, say
+  GlobObjA and GlobObjB respectively, then GlobObjA might be
+  created before GlobObjB, or it might not. This order is
+  implementation dependent and should not be relied upon since it
+  is inherently non-portable and could even change between compiler
+  versions from the same vendor.
+
+  The following text describes how Borland C++ and Turbo C++ handle
+  the order of construction of global objects.
+
+  When building a C++ program, three things can affect the link
+  order of modules:
+
+          1.  order of object modules
+          2.  order of libraries
+          3.  order of object modules within a library
+
+  For compiler versions 1.0, 1.01, 2.0, and 3.0 (Borland C++ or
+  Turbo C++, Windows or DOS), the order of constructor calls is
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1022
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  December 3, 1992                         PAGE  :  2/7
+
+    TITLE  :  Initialization Order of Objects & Turbo Vision
+
+
+
+
+  from right to left on the TLINK line, starting with libraries,
+  then object modules, and from bottom to top inside an individual
+  library.  Simply put, the order is exactly backwards to the order
+  in which the linker found each module.
+
+  There is also an anomaly that causes the destructors to be called
+  in exactly the same order, in violation of the standard.
+
+  For compiler version 3.1, the order of constructor calls is
+  exactly opposite of that listed above.  Object module
+  constructors are called first, from left to right on the TLINK
+  line.  Then library module constructors from left to right on the
+  TLINK line and top to bottom within each library. Destructor
+  order has not changed, and thus the 3.1 compilers are now in
+  accordance with the standard, with destructor order being the
+  exact opposite of constructor order.
+
+  If the IDE is being used, then the order of the object files on
+  the TLINK command line corresponds to the order in which modules
+  are listed in the project file.  User libraries are treated
+  similarly.
+
+  This fix implemented in version 3.1 affects the Turbo Vision
+  library.  Declaring the application object of a Turbo Vision
+  program outside of main() (i.e., make it a global object) was
+  allowed in version 3.0. This was because its constructor would be
+  called after every other object in the Turbo Vision library had
+  been constructed. In version 3.1, the application object
+  constructor will be called before any of the Turbo Vision library
+  global objects are built.
+
+  This poses a problem because certain functions that are called
+  when the application object is built require that objects such as
+  TScreen be constructed first, and this won't happen because the
+  order of initialization of global objects has changed.  If you
+  run such an application, there will be a short delay and then a
+  movable mouse cursor will appear on the screen.  No Turbo Vision
+  screen will appear and you will be able to do very little.
+  <Alt-X> will still exit the program if that keystroke is enabled
+  through the status line.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1022
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  December 3, 1992                         PAGE  :  3/7
+
+    TITLE  :  Initialization Order of Objects & Turbo Vision
+
+
+
+
+  The solution to this problem is to make the application object
+  local to main().  It can be made static if desired ( so that no
+  stack space is used ), but it should be local to main().
+
+  Below is a simple test program that will allow verification of
+  constructor and destructor calling order for a C++ program.  It
+  can be built in any version of the compiler, but the accompanying
+  makefile requires MAKE version 3.6 that shipped with either
+  version 3.0 or version 3.1.  Previous versions will require a
+  modification of the makefile.  Future versions of MAKE should
+  work okay.
+
+  For Further Reference:
+          The Annotated C++ Reference Manual
+          Margaret A. Ellis and Bjarne Stroustrup
+          Addison-Wesley Publishing Company
+          ISBN 0-201-51459-1
+
+  NOTES
+
+  1. The version numbers in this document refer to the version of
+  compiler technology used in a particular product.  For the most
+  part, the version of the product is the same as the version of
+  the technology.  The following table should be of some assistance
+  in determining this.
+
+          Product                       C++ Technology Version
+         ------------------------------------------------------
+          Borland C++ 3.1                        3.1
+          Borland C++ 3.0                        3.0
+          Borland C++ 2.0                        2.0
+          Turbo C++ for DOS 3.0                  3.0
+          Turbo C++ 2nd edition                  1.0
+          Turbo C++ 1.0                          1.0
+          Turbo C++ for Windows 3.1              3.1
+          Turbo C++ for Windows 3.0              3.0
+
+  2. How concepts such as global initialization order are
+  implemented is subject to change without notice.  This is an
+  implentation specific feature of C++ and it can change between
+  compiler versions.  This document is only good up through version
+  3.1 of Borland's compiler technology.  If you write code
+  dependent on a certain order, be sure to document fully how it
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1022
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  December 3, 1992                         PAGE  :  4/7
+
+    TITLE  :  Initialization Order of Objects & Turbo Vision
+
+
+
+
+  works and what order it requires.  That way, if the order
+  changes, any problems related to this can be easily traced.
+
+
+
+  #
+  # Makefile for Constructor Calling Order Demo.
+  #
+  # Written by Borland Technical Support, 1992.
+  #
+  .AUTODEPEND
+
+  NAME   = main
+  OBJ    = $(NAME).obj a.obj b.obj
+  LIB    = x.lib y.lib
+  XOBJ   = c.obj d.obj
+  YOBJ   = e.obj
+  DEBUG  = -v
+  MODEL  = -ml
+  CFLAGS = -c -H
+
+  .cpp.obj:
+      $(BCC) $(MODEL) $(DEBUG) $(CFLAGS) {$*.cpp }
+
+  .c.obj:
+      $(BCC) $(MODEL) $(DEBUG) $(CFLAGS) {$*.c }
+
+  #
+  # ________  EXE  ________
+  #
+  $(NAME).exe: $(OBJ) $(LIB)
+      $(TLINK) -x $(DEBUG) @&&~
+  c0l +
+  $(OBJ)
+  $(NAME)
+  $(NAME)
+  $(LIB) +
+  cl
+  ~
+
+  x.lib: $(XOBJ)
+      &$(TLIB) x.lib {-+$? }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1022
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  December 3, 1992                         PAGE  :  5/7
+
+    TITLE  :  Initialization Order of Objects & Turbo Vision
+
+
+
+
+  y.lib: $(YOBJ)
+      &$(TLIB) y.lib {-+$? }
+
+
+
+
+
+
+  /*
+   * MAIN.CPP: Main module for constructor calling order demo.
+   *
+   */
+  #include <iostream.h>
+
+  void aa(void), bb(void), cc(void), dd(void), ee(void);
+
+  int main()
+  {
+       cout << "Main..." << endl;
+
+       aa(); bb(); cc(); dd(); ee();
+       // Calling these functions forces
+       //  their linkage from the library.
+
+      return 0;
+  }
+
+
+
+
+
+  /*
+   * A.CPP: Test module A for constructor calling order demo.
+   *
+   */
+  #include <iostream.h>
+
+  class A {
+  public:
+      A() { cout << "Creating A (module 1)" << endl; }
+      ~A() { cout << "Destroying A (module 1)" << endl; }
+  };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1022
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  December 3, 1992                         PAGE  :  6/7
+
+    TITLE  :  Initialization Order of Objects & Turbo Vision
+
+
+
+
+  A a;
+
+  void aa(void) {}
+
+
+
+
+
+  /*
+   * B.CPP: Test module B for constructor calling order demo.
+   *
+   */
+  #include <iostream.h>
+
+  class B {
+  public:
+      B() { cout << "Creating B (module 2)" << endl; }
+      ~B() { cout << "Destroying B (module 2)" << endl; }
+  };
+
+  B b;
+
+  void bb(void) {}
+
+
+
+
+
+  /*
+   * C.CPP: Test module C for constructor calling order demo.
+   *
+   */
+  #include <iostream.h>
+
+  class C {
+  public:
+      C() { cout << "Creating C (lib 1, module 1)" << endl; }
+      ~C() { cout << "Destroying C (lib 1, module 1)" << endl; }
+  };
+
+  C c;
+
+  void cc(void) {}
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1022
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  December 3, 1992                         PAGE  :  7/7
+
+    TITLE  :  Initialization Order of Objects & Turbo Vision
+
+
+
+
+  /*
+   * D.CPP: Test module D for constructor calling order demo.
+   *
+   */
+  #include <iostream.h>
+
+  class D {
+  public:
+      D() { cout << "Creating D (lib 1, module 2)" << endl; }
+      ~D() { cout << "Destroying D (lib 1, module 2)" << endl; }
+  };
+
+  D d;
+
+  void dd(void) {}
+
+
+
+
+
+  /*
+   * E.CPP: Test module E for constructor calling order demo.
+   *
+   */
+  #include <iostream.h>
+
+  class E {
+  public:
+      E() { cout << "Creating E (lib 2, module 1)" << endl; }
+      ~E() { cout << "Destroying E (lib 2, module 1)" << endl; }
+  };
+
+  E e;
+
+  void ee(void) {}
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+

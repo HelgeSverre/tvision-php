@@ -1,0 +1,462 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1159
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  1/7
+
+    TITLE  :  Graying Buttons with Turbo Vision.
+
+
+
+
+
+       The following source code provides an example of graying a
+  button when using Borland's C++ Turbo Vision Framework for DOS.
+  A MAKEFILE is also included.
+
+
+  /****************************************************************
+  *                                                               *
+   * BUTTON.CPP                                                   *
+   *   This module contains code to set up a dialog box with three*
+   *   buttons. The first button toggles the second button between*
+   *   an enabled and disabled state.  The third is just an OK    *
+   *   button to  close the box.                                  *
+   *                                                              *
+   * SUPPORT MODULE for grey button example.                      *
+   *                                                              *
+   ****************************************************************
+   *                                                              *
+   * This code was written by Borland Technical Support.          *
+   * It is provided as is with no warranties expressed or implied *
+   *                                                              *
+   ***************************************************************/
+
+  #define Uses_TRect
+  #define Uses_TView
+  #define Uses_TEvent
+  #define Uses_TButton
+  #define Uses_TLabel
+  #define Uses_TDialog
+  #define Uses_MsgBox
+  #include <tv.h>
+
+  #pragma hdrstop
+
+  #include "button.h"
+  #include "cmds.h"
+
+
+  /****************************************************************
+   *                                                              *
+   * class TButtonDialog                                          *
+   *                                                              *
+   ****************************************************************
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1159
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  2/7
+
+    TITLE  :  Graying Buttons with Turbo Vision.
+
+
+
+
+   * TButtonDialog::TButtonDialog                                 *
+   *   Initialize the dialog box - add the appropriate labels and *
+   *   buttons and set option to center it on the screen.         *
+   ****************************************************************/
+
+  TButtonDialog::TButtonDialog(TRect& r, char *title) :
+      TDialog( r, title ),
+      TWindowInit( initFrame )
+  {
+      TButton *TB;
+
+      TB = new TButton( TRect(2,2,12,4), "~T~oggle", cmToggle,
+                        bfNormal );
+      insert( TB );
+      insert( new TLabel( TRect(13,2,37,3), "Toggle
+                      enabled/disabled", TB ) );
+
+      TB = new TButton( TRect(2,4,12,6), "T~e~ster", cmTester,
+                      bfNormal );
+      insert( TB );
+      insert( new TLabel( TRect(13,4,25,5), "Test Button", TB ) );
+
+      insert( new TButton( TRect(14,7,24,9), "O~K~", cmOK,
+                      bfDefault ) );
+
+      options |= ofCentered;
+      selectNext( False );
+  }
+
+
+  /****************************************************************
+   * TTestList::handleEvent
+   *   Handle the command events from the <Toggle> and <Tester>
+       buttons.
+   ****************************************************************/
+
+  void TButtonDialog::handleEvent( TEvent& event )
+  {
+      TDialog::handleEvent( event );
+
+      if( event.what == evCommand )
+      {
+          switch( event.message.command )
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1159
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  3/7
+
+    TITLE  :  Graying Buttons with Turbo Vision.
+
+
+
+
+          {
+          case cmToggle:             // Toggle tester button on/off
+              if( commandEnabled( cmTester ) )
+                  disableCommand( cmTester );
+              else
+                  enableCommand( cmTester );
+              break;
+
+          case cmTester:             // Put up a message box...
+              messageBox( "Tester button pressed...",
+                          mfOKButton | mfInformation
+                        );
+              break;
+
+          default:
+              return;
+          }
+          clearEvent(event);
+      }
+  }
+
+
+
+
+
+
+
+
+
+
+
+  /****************************************************************
+   * BUTTON.H                                                     *
+   *   Header file to support BUTTON.CPP.  Contains the dialog    *
+   *   class                                                      *
+   *   used for the buttons.                                      *
+   *                                                              *
+   * HEADER FILE for grey button example.                         *
+   *                                                              *
+   ****************************************************************
+   *                                                              *
+   * This code was written by Borland Technical Support.          *
+   * It is provided as is with no warranties expressed or implied.*
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1159
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  4/7
+
+    TITLE  :  Graying Buttons with Turbo Vision.
+
+
+
+
+   *                                                              *
+   ****************************************************************/
+
+  class TButtonDialog : public TDialog
+  {
+  public:
+      TButtonDialog( TRect& r, char *title );
+      virtual void handleEvent( TEvent& event );
+  };
+
+
+
+
+
+
+
+
+
+
+  /****************************************************************
+   * CMDS.H                                                       *
+   *   This module contains various commands used in the main     *
+   *   message  system (including the menu bar, status line, and  *
+   *   miscellaneous dialog boxes.)                               *
+   *                                                              *
+   * HEADER FILE for grey button example.                         *
+   *                                                              *
+   ****************************************************************
+   *                                                              *
+   * This code was written by Borland Technical Support.          *
+   * It is provided as is with no warranties expressed or implied.*
+   *                                                              *
+   ****************************************************************/
+
+  #ifndef _CMDS_H
+  #define _CMDS_H
+
+  const unsigned short cmButtonDialog = 100;
+  const unsigned short cmToggle       = 101;
+  const unsigned short cmTester       = 102;
+
+  #endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1159
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  5/7
+
+    TITLE  :  Graying Buttons with Turbo Vision.
+
+
+
+
+  /****************************************************************
+   * TEST.CPP                                                     *
+   *   This module contains the Turbo Vision application code to  *
+   *   run this example.  It sets up the necessary menus to bring *
+   *   up the test module represented by this demo.               *
+   * TEST MODULE for grey button example.                         *
+   *                                                              *
+   ****************************************************************
+   *                                                              *
+   * This code was written by Borland Technical Support.          *
+   * It is provided as is with no warranties expressed or implied.*
+   *                                                              *
+   ****************************************************************/
+
+  #define Uses_TRect
+  #define Uses_TKeys
+  #define Uses_TEvent
+  #define Uses_TDialog
+  #define Uses_TListViewer
+  #define Uses_TMenu
+  #define Uses_TMenuItem
+  #define Uses_TMenuBar
+  #define Uses_TDeskTop
+  #define Uses_TApplication
+  #include <tv.h>
+
+  #pragma hdrstop
+
+  #include "cmds.h"
+  #include "button.h"
+
+
+  class TTestApp : public TApplication
+  {
+
+  public:
+
+      TTestApp() : TApplication(),
+                   TProgInit( initStatusLine, initMenuBar,
+                              initDeskTop ) {}
+      static TMenuBar *initMenuBar( TRect r );
+      virtual void handleEvent( TEvent& event );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1159
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  6/7
+
+    TITLE  :  Graying Buttons with Turbo Vision.
+
+
+
+
+  };
+
+
+  TMenuBar *TTestApp::initMenuBar( TRect r )
+  {
+      r.b.y = r.a.y + 1;
+      return new TMenuBar( r, new TMenu(
+          *new TMenuItem( "~B~utton Dialog", cmButtonDialog, kbAltL
+                           )
+          ));
+  }
+
+
+  void TTestApp::handleEvent( TEvent& event )
+  {
+      TApplication::handleEvent( event );
+
+      if( event.what == evCommand &&
+          event.message.command == cmButtonDialog
+        )
+      {
+          TView *TBD = (TView *) validView(
+            new TButtonDialog( TRect(0,0,39,10), "Buttons")
+            );
+          if( TBD != 0 )
+              deskTop->execView( TBD );
+          clearEvent( event );
+      }
+  }
+
+
+  int main()
+  {
+      TTestApp TB;
+      TB.run();
+      return 0;
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1159
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  7/7
+
+    TITLE  :  Graying Buttons with Turbo Vision.
+
+
+
+
+  #
+  # Makefile for Turbo Vision demo applications
+  #
+  # Written by Borland Tech Support, 1992.
+  #
+  .AUTODEPEND
+
+  NAME    = testapp
+  OBJS    = $(NAME).obj button.obj
+
+  BCROOT  = C:\BORLANDC
+  INCPATH = $(BCROOT)\include;$(BCROOT)\TVISION\include
+  LIBPATH = $(BCROOT)\lib;$(BCROOT)\TVISION\lib
+
+  CFLAGS  = -c -I$(INCPATH) -H=$(NAME).sym -v -ml
+  LFLAGS  =  /v -Vt -L$(LIBPATH)
+  CC      = bcc
+  LINK    = tlink
+
+  .cpp.obj:
+      $(CC) $(CFLAGS) {$< }
+
+
+  $(NAME).exe: $(OBJS)
+      $(LINK) @&&~
+  $(LFLAGS) c0l $(OBJS)
+  $(NAME).exe
+  $(NAME).map
+  tv emu mathl cl
+  ~
+
+
+
+
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+

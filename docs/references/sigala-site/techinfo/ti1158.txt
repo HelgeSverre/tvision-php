@@ -1,0 +1,594 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1158
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  1/9
+
+    TITLE  :  A modal dialog from a modal dialog with Turbo Vision
+
+
+
+
+
+       The following code provides an example of executing a Modal
+  Dialog Box from another Dialog Box when using Turbo Vision.
+
+
+  /*********************************************************************\
+   * TEST.CPP                                                          *
+   *   This module contains the Turbo Vision application code to run   *
+   *   this example.  It sets up the necessary menus to bring up the   *
+   *   test module represented by this demo.                           *
+   *                                                                   *
+   * TEST MODULE for Dialog Example #3 : Creating a second modal dialog*
+   *   box from within a first.                                        *
+   *                                                                   *
+   *********************************************************************
+   *                                                                   *
+   * This code was written by Borland Technical Support.               *
+   * It is provided as is with no warranties expressed or implied.     *
+   *                                                                   *
+  \*********************************************************************/
+
+  #define Uses_TRect
+  #define Uses_TKeys
+  #define Uses_TEvent
+  #define Uses_TDialog
+  #define Uses_TMenu
+  #define Uses_TMenuItem
+  #define Uses_TMenuBar
+  #define Uses_TDeskTop
+  #define Uses_TApplication
+  #include <tv.h>
+  #include <mem.h>
+
+  #pragma hdrstop
+
+  #include "cmds.h"
+  #include "mdlg.h"
+
+
+  class TTestApp : public TApplication
+  {
+
+  public:
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1158
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  2/9
+
+    TITLE  :  A modal dialog from a modal dialog with Turbo Vision
+
+
+
+
+      TTestApp() : TApplication(),
+                   TProgInit( initStatusLine, initMenuBar, initDeskTop )
+  { }
+      static TMenuBar *initMenuBar( TRect r );
+      virtual void handleEvent( TEvent& event );
+
+  };
+
+
+  TMenuBar *TTestApp::initMenuBar( TRect r )
+  {
+      r.b.y = r.a.y + 1;
+      return new TMenuBar( r, new TMenu(
+          *new TMenuItem( "~D~ialog Box", cmEDialog, kbAltE )
+          ));
+  }
+
+
+  void TTestApp::handleEvent( TEvent& event )
+  {
+      TFirstDialog *td;
+
+      TApplication::handleEvent( event );
+
+      if( event.what == evCommand &&
+          event.message.command == cmEDialog )
+      {
+          td = new TFirstDialog( TRect(0,0,40,11),
+                                 "The first dialog box." );
+          if( validView( td ) )
+              deskTop->execView( td );
+      }
+  }
+
+
+  int main()
+  {
+      TTestApp TB;
+      TB.run();
+      return 0;
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1158
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  3/9
+
+    TITLE  :  A modal dialog from a modal dialog with Turbo Vision
+
+
+
+
+  /*********************************************************************
+   *                                                                   *
+   * MDLG.CPP                                                          *
+   *   This module contains the code for the two subclassed dialogs use*
+   *   by this demo.                                                   *
+   *                                                                   *
+   * SUPPORT MODULE for dialog example #3 : Creating a second modal    *
+   *   dialog box from within a first.                                 *
+   *                                                                   *
+   *   The key to this operation is making sure that the deskTop's     *
+   *   execView() function is used in all cases when a modal dialog box*
+   *   is desired.  execView() is a member function of TGroup, thus any*
+   *   class derived from TGroup will have its own version of that     *
+   *   function.  When inside a dialog box handleEvent procedure, code *
+   *   such as                                                         *
+   *                                                                   *
+   *      TDialog *td = ...                                            *
+   *      execView( td );                                              *
+   *                                                                   *
+   *   will compile, but the box will come up with lots of flashing    *
+   *   white on red colors.  This is because the new dialog box was    *
+   *   inserted into the old dialog box, instead of the deskTop and the*
+   *   palette isn't mapped right.  The solution is to execView the    *
+   *   dialog box this way:                                            *
+   *                                                                   *
+   *      TDialog *td = ...                                            *
+   *      TProgram::deskTop->execView( td );                           *
+   *                                                                   *
+   *  'deskTop' is a static public member of TProgram and points to the*
+   *   desktop object of the current application.  This way, the dialog*
+   *   box will be inserted into the desktop and the palettes will work*
+   *   properly.  The Z order will also be correct so that the views   *
+   *   stack up right.                                                 *
+   *                                                                   *
+   *********************************************************************
+   *                                                                   *
+   * This code was written by Borland Technical Support.               *
+   * It is provided as is with no warranties expressed or implied.     *
+   *                                                                   *
+   *********************************************************************/
+
+  #define Uses_TRect
+  #define Uses_TKeys
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1158
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  4/9
+
+    TITLE  :  A modal dialog from a modal dialog with Turbo Vision
+
+
+
+
+  #define Uses_TEvent
+  #define Uses_TButton
+  #define Uses_TStaticText
+  #define Uses_TDialog
+  #define Uses_MsgBox
+  #define Uses_TDeskTop
+  #define Uses_TProgram
+  #include <tv.h>
+
+  #pragma hdrstop
+
+  #include "cmds.h"
+  #include "mdlg.h"
+
+
+  /********************************************************************
+   *   Class TFirstDialog                                             *
+   ********************************************************************
+   * TFirstDialog::TFirstDialog                                       *
+   *   Constructor for the dialog box.  Encapsulates the box to ease  *
+   *   creation.                                                      *
+   ********************************************************************/
+
+  TFirstDialog::TFirstDialog( TRect& r, char *aTitle ) :
+      TDialog( r, aTitle ),
+      TWindowInit( initFrame )
+  {
+      insert( new TStaticText( TRect(2,2,38,6),
+         "This is a modal dialog box.  Hitting the <More> button below "
+         "will bring up a second modal dialog box on top of this one."
+          ));
+
+      insert( new TButton( TRect(2,8,12,10),
+                          "~M~ore", cmMore, bfDefault )
+            );
+      insert( new TButton( TRect(14,8,24,10), "O~K~", cmOK, bfNormal )
+            );
+      insert( new TButton( TRect(26,8,36,10), "~C~ancel", cmCancel,
+                           bfNormal )
+            );
+
+      selectNext( False );
+      options |= ofCentered;
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1158
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  5/9
+
+    TITLE  :  A modal dialog from a modal dialog with Turbo Vision
+
+
+
+
+  }
+
+
+  /***********************************************************************
+   * TFirstDialog::handleEvent
+   *   Handle the <More> button and bring up the second dialog box when
+   *   this button is pushed.
+   ***********************************************************************/
+
+  void TFirstDialog::handleEvent( TEvent& event )
+  {
+      TSecondDialog *td;
+
+      if( event.what == evCommand )
+          switch( event.message.command )
+          {
+          case cmMore:               // Brings up a second dialog box...
+              td = new TSecondDialog( TRect(0,0,38,9),
+                                      "The second dialog box."
+                                    );
+              if( TProgram::application->validView( td ) )
+                  TProgram::deskTop->execView( td );
+              clearEvent( event );
+              break;
+          }
+
+      TDialog::handleEvent( event );
+  }
+
+
+  /**********************************************************************
+   *
+   * Class TSecondDialog
+   *
+   **********************************************************************
+   * TSecondDialog::TSecondDialog
+   *   A fairly cheezy second dialog box with an ok button to make it go
+   *   away.  (This is probably a good thing :-) )
+   ***********************************************************************/
+
+  TSecondDialog::TSecondDialog( TRect& r, char *aTitle ) :
+      TDialog( r, aTitle ),
+      TWindowInit( initFrame )
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1158
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  6/9
+
+    TITLE  :  A modal dialog from a modal dialog with Turbo Vision
+
+
+
+
+  {
+      insert( new TStaticText( TRect(2,2,36,5),
+        "This the second modal dialog box.  Hitting the <OK> button or "
+        "<Esc> will make it go away."
+          ));
+
+      insert( new TButton( TRect(13,6,23,8), "O~K~", cmOK, bfDefault )
+            );
+      options |= ofCentered;
+  }
+
+
+
+
+
+
+
+
+
+
+
+  /*********************************************************************
+   *                                                                   *
+   * CMDS.H                                                            *
+   *   This header contains various commands used in the main message  *
+   *   system (including the menu bar, status line, and miscellaneous  *
+   *   dialog boxes.)                                                  *
+   *                                                                   *
+   *********************************************************************
+   *                                                                   *
+   * This code was written by Borland Technical Support.               *
+   * It is provided as is with no warranties expressed or implied.     *
+   *                                                                   *
+   *********************************************************************/
+
+  #ifndef _CMDS_H
+  #define _CMDS_H
+
+  const unsigned short cmEDialog      = 100;
+  const unsigned short cmMore         = 101;
+
+  #endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1158
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  7/9
+
+    TITLE  :  A modal dialog from a modal dialog with Turbo Vision
+
+
+
+
+  /*********************************************************************
+   *                                                                   *
+   * MDLG.H                                                            *
+   *   This header contains the class definitions for the MDLG.CPP     *
+   *   source module.                                                  *
+   *                                                                   *
+   * CLASSES                                                           *
+   *   TFirstDialog           The first dialog box.                    *
+   *   TSecondDialog          The second dialog box.                   *
+   *                                                                   *
+   *********************************************************************
+   *                                                                   *
+   * This code was written by Borland Technical Support.               *
+   * It is provided as is with no warranties expressed or implied.     *
+   *                                                                   *
+   *********************************************************************/
+
+
+  class TFirstDialog : public TDialog
+  {
+
+  public:
+
+      TFirstDialog( TRect& r, char *aTitle );
+      virtual void handleEvent( TEvent& event );
+
+  };
+
+
+  class TSecondDialog : public TDialog
+  {
+
+  public:
+
+      TSecondDialog( TRect& r, char *aTitle );
+
+  };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1158
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  8/9
+
+    TITLE  :  A modal dialog from a modal dialog with Turbo Vision
+
+
+
+
+  #
+  # Makefile for Turbo Vision sample demo
+  #
+  # Written by Borland Tech Support, 1992.
+  #
+  .AUTODEPEND
+
+  NAME    = test
+  OBJS    = $(NAME).obj mdlg.obj
+
+  DEBUG   = -v
+  MODEL   = -ml
+  MAP     = -x
+  INCPATH = C:\BORLANDC\INCLUDE;C:\BORLANDC\TVISION\INCLUDE
+  LIBPATH = C:\BORLANDC\LIB;C:\BORLANDC\TVISION\LIB
+
+  CFLAGS  = -c -H=$(NAME).sym $(DEBUG) $(MODEL)
+  LFLAGS  = $(MAP) $(DEBUG) -Vt -L$(LIBPATH)
+  CC      = bcc
+  LINK    = tlink
+
+  .cpp.obj:
+      $(CC) +$(NAME).cfg {$*.cpp }
+
+  .c.obj:
+      $(CC) +$(NAME).cfg {$*.c }
+
+  $(NAME).exe: $(NAME).cfg $(OBJS)
+      $(LINK) @&&~
+  $(LFLAGS) c0l +
+  $(OBJS)
+  $(NAME).exe
+  $(NAME).map
+  tv +
+  emu + mathl + cl
+  ~
+
+  $(NAME).cfg: makefile
+          copy &&~
+  $(CFLAGS) -I$(INCPATH) -L$(LIBPATH)
+  ~ $(NAME).cfg
+
+  clean:
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1158
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  November 11, 1992                        PAGE  :  9/9
+
+    TITLE  :  A modal dialog from a modal dialog with Turbo Vision
+
+
+
+
+      del *.sym *.obj *.exe *.cfg
+
+
+
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that you
+  received with the Borland product to which this information pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

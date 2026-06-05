@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1553
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/5
+
+    TITLE  :  How to override freeItem for Collections
+
+
+
+
+  //=============================================================
+  //
+  // Example of a derived TNSCollection class that can be used to
+  // store objects that have their own destructors.
+  //
+  // IMPORTANT:
+  //   When a TNSCollection item is deleted, the virtual member
+  //   function freeItem() is called.  By default, this function
+  //   simply deletes a void pointer.  This is fine for objects
+  //   which do not have their own destructors.  For objects with
+  //   destructors, freeItem MUST be overridden for proper
+  //   clean-up.  To provide proper clean-up, the void pointer
+  //   passed in to freeItem must be cast to the class type
+  //   before deletion.
+  //
+  //=============================================================
+  #define Uses_TCollection
+  #define Uses_ipstream
+  #define Uses_opstream
+  #include <tv.h>
+  #include <conio.h>
+  #include <iostream.h>
+
+  //=============================================================
+  // TFruit class
+  //    This is the object we'll put in the collection.
+  //=============================================================
+  class TFruit
+  {
+
+      static int refCount;
+      char *name;
+
+  public:
+
+      TFruit( char *s )
+      {
+          name = newStr( s );
+          ++refCount;
+          cout << "  TFruit CTor: " << name << " (" << refCount
+               << ")" << endl;
+      }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1553
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/5
+
+    TITLE  :  How to override freeItem for Collections
+
+
+
+
+      ~TFruit()
+      {
+          cout << "!!TFruit DTor: " << name << " (" << refCount
+               << ")" << endl;
+          --refCount;
+          delete name;
+      }
+
+  };
+
+  int TFruit::refCount;
+
+
+  //=============================================================
+  // TFruitBowl
+  //    This is the collection we'll be using.  It's got full
+  //    stream support, except for registration in the stream
+  //    manager database.
+  //=============================================================
+  class TFruitBowl : public TCollection
+  {
+
+  public:
+
+      //
+      //constructor
+      //
+      TFruitBowl( ccIndex aLimit, ccIndex aDelta ) :
+          TCollection( aLimit, aDelta )
+      {
+          cout << "Creating TFruitBowl..." << endl;
+      }
+
+      //
+      //destructor
+      //
+      ~TFruitBowl()
+      {
+          cout << "Destroying TFruitBowl." << endl;
+      }
+
+  private:
+      virtual void freeItem( void *item )
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1553
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/5
+
+    TITLE  :  How to override freeItem for Collections
+
+
+
+
+          {
+            //
+            //Cast item to a TFruit pointer and then delete
+            //
+            delete (TFruit *) item;
+          }
+
+      //
+      //The following (streamableName, readItem, writeItem,
+      //streamable constructor, const name and build) functions
+      //are pure virtual in TCollection, so they must be
+      //redefined.  These functions add 'streamability' to the
+      //TFruitBowl class.
+      //
+      virtual const char *streamableName() const
+          { return name; }
+      virtual void *readItem( ipstream& ip )
+          { return( new TFruit( ip.readString() )); }
+      virtual void writeItem( void *item, opstream& op )
+          { op.writeString( ((TFruit *) item)->name ); }
+
+  protected:
+
+      TFruitBowl( StreamableInit ) : TCollection(streamableInit)
+          {}
+
+  public:
+
+      static const char * const near name;
+      static TStreamable *build()
+          { return new TFruitBowl( streamableInit ); }
+
+  };
+
+  //
+  //Initilize the 'name' static variable
+  //
+  const char * const near TFruitBowl::name = "TFruitBowl";
+
+  //
+  //Overloaded insertion and extraction operators - for
+  //streamability.
+  //
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1553
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/5
+
+    TITLE  :  How to override freeItem for Collections
+
+
+
+
+  inline ipstream& operator >> ( ipstream& is, TFruitBowl& cl )
+      { return is >> (TStreamable&)cl; }
+  inline ipstream& operator >> ( ipstream& is, TFruitBowl*& cl )
+      { return is >> (void *&)cl; }
+
+  inline opstream& operator << ( opstream& os, TFruitBowl& cl )
+      { return os << (TStreamable&)cl; }
+  inline opstream& operator << ( opstream& os, TFruitBowl* cl )
+      { return os << (TStreamable *)cl; }
+
+
+  //=============================================================
+  // main
+  //    Here we create a TFruitBowl and successive insert and
+  //    remove TFruit objects from it.  At the end, we destroy
+  //    the TFruitBowl (with TFruit still in it).  The calls to
+  //    'cout' demonstrate the constructor and destructor calls
+  //    that take place.
+  //=============================================================
+  int main()
+  {
+      TFruitBowl *bowl = new TFruitBowl( 10, 10 );
+
+      cout << "Adding items to fruit collection." << endl;
+      bowl->insert( new TFruit( "Apple" ));
+      bowl->insert( new TFruit( "Orange" ));
+      bowl->insert( new TFruit( "Peach" ));
+      bowl->insert( new TFruit( "Kiwi" ));
+
+      cout << "\nRemoving items from fruit collection." << endl;
+      bowl->atFree( 3 );
+      bowl->atFree( 1 );
+
+      cout << "\nAdding more items to fruit collection." << endl;
+      bowl->insert( new TFruit( "Pear" ));
+      bowl->insert( new TFruit( "Grapes" ));
+
+      cout << "\nDestroying fruit bowl and contents." << endl;
+      TObject::destroy( bowl );
+
+      cout << "\nPress any key to terminate"
+              " (and possibly clear screen. :-(";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1553
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/5
+
+    TITLE  :  How to override freeItem for Collections
+
+
+
+
+      getch();
+      return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

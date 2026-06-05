@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1023
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  1/5
+
+    TITLE  :  Persistent Objects using Turbo Vision
+
+
+
+
+
+  One of the questions in object oriented programming that arises
+  is how to save an object to disk or other media.  This concept is
+  called persistence, referring to objects whose lifetime persists
+  beyond the termination of the program in which they were created.
+  C++ does not have any built in facility for handling persistent
+  objects and there are all sorts of hidden data members in C++
+  classes, including some with runtime dependent address
+  information.  So the question becomes one of how to design a
+  mechanism that will allow us to write the data of a class out to
+  a disk file in such a way that we can restore the object at a
+  later time with the data intact.
+
+  Turbo Vision has such a mechanism and it is called the Turbo
+  Vision stream.  Turbo Vision streams work with any Turbo Vision
+  object that has had stream support added.  This document is
+  designed as an overview for the Turbo Vision streams and to act
+  as a checklist for the different items a programmer has to
+  provide to add complete stream support to a custom Turbo Vision
+  object.  It is expected that the reader be familiar with the
+  concepts discussed in Chapter 8 of the Turbo Vision User's Guide.
+
+  Here is a brief description of the mechanism used by Turbo Vision
+  to implement persistent objects.  A special type of stream,
+  pstream, is derived from the standard C++ i/o stream library to
+  handle reading and writing the special data files.  For output
+  each object provides an appropriate write() function to write its
+  data out to the stream.  This function will be written in terms
+  of a base of functions and operators that work with the built in
+  types.  It is called by an overloaded operator<< when the
+  programmer uses that operator to write the object out to the
+  stream.
+
+  Later, when the object is to be read in, a special constructor
+  that takes a type StreamableInit constructor is called to
+  recreate a memory image of the object.  The stream manager calls
+  this constructor through the static build() member function whose
+  address is stored in the stream registration database.  This is
+  the reason an object must be registered before it will stream
+  properly and this is how the runtime dependent information such
+  as the virtual table is restored.  Next the read() functions will
+  be called to initialize the data areas of the object.  Then the
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1023
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  2/5
+
+    TITLE  :  Persistent Objects using Turbo Vision
+
+
+
+
+  operator returns, and a new object has been created that is
+  functionally equivalent to the one which had been saved earlier.
+
+  There is a list of eight considerations that must be met before
+  an object can be streamed properly.  Here is the list of
+  requirements.
+
+  1.   The object must have TStreamable in its inheritance
+  hierarchy.  Anything derived from TView already meets this
+  requirement.  If one is deriving a new object from TObject and
+  one desires to stream such items, then multiple inheritance
+  should be used to derive it from TStreamable also.
+
+  2.   Override the virtual read/write for data related to class
+  (if the class is derived from something, then one will call the
+  parents read/write function first.  e.g. TView::write().)  If
+  there is no data specific to this class, these members may be
+  left out.  These should be protected data members.  The
+  prototypes are:
+
+       virtual void write( opstream& )
+       virtual void *read( ipstream& )    // returns 'this'
+
+  3.   Include a private constructor which accepts one parameter of
+  type StreamableInit (this is a typedef for 'streamableInit').
+  Have the constructor call the parent class constructor and pass
+  it the parameter streamableInit.
+
+       e.g. TClassName( StreamableInit ) : TView( StreamableInit )
+            {}
+
+  4.   Have a public function that builds a 'template' for the
+  object.  This will be used by the stream manager to create an
+  instance of an object whose data it is currently reading.  The
+  prototype is
+
+       TStreamable *build()
+
+  and here is an example:
+
+      TStreamable *TClassName::build()
+      {
+          return new TClassName( streamableInit );
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1023
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  3/5
+
+    TITLE  :  Persistent Objects using Turbo Vision
+
+
+
+
+      }
+
+  5.   Have a public static character pointer to const called name.
+  This should be initialized to a unique character string, normally
+  the class name, e.g.
+
+       const char * const TClassName::name = "TClassName";
+
+  6.   Have a public function called streamableName() that returns
+  the above string, name.  It's implemented like this:
+
+      virtual const char *streamableName() const
+      {
+          return name;
+      }
+
+  7.   The object should be registered with the stream manager.
+  This is done by creating an object of type TStreamableClass and
+  passing the name, address of the build member function, and a
+  third parameter to its constructor.  The third argument, __DELTA(
+  TClassName ) is a macro that is explained at the end of this
+  document.  By convention, the name of this instance should be
+  RClassName, e.g.
+
+       TStreamableClass RClassName( TClassName::name,
+                                    TClassName::build,
+                                    __DELTA( TClassName )
+                                  );
+
+  Furthermore, when using a class that descends from a Turbo Vision
+  object, you have to pull in its registration instance too.  This
+  done with the __link() macro.  It will be used for the TV class
+  that the object was derived from.  It takes a single argument
+  that is the class name of the TV class involved, except the first
+  letter is an 'R' instead of a 'T'.  If you derived TMyWindow from
+  TWindow, you would do this:
+
+      __link( RWindow );
+
+  8.   The >> and << operators should be overloaded for this object
+  with the following lines to facilitate their usage for writing
+  and reading objects with the stream.  When reading objects from a
+  stream into a pointer, the pointer should NOT be allocated first.
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1023
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  4/5
+
+    TITLE  :  Persistent Objects using Turbo Vision
+
+
+
+
+  The stream manager will take care of creating the proper object
+  for that pointer and assigning the new address.  When writing
+  objects to a stream, make sure that the first object is passed by
+  address to the operator, otherwise the stream header will not be
+  set up properly.
+
+      inline ipstream& operator >> (ipstream& is, TClassName & cl)
+      {
+          return is >> (TStreamable&) cl;
+      }
+
+      inline ipstream& operator >> (ipstream& is, TClassName *& cl)
+      {
+          return is >> (void *&) cl;
+      }
+
+      inline opstream& operator << (opstream& os, TClassName & cl)
+      {
+          return os << (TStreamable&) cl;
+      }
+
+      inline opstream& operator << (opstream& os, TClassName * cl)
+      {
+          return os << (TStreamable *) cl;
+      }
+
+
+
+  Quick descriptions of Turbo Vision stream objects and macros.
+  ------------------------------------------------------------
+
+  i/ofpstream:
+
+      These are the names of the stream objects that replace the
+  C++ file streams.  Use them when writing or reading objects to or
+  from a disk file.
+
+
+  TStreamable:
+
+      Base class for all streamable objects.  Any class that is
+  streamed MUST be descended from this class.  (Note: Anything
+  derived from TView already meets this requirement.)
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1023
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  5/5
+
+    TITLE  :  Persistent Objects using Turbo Vision
+
+
+
+
+  TStreamableClass:
+
+      An object of this type is created for the purposes of
+  registering a new object with the streams.  This gives the stream
+  manager the tools to build an object that is being read.
+
+
+  __link( RTVClassName ):
+
+      Used to register the Turbo Vision object RTVClassName.
+
+
+  __DELTA( TClassName ):
+
+      This calculates the difference in the address between a
+  TClassName* and the embedded TStreamable* within.  TClassName may
+  have multiple base classes, most often being TStreamable and
+  TObject, and these addresses are not necessarily the same.  The
+  stream manager needs this delta value to be able to properly cast
+  a TStreamable* back to the object it is supposed to be.
+
+
+  More examples of implementing Turbo Vision streams
+  --------------------------------------------------
+
+  On the Borland Forums and BBS there are two sample archive files,
+  TVNSTREA.ZIP and TVSTREAM.ZIP.  The former is a simple Turbo
+  Vision program and the latter is the same program but with stream
+  support and a <Save Desktop> feature added.
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

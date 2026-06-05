@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1532
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/5
+
+    TITLE  :  Continuously updated message box in Turbo Vision
+
+
+
+
+  // DLGMSG.CPP - demonstrates a continuously updated non-modal
+  // message dialog box.  This would be useful to inform the user
+  // of the status of some continuing process, such as loading a
+  // large file or recomputing a database.
+
+  #pragma hdrstart
+  #define Uses_TKeys
+  #define Uses_TEvent
+  #define Uses_TApplication
+  #define Uses_TRect
+  #define Uses_TMenu
+  #define Uses_TMenuBar
+  #define Uses_TMenuItem
+  #define Uses_TDialog
+  #define Uses_TDeskTop
+  #define Uses_TStaticText
+  #include <tv.h>
+  #include <time.h>
+  #pragma hdrstop
+
+  const cmQuitMsg=101;
+  const cmDoMsg=102;
+
+  // a trivial overloaded operator to make building menus easier
+
+  TMenuItem& operator +(TMenuItem& one, TMenuItem& two)
+  {
+     TMenuItem *p=&one;
+     while (p->next!=NULL) p=p->next;
+     p->next=&two;
+     return one;
+  }
+
+  // Our class TVarText derived from TStaticText provides the extra
+  // functionality of changing the text string member.  TParamText
+  // might be suitable, except that it is broken and could only
+  // accept strings from the stack (_SS:xxx) even if it were fixed.
+
+
+  class TVarText : public TStaticText
+  {
+      public:
+      TVarText(TRect r, const char * s) : TStaticText(r,s) {  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1532
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/5
+
+    TITLE  :  Continuously updated message box in Turbo Vision
+
+
+
+
+      void setText(char *v)
+      {
+          delete((char *) text);
+          text= newStr(v);
+      }
+  };
+
+  // A TMsgDlg is a sample class derived from TDialog for the
+  // purpose of displaying messages non-modally and perhaps being
+  // continually updated by calls to the Update() function.  In
+  // this case, we'll display the time.
+
+  class TMsgDlg: public TDialog
+  {
+      public:
+
+      TMsgDlg(TRect& r, const char *title): TDialog(r, title),
+          TWindowInit(initFrame)
+      {
+          time_t newTime;
+          newTime= time(0);
+          curText= new TVarText(TRect(3,2,28,3),ctime(&newTime));
+          insert(curText);
+          // In this application, we don't want a close button, for
+          // TMsgDlg, because TApplication::idle() isn't set up to
+          // be informed that the MsgDlg has destroyed itself, and
+          // thus might keep on trying to call Update() for a
+          // missing TMsgDlg.
+
+          flags &= ~wfClose;
+      }
+      void Update();
+
+      private:
+
+      TVarText *curText;
+  };
+
+  // In Update(), we'll just set & display some new text in the
+  // MsgDlg; in this case, the new time.
+
+  void TMsgDlg::Update()
+  {
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1532
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/5
+
+    TITLE  :  Continuously updated message box in Turbo Vision
+
+
+
+
+      time_t newTime = time(0);
+      static time_t oldTime=0;
+      if (newTime != oldTime)
+      {
+          oldTime=newTime;
+          curText->setText(ctime(&newTime));
+          curText->drawView();
+      }
+  }
+
+  class TMyApp: public TApplication
+  {
+       public:
+       TMyApp(): TProgInit
+       (TApplication::initStatusLine,
+        TMyApp::initMenuBar,
+        TApplication::initDeskTop)
+       {
+          myMsgDlg = NULL;
+       }
+       static TMenuBar* initMenuBar(TRect);
+       void handleEvent (TEvent&);
+       void idle();
+       private:
+       TMsgDlg* myMsgDlg;
+  };
+
+  // Standard menu bar, using our overloaded menu-add operator
+  // (see above)
+
+  TMenuBar *TMyApp::initMenuBar(TRect r)
+  {
+      r.b.y=r.a.y+1;
+      TMenuBar *m=new TMenuBar(r,new TMenu(
+          *new TMenuItem("~M~essageWindow",cmDoMsg,kbAltM) +
+          *new TMenuItem("Message~Q~uit",cmQuitMsg,kbAltQ)));
+      return(m);
+  }
+
+  // Here we Update the message box in the idle() loop; you may
+  // wish to call the message box's Update() from elsewhere (from a
+  // function that reads a file, say.)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1532
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/5
+
+    TITLE  :  Continuously updated message box in Turbo Vision
+
+
+
+
+  void TMyApp::idle()
+  {
+     TProgram::idle();
+     if (myMsgDlg!=NULL) myMsgDlg->Update();
+  }
+
+  // A very basic handleEvent that creates or destroys the message
+  // dialog depending on the menu choice.
+
+  void TMyApp::handleEvent(TEvent& event)
+  {
+      TApplication::handleEvent(event);
+      if (event.what==evCommand)
+      {
+          switch (event.message.command)
+          {
+              case cmDoMsg:
+                  // put up a message dialog -- don't forget to use
+                  // deskTop's insert() and not TApplication's.
+                  // We use insert() instead of execview() so that
+                  // it will not be modal and other processes may
+                  // continue while the message dialog is
+                  // displayed.
+
+                  if (myMsgDlg == NULL)
+                  {
+                      myMsgDlg = new TMsgDlg(TRect(3,5,33,11),
+                                             "Time");
+                      deskTop->insert(myMsgDlg);
+                  }
+                  break;
+              case cmQuitMsg:
+                  // destroy message dialog (if it exists)
+                  if (myMsgDlg != NULL)
+                  {
+                      destroy(myMsgDlg);
+                      myMsgDlg=NULL;
+                  }
+                  break;
+
+              default:
+                  // just return if we can't do anything with this
+                  // command
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1532
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/5
+
+    TITLE  :  Continuously updated message box in Turbo Vision
+
+
+
+
+                  return;
+          }
+          // if we handled this event, clear it.
+          clearEvent(event);
+      }
+  }
+
+  int main()
+  {
+     // Create my application
+     TMyApp app;
+     // and run it ...
+     app.run();
+     // ... until it stops
+     return(0);
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1297
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/5
+
+    TITLE  :  Example of password entry using a TInputLine.
+
+
+
+
+
+  /********************************************************
+  **   Passwrd.cpp
+  **
+  **  Example of a TInputline implementation of a password
+  **  input box.
+  **
+  **  Compile with: Bcc -ml passwrd.cpp tv.lib
+  **
+  *********************************************************
+
+  #define Uses_MsgBox
+  #define Uses_TApplication
+  #define Uses_TEventQueue
+  #define Uses_TEvent
+  #define Uses_TKeys
+  #define Uses_TRect
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+  #define Uses_TMenuItem
+  #define Uses_TStatusLine
+  #define Uses_TStatusItem
+  #define Uses_TStatusDef
+  #define Uses_TDeskTop
+  #define Uses_TView
+  #define Uses_TWindow
+  #define Uses_TMenu
+  #define Uses_TDialog
+  #define Uses_TStaticText
+  #define Uses_TInputLine
+  #define Uses_TButton
+  #define Uses_TRect
+
+  #include <tv.h>
+  #include <ctype.h>   //isprint
+  #include <string.h>  //strset
+  #include <stdio.h>   //sprintf
+
+  const int cmAbout   = 100;
+  const int cmDialog1 = 101;
+
+  struct test
+  {
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1297
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/5
+
+    TITLE  :  Example of password entry using a TInputLine.
+
+
+
+
+    char string[20];
+  }password;
+
+
+  class TMyApp : public TApplication
+  {
+
+  public:
+       TMyApp();
+    static TMenuBar *initMenuBar( TRect );
+       static TStatusLine *initStatusLine( TRect );
+       void handleEvent(TEvent& event);
+       void Dialog1(void);
+  };
+
+
+  TMyApp::TMyApp() :
+       TProgInit( initStatusLine,
+                  initMenuBar,
+                  initDeskTop
+                 )
+  {
+  }
+
+
+  class PasswrdLine : public TInputLine
+  {
+       const char passwordChar;
+
+  public:
+       PasswrdLine(const TRect& bounds, int aMaxLen):
+            TInputLine( bounds, aMaxLen ), passwordChar('*'){}
+       void draw();
+  };
+
+
+  //
+  // 1) Save the current inputline data string.
+  // 2) Copy a character into every byte of the inputline
+  //    data string.
+  // 3) Draw the 'masked' data string.
+  // 4) Copy the saved string back into the inputline data area.
+  //
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1297
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/5
+
+    TITLE  :  Example of password entry using a TInputLine.
+
+
+
+
+  void PasswrdLine::draw()
+  {
+       char* save = newStr(data);
+       strset(data, passwordChar);
+       TInputLine::draw();
+       strcpy(data, save);
+       delete save;
+  }
+
+
+  void TMyApp::Dialog1(void)
+  {
+       TDialog *pd = new TDialog( TRect( 10,2,70,18),
+                                 "Password Input");
+       if( validView( pd ) )
+       {
+            pd->insert( new TButton( TRect(30,10,40,12),"~O~k",
+                            cmOK, bfDefault) );
+            PasswrdLine *t = new PasswrdLine( TRect(3,8,33,9),
+                                                20 );
+            pd->insert( t );
+            if( deskTop->execView(pd) == cmOK )
+            {//
+             // Now let's have a look at the input...
+             //
+                 pd->getData( &password );
+                 char buf[60];
+                 sprintf(buf,"%s %s","\003The input is: ",
+                           password.string);
+                 messageBox(buf, mfInformation | mfOKButton);
+            }
+       }
+       destroy(pd);
+  }
+
+
+  void TMyApp::handleEvent(TEvent& event)
+  {
+
+       TApplication::handleEvent( event );
+
+       if( event.what == evCommand )
+       {
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1297
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/5
+
+    TITLE  :  Example of password entry using a TInputLine.
+
+
+
+
+            switch( event.message.command)
+            {
+                 case cmDialog1:
+                      Dialog1();
+                      break;
+
+                 default:
+                 break;
+            }
+            clearEvent( event );
+       }
+  }
+
+
+  TStatusLine *TMyApp::initStatusLine(TRect r)
+  {
+       r.a.y = r.b.y - 1;
+
+       return new TStatusLine( r,
+            *new TStatusDef( 0, 0xFFFF) +
+            *new TStatusItem( "~Alt-X~ Exit", kbAltX, cmQuit) +
+            *new TStatusItem( "~Alt-P~ Password", kbAltP,
+                                cmDialog1)
+            );
+  }
+
+
+  TMenuBar *TMyApp::initMenuBar( TRect r )
+  {
+       r.b.y = r.a.y + 1;
+
+       TMenuItem *two =
+            new TMenuItem("~E~xit", cmQuit, kbAltX);
+
+       TMenuItem *one =
+            new TMenuItem("~\xF0~", kbAltSpace,
+            new TMenu( *new TMenuItem("~P~assword", cmDialog1,
+                      kbAltP)), hcNoContext, two);
+
+       return ( new TMenuBar( r, new TMenu( *one ) )  );
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1297
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/5
+
+    TITLE  :  Example of password entry using a TInputLine.
+
+
+
+
+  int main()
+  {
+
+       TMyApp myApp;
+       myApp.run();
+       return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

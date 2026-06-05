@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1778
+  VERSION  :  4.0
+       OS  :  WIN
+     DATE  :  February 17, 1994                        PAGE  :  1/4
+
+    TITLE  :  COMMON QUESTIONS AND ANSWERS ABOUT BORLAND C++ 4.0
+
+
+
+
+
+
+
+  Since the release of BC++4.0, the technical support group has
+  been flooded with new problems arising during installation and
+  configuration of BC++ 4.0.  The following list of questions and
+  answers is compiled from the most frequently asked questions.
+  The last question asks how to receive Technical Information
+  documents.
+
+
+  Q: I got my BC++4.0 installed and I didn't get any error messages
+  during the installation.  But when I click on the Borland C++
+  icon, the screen blinks and I am back to the Program Manager, or
+  I get a "fatal error in display" error message.  What should I
+  do?
+
+  A: This is a common problem with various types of video cards in
+  the market, such as the ATI Ultra and Diamond Stealth cards.  The
+  two solutions are as follows:  Switch your video mode to VGA
+  under Windows Setup.  Contact your video card company and get the
+  latest update of their drivers.  Until you get the driver, VGA
+  mode is the temporary solution.  Once you get the newest drivers,
+  you can switch back to your old video mode.  For more
+  information, refer to the Technical Information document TI 1755.
+
+
+  Q: I just got the diskette set, and I have 60M of HD space.  I
+  only need to do DOS programming, or I just need certain tools,
+  how can I configure the installation program so I can fit the
+  compiler on my system?
+
+  A: Refer to Section 3 in INSTALL.TXT (diskette version) on the
+  first disk, Minimum and Selected Installation Options.
+
+
+  Q: I am installing BC++4.0, and I get a "disk full" message.  But
+  I had 90M of HD space available when I ran the CHKDSK command.  I
+  have a compressed drive(DBLSPACE, STACKER, etc.).
+
+  A: Refer to Section 2 in INSTALL.TXT (diskette version) under
+  Disk Compression.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1778
+  VERSION  :  4.0
+       OS  :  WIN
+     DATE  :  February 17, 1994                        PAGE  :  2/4
+
+    TITLE  :  COMMON QUESTIONS AND ANSWERS ABOUT BORLAND C++ 4.0
+
+
+
+
+  Q: I have installed BC++4.0 from a CD-ROM, I did a minimum
+  installation and everything seems to be fine, except that
+  whenever I start Windows, it requires me to place the CD-ROM in
+  the drive.  How do I avoid this inconvenient process?
+
+  A: Refer to Section 3 in INSTALL.TXT (CD version) located in the
+  INSTALL directory.
+
+
+  Q: I just received the CD-ROM version of BC++4.0, and I tried to
+  install it but the drive won't recognize the CD or I see a blank
+  CD.  All my other CD's work except for this one.  Do I need to
+  get a new CD?  I have a Corel SCSI driver.
+
+  A: No, it is not a blank CD.  But you need to make the following
+  changes.
+
+     1. Edit your CONFIG.SYS file, and make sure
+     DEVICE=[DRIVER.SYS] /D:MSCD000 is there (replace DRIVER.SYS
+     with your CD-ROM driver).
+
+     2. If you have DOS 6.0 or above, you should have a MSCDEX.EXE
+     file in the DOS directory, if you don't have DOS 6.0 or above,
+     you might want to copy that file from someone else who has it
+     and put it in your DOS directory.
+
+     3. Edit your AUTOEXEC.BAT file, REM out the line where Corel
+     CDEX is, and add C:\DOS\MSCDEX.EXE /S /D:MSCD000
+
+
+  Q: I am having a problem with the CDROM installation.  I have
+  clean booted, made sure I have enough space, and am still having
+  problems.  What can I do?
+
+  A: The CDROM version of BC4 has the full product, in uncompressed
+  format, in the BC4 directory on the CD.  It is possible to do a
+  manual installation, bypassing the install executable.  Refer to
+  Technical Information document TI1769 for more instructions.
+
+
+  Q: I will install BC++4.0 on a network, I want to know what
+  options I need to pick in order to get it to work?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1778
+  VERSION  :  4.0
+       OS  :  WIN
+     DATE  :  February 17, 1994                        PAGE  :  3/4
+
+    TITLE  :  COMMON QUESTIONS AND ANSWERS ABOUT BORLAND C++ 4.0
+
+
+
+
+  A: Refer to Section 9 in INSTALL.TXT.  More detailed instructions
+  are available in our Technical Information document TI1739.
+
+
+  Q: When I click on the Workshop icon or try to invoke Workshop
+  from the IDE, I get this error message "Error, Resource Workshop
+  requires BWCC 2.00 and above".  What's the problem?
+
+  A: Actually the problem arises from having two BWCC.DLL files,
+  one in the WINDOWS directory and the other in WINDOWS\SYSTEM
+  directory.  The former one is old and can be deleted.  The latter
+  one is the updated BWCC file, dated 10-21-93, size 156544, that
+  you should keep.  Should you still have a problem, refer to the
+  Technical Information document TI1768.
+
+
+  Q: I installed BC++4.0 and want to run Resource Workshop, but
+  when I click on Workshop icon, I get this error message,
+  "CTL3DV2.DLL, STOP, This application uses CTL3DV2.DLL, which has
+  not been correctly installed".  What should I do?
+
+  A: The problem arises from the install program which has
+  mistakenly placed CTL3DV2.DLL into the \BC4\BIN directory.  If
+  this is the case, move the file to the \WINDOWS\SYSTEM directory.
+  If it still doesn't work, rename WORKSHOP.INI file in the
+  WINDOWS directory, and try to run RW again.  If all of the above
+  fails, call Borland Technical Support at (408) 461-9133.
+
+
+  Q: I have BC++3.1 with Application Frameworks (or any older
+  versions), and I am upgrading to BC++4.0.  Can I leave my older
+  version on my system?
+
+  A: Yes, although you will have to do some configuring in order to
+  have both of them run properly.  Refer to Technical Information
+  document TI1738 for more information.
+
+
+  Q: I just got BC++4.0, and I notice that it doesn't come with
+  Turbo Vision, and OWL1 is upgraded to OWL2.  Can I still use my
+  old TV and OWL1 programs with BC++4.0?
+
+  A: Yes, with minimal modifications.  There is file called
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1778
+  VERSION  :  4.0
+       OS  :  WIN
+     DATE  :  February 17, 1994                        PAGE  :  4/4
+
+    TITLE  :  COMMON QUESTIONS AND ANSWERS ABOUT BORLAND C++ 4.0
+
+
+
+
+  COMPAT.TXT that will explain the necessary changes to your source
+  code.  It is located in the \BC4\DOC directory.  Updated
+  instructions are available in the following Technical
+  Information documents.
+
+    Title                        Document Number
+    -------------------------------------------
+    OWL1.0 w/BC++4.0             TI 1750
+    Using OWL1.0 w/BC++4.0       TI 1751
+    Rebuilding TV1.0x w/BC++4.0  TI 1752
+    Using TV1.0x w/BC++4.0       TI 1753
+
+
+  Q: I am installing Borland Visual Solutions Pack, and I am
+  encountering one of the following problems:
+
+      1) "BORINST CAUSED A SEGMENT LOAD FAILURE IN MODULE
+          BVSPINST.EXE AT..."
+      2) "...header check sum...".
+      3) Under OS/2, I get part of the way through the first disk
+         and then the installation menu box pops up asking for the
+         first disk again.
+
+  A: We have patch to fix this problem.  Call our BBS at
+  (408) 431-5096 and download the file BVSPP1.ZIP.
+
+
+  Q: How do I develop DOS applications in BC++ 4.0?
+
+  A: Refer to TI 1773 for information on how to do this.
+
+
+  Q: How do I get a Technical Information document?
+
+  A: From either our BBS at (408)431-5096(TI1738.ZIP) or TechFax at
+  (800) 822-4269.
+
+
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1778
+  VERSION  :  4.0
+       OS  :  WIN
+     DATE  :  February 17, 1994                        PAGE  :  5/5
+
+    TITLE  :  COMMON QUESTIONS AND ANSWERS ABOUT BORLAND C++ 4.0
+
+
+
+
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

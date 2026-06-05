@@ -1,0 +1,528 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1555
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/8
+
+    TITLE  :  Example of a restricted InputLine (Turbo Vision)
+
+
+
+
+  This document contains 3 files:
+
+     RANGELIN.HPP
+     RANGELIN.CPP
+     INPUTEST.CPP
+
+  **** BEGIN FILE: RANGELIN.HPP ****
+  /* -----------------------------------------------------------*/
+  /*                                                            */
+  /*   RANGELIN.HPP                                             */
+  /*                                                            */
+  /*   Copyright (c) Borland International 1991                 */
+  /*   All Rights Reserved.                                     */
+  /*                                                            */
+  /*   defines the class RangeLine                              */
+  /*                                                            */
+  /* -----------------------------------------------------------*/
+
+  #ifndef __RANGELINE_
+  #define __RANGELINE_
+
+  #define Uses_TInputLine
+  #define Uses_TEvent
+  #include <tv.h>
+
+  //  Input Flags masks
+  const ushort
+      ifUpper         = 0x001,    //allow uppercase characters
+      ifLower         = 0x002,    //allow owercase characters
+      ifNum           = 0x004,    //allow digits
+      ifSpace         = 0x008,    //allow spaces
+      ifRange         = 0x010,    //a range of values will follow
+      ifDefault       = 0x020;    //allow all printable chars
+
+
+  class RangeLine : public TInputLine
+  {
+     short inputFlags;
+     short begin, end;
+
+     public:
+      RangeLine(const TRect& bounds, int aMaxLen, ushort iMask,
+        short a = 0, short b=0):
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1555
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/8
+
+    TITLE  :  Example of a restricted InputLine (Turbo Vision)
+
+
+
+
+      TInputLine( bounds, aMaxLen )
+      {
+         inputFlags = iMask;
+         begin = a;
+         end   = b;
+      }
+     protected:
+      virtual void handleEvent( TEvent& event );
+
+  };
+
+  #endif  //_RANGELINE_
+  **** END FILE: RANGELIN.HPP ****
+  **** BEGIN FILE: RANGELIN.CPP ****
+  /* -----------------------------------------------------------*/
+  /*                                                            */
+  /*   RANGELIN.CPP                                             */
+  /*                                                            */
+  /*   Copyright (c) Borland International 1991                 */
+  /*   All Rights Reserved.                                     */
+  /*                                                            */
+  /*   class RangeLine                                          */
+  /*                                                            */
+  /* -----------------------------------------------------------*/
+
+  #include "rangelin.hpp"
+  #include <stdio.h>       //putchar
+  #include <ctype.h>       //isalpha, isdigit ...
+  #include <string.h>      //strncpy
+
+
+  void RangeLine::handleEvent(TEvent& event )
+  {
+      static char beep = '\a';
+      if( isprint(event.keyDown.charScan.charCode) )
+      {
+        if( ifDefault & inputFlags ||
+          (ifUpper & inputFlags &&
+            isupper(event.keyDown.charScan.charCode))||
+          (ifLower & inputFlags &&
+            islower(event.keyDown.charScan.charCode))||
+          (ifNum   & inputFlags &&
+            isdigit(event.keyDown.charScan.charCode))||
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1555
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/8
+
+    TITLE  :  Example of a restricted InputLine (Turbo Vision)
+
+
+
+
+          (ifSpace & inputFlags &&
+            isspace(event.keyDown.charScan.charCode)) )
+          {
+            if( ifRange & inputFlags )
+              if( (event.keyDown.charScan.charCode < begin) ||
+                (event.keyDown.charScan.charCode > end) )
+              {
+                 putchar(beep);
+                 clearEvent(event);
+                 return;
+              }
+
+           }
+           else
+           {
+              putchar(beep);
+              clearEvent(event);
+              return;
+           }
+
+      }
+
+      TInputLine::handleEvent( event );
+
+  }
+  **** END FILE: RANGELIN.CPP ****
+  **** BEGIN FILE: INPUTEST.CPP ****
+  /*************************************************************
+  **                           Inputest.cpp
+  **
+  **
+  **  Example of a TInputline implementation of a range inputLine.
+  **
+  **
+  **  Compile with: Bcc -ml inputest.cpp rangelin.cpp tv.lib
+  **
+  ***************************************************************/
+
+  #define Uses_MsgBox
+  #define Uses_TApplication
+  #define Uses_TEventQueue
+  #define Uses_TEvent
+  #define Uses_TKeys
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1555
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/8
+
+    TITLE  :  Example of a restricted InputLine (Turbo Vision)
+
+
+
+
+  #define Uses_TRect
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+  #define Uses_TMenuItem
+  #define Uses_TStatusLine
+  #define Uses_TStatusItem
+  #define Uses_TStatusDef
+  #define Uses_TDeskTop
+  #define Uses_TView
+  #define Uses_TWindow
+  #define Uses_TMenu
+  #define Uses_TDialog
+  #define Uses_TStaticText
+  #define Uses_TInputLine
+  #define Uses_TButton
+  #define Uses_TRect
+  #define Uses_TLabel
+
+
+  #include <stdio.h>        //for puts
+  #include "rangelin.hpp"   //rangeline
+  #include <tv.h>
+
+  const int cmTest = 100;
+
+
+  class TMyApp : public TApplication
+  {
+
+  public:
+       TMyApp();
+       void handleEvent(TEvent& event);
+       void Test(void);
+
+  protected:
+       static TMenuBar *initMenuBar( TRect );
+       static TStatusLine *initStatusLine( TRect );
+
+  };
+
+
+  TMyApp::TMyApp() :
+       TProgInit( initStatusLine,
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1555
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/8
+
+    TITLE  :  Example of a restricted InputLine (Turbo Vision)
+
+
+
+
+               initMenuBar,
+               initDeskTop
+             )
+  {
+     //
+     //put an event on the queue to bring up the dialog on
+     //start-up.
+     //
+     TEvent e;
+     e.what = evCommand;
+     e.message.command = cmTest;
+     putEvent( e );
+
+  }
+
+
+  void TMyApp::Test(void)
+  {
+
+      TDialog *pd =
+      new TDialog( TRect( 10,2,70,20), "Test Dialog");
+      if( validView( pd ) )
+      {
+         RangeLine *numLine =
+         new RangeLine( TRect(5,3,25,4), 50, ifNum );
+         pd->insert(numLine);
+         pd->insert( new TLabel(TRect(4,2,20,3),
+           "~N~umber Input", numLine));
+
+         RangeLine *LowerLine =
+         new RangeLine( TRect(5,7,25,8), 50, ifLower);
+         pd->insert(LowerLine);
+         pd->insert( new TLabel(TRect(4,6,20,7),
+           "~L~ower Case", LowerLine));
+
+         RangeLine *UpperLine =
+         new RangeLine( TRect(5,11,25,12), 50, ifUpper);
+         pd->insert(UpperLine);
+         pd->insert( new TLabel(TRect(4,10,20,11),
+           "~U~pper Case", UpperLine));
+
+         RangeLine *DefaultLine =
+         new RangeLine( TRect(5,14,25,15), 50, ifDefault);
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1555
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  6/8
+
+    TITLE  :  Example of a restricted InputLine (Turbo Vision)
+
+
+
+
+         pd->insert(DefaultLine);
+         pd->insert( new TLabel(TRect(4,13,20,14),
+           "~D~efault", DefaultLine));
+
+         RangeLine *UpperLower =
+         new RangeLine( TRect(35,3,55,4), 50, ifUpper|ifLower);
+         pd->insert(UpperLower);
+         pd->insert( new TLabel(TRect(34,2,55,3),
+           "~B~oth Upper and Lower", UpperLower));
+
+         RangeLine *NumRange =
+         new RangeLine(TRect(35,7,55,8),50,ifNum|ifRange,'0','5');
+         pd->insert(NumRange);
+         pd->insert( new TLabel(TRect(34,6,55,7),
+           "~D~igits 0-5",NumRange));
+
+         RangeLine *AlphaSpace =
+         new RangeLine( TRect(35,11,55,12), 50,
+           ifUpper|ifLower|ifSpace);
+         pd->insert(AlphaSpace);
+         pd->insert( new TLabel(TRect(34,10,55,11),
+           "~A~lpha w/Space", AlphaSpace));
+
+         pd->selectNext(False);
+
+         deskTop->execView(pd);
+      }
+      destroy(pd);
+
+  }
+
+
+  void TMyApp::handleEvent(TEvent& event)
+  {
+
+    TApplication::handleEvent( event );
+
+     if( event.what == evCommand )
+     {
+        switch( event.message.command)
+        {
+       case cmTest:
+         Test();
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1555
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  7/8
+
+    TITLE  :  Example of a restricted InputLine (Turbo Vision)
+
+
+
+
+         break;
+
+       default:
+         break;
+        }
+        clearEvent( event );
+     }
+
+
+  }
+
+
+  TStatusLine *TMyApp::initStatusLine(TRect r)
+  {
+     r.a.y = r.b.y - 1;
+
+     return new TStatusLine( r,
+         *new TStatusDef( 0, 0xFFFF) +
+         *new TStatusItem( "~Alt-X~ Exit", kbAltX, cmQuit) +
+         *new TStatusItem( "~Alt-T~ Test", kbAltT, cmTest)
+         );
+
+  }
+
+
+  TMenuBar *TMyApp::initMenuBar( TRect r )
+  {
+      r.b.y = r.a.y + 1;
+
+     TMenuItem *two =
+        new TMenuItem("~E~xit", cmQuit, kbAltX);
+
+     TMenuItem *one =
+        new TMenuItem("~\xF0~", kbAltSpace,
+       new TMenu( *new TMenuItem("~T~est", cmTest, kbAltT)),
+            hcNoContext, two);
+
+      return ( new TMenuBar( r, new TMenu( *one ) )  );
+
+  }
+
+
+  int main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1555
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  8/8
+
+    TITLE  :  Example of a restricted InputLine (Turbo Vision)
+
+
+
+
+  {
+
+    TMyApp *myApp = new TMyApp();
+    myApp->run();
+    return 0;
+  }
+  **** END FILE: INPUTEST.CPP ****
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1395
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/5
+
+    TITLE  :  How to use HeapView in a Turbo Vision program
+
+
+
+
+  //===============================================================
+  //  The following routines have been uploaded to the Borland
+  //  Forum BPROGB on CompuServe by the Technical Support staff.
+  //  They are provided as a courtesy and not as part of a Borland
+  //  product; and, as such, are provided without the assurance of
+  //  technical support or any specific guarantees.
+  //==============================================================
+  //  Turbo Vision - Heap View Demo
+  //
+  //  This sample code demonstrates creating and inserting a heap
+  //  view into a Turbo Vision application.
+  //
+  //  To compile on the command line:
+  //    1. Add the following lines to \BORLANDC\BIN\TURBOC.CFG
+  //       (modify the paths appropriately for your system.)
+  //
+  //      -I\borlandc\tvision\include;\borlandc\tvision\demos
+  //      -L\borlandc\tvision\lib
+  //
+  //    2. Run the following command:
+  //
+  //      bcc -ml heap.cpp gadgets.cpp tv.lib
+  //
+  //  To compile in the IDE:
+  //
+  //    1. Create a project file.
+  //    2. Insert heap.cpp and gadgets.cpp into the project.
+  //    3. Under Options | Application, select Dos Standard.
+  //    4. Under Options | Compiler | Code Generation, select Large
+  //       Memory Model.
+  //    5. Under Options | Linker | Libraries, check Turbo Vision
+  //       Library.
+  //    6. Under Options | Directories, add the TVISION\INCLUDE and
+  //       TVISION\DEMOS directories to the include path.  Add the
+  //       TVISION\LIB directory to the library path.
+  //
+  //   NOTE:
+  //        Gadgets.cpp is in c:\borlandc\tv\demos sub-directory.
+  //
+  //===============================================================
+
+  #define Uses_MsgBox
+  #define Uses_TProgram
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1395
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/5
+
+    TITLE  :  How to use HeapView in a Turbo Vision program
+
+
+
+
+  #define Uses_TApplication
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+  #define Uses_TMenuItem
+  #define Uses_TStatusLine
+  #define Uses_TStatusItem
+  #define Uses_TStatusDef
+  #define Uses_TDeskTop
+  #define Uses_TView
+  #define Uses_TDialog
+  #define Uses_TButton
+  #define Uses_TMenu
+  #define Uses_TKeys
+
+  #include <tv.h>
+
+  //
+  //Need gadgets.h for the THeapView prototypes
+  //
+  #include "gadgets.h"
+
+  const  cmAbout = 100;
+
+
+  class TMyApp : public TApplication
+  {
+    //
+    //pointer to our heapview
+    //
+    THeapView *heap;
+
+  public:
+       TMyApp();
+       static TMenuBar *initMenuBar( TRect );
+       static TStatusLine *initStatusLine( TRect );
+       void handleEvent(TEvent& event);
+       void idle(void);
+  };
+
+
+  TMyApp::TMyApp() :
+       TProgInit( &initStatusLine,
+               &initMenuBar,
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1395
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/5
+
+    TITLE  :  How to use HeapView in a Turbo Vision program
+
+
+
+
+               &initDeskTop
+             )
+  {
+
+      //
+      // Create a view that will fit into the lower right hand
+      // corner of the statusLine.
+      //
+      TRect r = getExtent();
+      r.a.x = r.b.x - 13;
+      r.a.y = r.b.y - 1;
+      //
+      //Create a heapView and insert it into the deskTop
+      //
+      heap = new THeapView( r );
+      insert(heap);
+
+  }
+
+
+  void TMyApp::idle()
+  {
+      //
+      //Call TPrograms idle, while there is some heap left,
+      //update the heapView
+      //
+      TProgram::idle();
+      if (heap != 0 )
+      {
+         heap->update();
+      }
+
+  }
+
+
+  //
+  //message for the About box
+  //
+  char *about_message = "\003Turbo Vision Heap View
+  Demo\n\003Borland International\n\0031993";
+
+  //
+  //Use the application handleEvent to catch the cmAbout
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1395
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/5
+
+    TITLE  :  How to use HeapView in a Turbo Vision program
+
+
+
+
+  //and pop up a messageBox
+  //
+  void TMyApp::handleEvent(TEvent& event)
+  {
+
+     TApplication::handleEvent( event );
+
+     if( event.what == evCommand )
+     {
+        switch( event.message.command)
+        {
+        case cmAbout:
+          messageBox(about_message, mfInformation | mfOKButton );
+          clearEvent( event );
+          break;
+
+        default:
+          break;
+        }
+     }
+  }
+
+
+  //
+  //Create a statusLine
+  //
+  TStatusLine *TMyApp::initStatusLine(TRect r)
+  {
+       r.a.y = r.b.y - 1;
+
+     return new TStatusLine( r,
+         *new TStatusDef( 0, 0xFFFF) +
+         *new TStatusItem( "~Alt-X~ Exit", kbAltX, cmQuit) +
+         *new TStatusItem( "~Alt-A~ About", kbAltA, cmAbout)
+         );
+  }
+
+  //
+  //Create a MenuBar
+  //
+  TMenuBar *TMyApp::initMenuBar( TRect r )
+  {
+     r.b.y = r.a.y + 1;
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1395
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/5
+
+    TITLE  :  How to use HeapView in a Turbo Vision program
+
+
+
+
+     TMenuItem *one =
+        new TMenuItem("~\xF0~", kbAltSpace,
+          new TMenu( *new TMenuItem("~A~bout", cmAbout, kbAltA)),
+        hcNoContext, 0);
+
+     return new TMenuBar( r, new TMenu( *one ));
+
+
+  }
+
+
+  int main()
+  {
+     TMyApp *myApp = new TMyApp;
+     myApp->run();
+     TObject::destroy( myApp );
+
+     return 0;
+  }
+
+
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

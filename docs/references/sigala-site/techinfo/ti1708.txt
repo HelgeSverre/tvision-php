@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1708
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/5
+
+    TITLE  :  Using setData to initialize dialog box contents
+
+
+
+
+  /*  This is an example program that shows how to use setData to
+      initialize the contents of a dialog box.
+  */
+
+  #define Uses_TApplication
+  #define Uses_TButton
+  #define Uses_TCheckBoxes
+  #define Uses_TDeskTop
+  #define Uses_TDialog
+  #define Uses_TEvent
+  #define Uses_TInputLine
+  #define Uses_TKeys
+  #define Uses_TLabel
+  #define Uses_TMenu
+  #define Uses_TMenuBar
+  #define Uses_TMenuItem
+  #define Uses_TRadioButtons
+  #define Uses_TRect
+  #define Uses_TSItem
+  #define Uses_TSubMenu
+  #include <tv.h>
+
+  #include  <stdio.h>
+
+  #define cmOpenFood  100
+
+  class TClassApp : public TApplication
+  {
+  public:
+      TClassApp();
+      static TMenuBar *initMenuBar (TRect r);
+      virtual void handleEvent (TEvent& event);
+  };
+
+  TClassApp::TClassApp() :
+      TApplication(),
+      TProgInit( initStatusLine, initMenuBar, initDeskTop )
+  {
+  }
+
+  TMenuBar *TClassApp::initMenuBar( TRect r )
+  {
+    r.b.y = r.a.y + 1;
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1708
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/5
+
+    TITLE  :  Using setData to initialize dialog box contents
+
+
+
+
+    TSubMenu &sub1 =
+      *new TSubMenu ("~F~ile", kbAltF, hcNoContext) +
+      *new TMenuItem ("E~x~it", cmQuit, kbAltX,
+                        hcNoContext, "Alt-X") +
+      *new TMenuItem ("~R~eplicator Order Form", cmOpenFood,
+                      kbAltF3, hcNoContext, "Alt-F3");
+
+    return new TMenuBar (r, new TMenu ((TMenuItem &) sub1));
+  };
+
+  class TMyDialog : public TDialog
+  {
+  private:
+    TView *cb,    // CheckBoxes
+          *rb,    // RadioButtons
+          *il,    // InputLine
+          *okb,   // OK Button
+          *canb;  // Cancel Button
+
+    /* This buffer is key to the success of setData.  There needs
+       to be a variable for each item inserted into the dialog.
+       These items need to follow the order of insertion.
+    */
+    struct transferBuffer{
+      ushort  cbData;       // CheckBox
+      ushort  rbData;       // RadioButton
+      char    ilData [128]; // InputLine
+
+      /* Constructor for buffer initializes it to blank dialog.
+      */
+      transferBuffer()
+      {
+        cbData  =
+        rbData  = 0;
+        memset (ilData, NULL, 128);
+      }
+    };
+
+    void  saveData (void);
+
+  public:
+    TMyDialog (void);
+    virtual void  handleEvent (TEvent &event);
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1708
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/5
+
+    TITLE  :  Using setData to initialize dialog box contents
+
+
+
+
+  };
+
+  struct TMyDialog::transferBuffer  myDialogData;
+
+  void  TMyDialog::saveData (void)
+  {
+    getData (&myDialogData);
+  }
+
+  TMyDialog::TMyDialog (void) :
+    TDialog (TRect (0, 0, 56, 18), "Replicator Order Form"),
+    TWindowInit (initFrame)
+  {
+    cb  = new TCheckBoxes (TRect (3, 3, 18, 6),
+            new TSItem ("~S~prouts",
+              new TSItem ("~B~eans",
+                new TSItem ("~T~ofu", NULL) )));
+    insert (cb);
+    insert (new TLabel (TRect (2, 2, 15, 3), "Food Product", cb));
+
+    rb  = new TRadioButtons (TRect (22, 3, 44, 6),
+            new TSItem ("~F~ried",
+              new TSItem ("~B~aked",
+                new TSItem ("B~o~iled", NULL) )));
+    insert (rb);
+    insert (new TLabel (TRect (21, 2, 33, 3), "Preparation", rb));
+
+    il  = new TInputLine (TRect (3, 8, 37, 9), 128);
+    insert (il);
+    insert (new TLabel (TRect (2, 7, 40, 8),
+                        "Special instructions", il));
+
+    okb = new TButton (TRect (15, 10, 25, 12), "~O~k", cmOK,
+                       bfDefault);
+    insert (okb);
+
+    canb  = new TButton (TRect (28, 10, 38, 12), "~C~ancel",
+                         cmCancel, bfNormal);
+    insert (canb);
+
+    options |= ofCentered;
+    setData (&myDialogData);  // Fill dialog with data in transfer
+                              // buffer.
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1708
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/5
+
+    TITLE  :  Using setData to initialize dialog box contents
+
+
+
+
+    selectNext (False);       // Move focus to first item inserted
+                              // into dialog.
+  }
+
+  void  TMyDialog::handleEvent (TEvent &event)
+  {
+    if  (event.what == evCommand)
+    {
+      switch (event.message.command)
+      {
+        case  cmOK:
+          saveData();     // Save the dialog contents into the
+                          // transfer buffer so that it can be
+                          // restored when the dialog is brought up
+                          // the next time.
+          endModal(cmOK);
+          break;
+
+        default:
+          break;
+      }
+    }
+    TDialog::handleEvent (event);
+  };
+
+  void TClassApp::handleEvent( TEvent& event )
+  {
+      TApplication::handleEvent( event );
+
+      if( event.what == evCommand )
+      {
+          switch( event.message.command )
+          {
+            case cmOpenFood:
+            {
+              TMyDialog *md = new TMyDialog;
+              deskTop->execView (md);
+              break;
+            }
+
+            default:
+              return;
+          }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1708
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/5
+
+    TITLE  :  Using setData to initialize dialog box contents
+
+
+
+
+      }
+  }
+
+
+  int main()
+  {
+      TClassApp TCA;
+      TCA.run();
+      return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

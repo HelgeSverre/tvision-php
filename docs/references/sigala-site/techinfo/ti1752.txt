@@ -1,0 +1,396 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1752
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 13, 1994                         PAGE  :  1/6
+
+    TITLE  :  Rebuilding Turbo Vision 1.0x with Borland C++ 4.0
+
+
+
+
+  Due to changes in the debug information format, symbol length,
+  and runtime library, the Turbo Vision library must be recompiled
+  with Borland C++ 4.0.  There are 3 steps to this process:
+
+  1. Copy the old 3.1 Turbo Vision source into the new BC4
+     directory structure.
+
+  2. Make the appropriate source code changes according to the
+     instructions below.
+
+  3. Run MAKE to build the new Turbo Vision library you need to
+     continue your work.  If you are using Turbo Vision in an
+     overlaid application, make sure you follow the instructions
+     specific to overlays.
+
+  These steps are now presented in more detail:  Note that the
+  Borland C++ root directory is assumed to be \BC4.  Change this as
+  necessary to reflect your particular installation and make sure
+  that \BC4\BIN is in your path.  There is a support file for this
+  TI called BC40TV.ZIP.  Be sure to obtain this file from our BBS,
+  Compuserve, BIX, or Genie.  It contains files necessary to
+  rebuild the Turbo Vision library for Borland C++ 4.0
+
+  1. First, you need to copy your old Turbo Vision source and
+     include files from Borland C++ 3.1 into your Borland C++ 4.0
+     directory hierarchy.  One way of doing this would be to run
+     the following command from the DOS command prompt:
+
+        XCOPY \BC31\TVISION \BC4\TVISION /S
+
+     When it asks you about creating a directory called TVISION,
+     reply yes.
+
+     If you completely removed Borland C++ 3.1 before installing
+     4.0, then you must reinstall the Turbo Vision source code and
+     header files.  First, there are several directories that need
+     to be created.  You can use the following set of commands to
+     do this:
+
+        CD \BC4
+        MKDIR TVISION
+        CD TVISION
+        MKDIR SOURCE
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1752
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 13, 1994                         PAGE  :  2/6
+
+    TITLE  :  Rebuilding Turbo Vision 1.0x with Borland C++ 4.0
+
+
+
+
+        MKDIR INCLUDE
+        MKDIR OBJS
+        MKDIR HELP
+        MKDIR LIB
+        MKDIR DEMOS
+        MKDIR DOCDEMOS
+
+     From BC++ 3.1 disk 1, copy UNPAK.EXE into the \BC4\BIN
+     directory.  Next, using FILELIST.DOC, also on disk 1,
+     determine which disks contain the following files: TVSRC.PAK,
+     TVINC.PAK, TVHELP.PAK, TVDEMOS.PAK, TVDOCDEM.PAK.  To unpack
+     them, perform the following operations, modified to fit your
+     directory hierarchy if necessary.
+
+        <insert disk with TVSRC.PAK into drive A:>
+        CD \BC4\TVISION\SOURCE
+        UNPAK X A:\TVSRC.PAK
+
+        <insert disk with TVINC.PAK into drive A:>
+        CD \BC4\TVISION\INCLUDE
+        UNPAK X A:\TVINC.PAK
+
+        <insert disk with TVHELP.PAK into drive A:>
+        CD \BC4\TVISION\HELP
+        UNPAK X A:\TVHELP.PAK
+
+        <insert disk with TVDEMOS.PAK into drive A:>
+        CD \BC4\TVISION\DEMOS
+        UNPAK X A:\TVDEMOS.PAK
+
+        <insert disk with TVDOCDEM.PAK into drive A:>
+        CD \BC4\TVISION\DOCDEMOS
+        UNPAK X A:\TVDOCDEM.PAK
+
+     If you have owned Borland C++ 3.1 for a long time, your
+     installation copy may use PKZIP file compression instead of
+     PAK file compression.  If so, then follow the instructions
+     above, but use UNZIP.EXE instead of UNPAK.EXE.  Also, note
+     that the compressed files will have a .ZIP extension instead
+     of .PAK and that the 'X' command line should not be used.
+
+  2. Next, the source code needs a few minor changes before it will
+     successfully recompile with the new compiler.  If you upgraded
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1752
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 13, 1994                         PAGE  :  3/6
+
+    TITLE  :  Rebuilding Turbo Vision 1.0x with Borland C++ 4.0
+
+
+
+
+     from Borland C++ 2.0 and have the original version of Turbo
+     Vision (there were minor revisions for Borland C++ 3.0 and
+     3.1), be extra careful making the source code changes because
+     some of the line numbers mentioned may not accurately reflect
+     your version.
+
+     The changes are as follows:
+
+     a. Due to tighter syntax checking, case blocks that declare
+        initialized local variables need their own scoping block.
+        Make the changes below in the order shown so that confusion
+        over the correct line numbers can be avoided.  In general,
+        the '{' follows a case statement, and the '}' follows a
+        break statement.
+
+        COLORSEL.CPP
+
+           Add after line 219:  }
+           Add after line 179:  {
+           Add after line 177:  }
+           Add after line 164:  {
+
+        TBUTTON.CPP
+
+           Add after line 226:  }
+           Add after line 211:  {
+           Add after line 209:  }
+           Add after line 192:  {
+
+     b. There is a new version of strchr() that returns a const
+        char * if the parameter passed is also const char *.  There
+        are two places in Turbo Vision where this causes a type
+        mismatch error.  A simple cast fixes the problem in both
+        cases.
+
+        TINPUTLIN.CPP
+
+           Replace line 44:
+              if( (p = strchr( s, '~' )) != 0 )
+           With
+              if( (p = (char *) strchr( s, '~' )) != 0 )
+
+        TMNUVIEW.CPP
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1752
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 13, 1994                         PAGE  :  4/6
+
+    TITLE  :  Rebuilding Turbo Vision 1.0x with Borland C++ 4.0
+
+
+
+
+           Replace line 348:
+              char *loc = strchr( p->name, '~' );
+           With
+              char *loc = (char *) strchr( p->name, '~' );
+
+     c. Because we fixed a problem with the variable argument
+        support in the runtime library, a change is in order to
+        correctly use the new version.
+
+        MSGBOX.CPP:
+
+           Replace line 114:       va_start( argptr, aOptions );
+           With                    va_start( argptr, fmt );
+
+           Replace line 138:       va_start( argptr, aOptions );
+           With                     va_start( argptr, fmt );
+
+     d. The assembler is no longer required during the compilation
+        of SYSERR.CPP.  You must make this change if you did not
+        purchase Turbo Assembler with Borland C++ 4.0.
+
+        SYSERR.CPP
+
+           Delete line 18:        #pragma inline
+
+     e. Due to the addition of the new third character type, the
+        name mangling for character types has changed and the
+        following changes are necessary.  If you did not purchase
+        the Turbo Assembler with Borland C++ 4.0, you need to
+        obtain a properly assembled version of this file.  The new
+        version shipped in the LIB\COMPAT directory may not have
+        these changes made to it.  You can obtain a new correct
+        copy of TVWRITE.OBJ from our BBS, Compuserve, BIX, or Genie
+        by downloading the file BC40TV.ZIP.  Be sure to replace the
+        file \BC4\LIB\COMPAT\TVWRITE.OBJ with this new version.
+
+        TVWRITE.ASM
+
+           Replace line 25:       PUBLIC  @TView@writeChar$qsszcucs
+           With           PUBLIC  @TView@writeChar$qsscucs
+
+           Replace line 27:       PUBLIC  @TView@writeStr$qssnxzcuc
+           With           PUBLIC  @TView@writeStr$qssnxcuc
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1752
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 13, 1994                         PAGE  :  5/6
+
+    TITLE  :  Rebuilding Turbo Vision 1.0x with Borland C++ 4.0
+
+
+
+
+           Replace line 366:      PROC    @TView@writeChar$qsszcucs
+           With           PROC    @TView@writeChar$qsscucs
+
+           Replace line 436:      PROC    @TView@writeStr$qssnxzcuc
+           With           PROC    @TView@writeStr$qssnxcuc
+
+        Note that all of the above changes simply entail removing
+        the letter 'z' from the last part of the mangled symbol
+        name.
+
+     f. Finally, we have extensively modified the old makefile for
+        BC++ 4.0.  In addition to changes required by the new BC4
+        directory hierarchy, some new features have been added to
+        make the makefile easier to use.  This new makefile can be
+        found in the BC40TV.ZIP file mentioned in step (e) above.
+        Extract the new makefile with PKUNZIP, and save it in the
+        \BC4\TVISION\SOURCE directory as MAKEFILE.
+
+  3. You are now ready to build a new version of the Turbo Vision
+     library for use with Borland C++ 4.0.  There are a number of
+     options supported in this makefile, including the following:
+
+        -DDEBUG           Builds the library with full debug
+  information.
+
+        -DNOTASM          Required to build the library if you do
+  not
+                          have Turbo Assembler 4.0.
+
+        -DOVERLAY         Builds an overlay compatible version of
+  the
+                          library.
+
+     If you build the stock library (no -DOVERLAY switch), the
+     output is a single library file called TV.LIB placed in the
+     \BC4\LIB directory.  If you build an overlay compatible
+     version of the library, there are two output files named
+     TVO.LIB and TVNO.LIB, again placed in \BC4\LIB.  TVO.LIB is
+     the portion of Turbo Vision that can be overlaid and TVNO.LIB
+     is the group of modules that cannot be overlaid.  See TI 1753
+     on Using Turbo Vision with Borland C++ 4.0 for more details on
+     this.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1752
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 13, 1994                         PAGE  :  6/6
+
+    TITLE  :  Rebuilding Turbo Vision 1.0x with Borland C++ 4.0
+
+
+
+
+     For example, to build the stock library, run:
+
+        MAKE
+
+     To build an overlay compatible version of the library with
+     full debug info and without using Turbo Assembler, run:
+
+        MAKE -DOVERLAY -DNOTASM -DDEBUG
+
+     Note that any combination of the above switches may be used.
+     There are also a few more options that are discussed in the
+     header of the makefile.
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,396 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1558
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  September 1, 1993                        PAGE  :  1/6
+
+    TITLE  :  Saving/Restoring the mouse state in Turbo Vision
+
+
+
+
+  /*
+     Problem:
+       When I call mouse interrupts in my Turbo Vision
+       application, the mouse cursor disappears and the mouse is
+       disabled.
+
+     Solution:
+       Save the mouse state using interrupts 33,15 and 33,16.
+       Then call the other mouse interrupts.  After calling the
+       other int 33 functions, restore the mouse state with
+       int 33,17.
+  */
+
+  #include <dos.h>
+  #include <stdio.h>
+
+  #define Uses_MsgBox
+  #define Uses_TKeys
+  #define Uses_TApplication
+  #define Uses_TEvent
+  #define Uses_TRect
+  #define Uses_TDialog
+  #define Uses_TStaticText
+  #define Uses_TButton
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+  #define Uses_TMenuItem
+  #define Uses_TStatusLine
+  #define Uses_TStatusItem
+  #define Uses_TStatusDef
+  #define Uses_TDeskTop
+  #include <tv.h>
+
+  const cmGetMouseType = 100;
+
+  class MouseState
+  {
+  private:
+    // The size of the mouse state buffer.
+    //
+    static unsigned int statebufsize;
+
+    // The buffer which saves state of mouse.
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1558
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  September 1, 1993                        PAGE  :  2/6
+
+    TITLE  :  Saving/Restoring the mouse state in Turbo Vision
+
+
+
+
+    //
+    static char *statebuf;
+  public:
+    MouseState(void);
+    ~MouseState(void);
+    void saveMouseState (void);
+    void restoreMouseState (void);
+  };
+
+  char        *MouseState::statebuf = 0;
+  unsigned int MouseState::statebufsize = 0;
+
+  MouseState::MouseState (void)
+  {
+    statebufsize = 0;
+    statebuf = 0;
+  }
+
+  MouseState::~MouseState (void)
+  {
+    /* Make sure that a MouseState does not get destroyed without
+       restoring the mouse state first.
+    */
+    restoreMouseState();
+  }
+
+  void MouseState::saveMouseState (void)
+  {
+    // Check if a mouse state is already saved.
+    //
+    if (statebuf)
+    {
+      /* There is a previous mouse state saved.  Restore that
+         state before we save this one.
+      */
+      restoreMouseState();
+    }
+
+    // Get size of mouse state buffer.
+    //
+    asm {
+      mov ax, 15h
+      int 33h     // Loads bx with size of buffer in bytes.
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1558
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  September 1, 1993                        PAGE  :  3/6
+
+    TITLE  :  Saving/Restoring the mouse state in Turbo Vision
+
+
+
+
+    }
+    statebufsize = _BX;
+    statebuf     = new char[statebufsize];
+
+    // Now save mouse state buffer.
+    //
+    _ES = FP_SEG (statebuf);
+    _DX = FP_OFF (statebuf);
+    asm {
+      mov ax, 16h
+      int 33h    // Saves mouse state structure into statebuf.
+    }
+  }
+
+  void MouseState::restoreMouseState (void)
+  {
+    if (statebuf)
+    {
+      // Restore mouse state from statebuf.
+      //
+      _ES = FP_SEG (statebuf);
+      _DX = FP_OFF (statebuf);
+      asm {
+        mov ax, 17h
+        int 33h     // Restore mouse state structure from statebuf.
+      }
+      delete statebuf;
+      statebuf = 0;
+      statebufsize = 0;
+    }
+  }
+
+  /* This test function calls some mouse interrupts that can cause
+     the mouse to become disabled.
+  */
+  int getMouseType (void)
+  {
+    /* Returns -1 if no mouse driver is loaded.  Otherwise returns
+       the type of mouse installed (serial, bus, etc.).
+    */
+    unsigned int mouseloaded;
+    signed int   mousetype;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1558
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  September 1, 1993                        PAGE  :  4/6
+
+    TITLE  :  Saving/Restoring the mouse state in Turbo Vision
+
+
+
+
+    // Save mouse state.
+    //
+    MouseState  ms;
+    ms.saveMouseState();
+
+    // Detect mouse driver.
+    //
+    asm {
+      mov ax, 0
+      int 33h     // AX gets 0, if no mouse driver, else FFFF.
+    }
+    mouseloaded = _AX;
+
+    if (mouseloaded)
+    {
+      // Get type of mouse installed.
+      //
+      asm {
+        mov ax, 24h
+        int 33h   // CH gets type of mouse installed.
+      }
+      mousetype  = _CH;
+    }
+    else
+      mousetype = -1;
+
+    // Restore mouse state.
+    //
+    ms.restoreMouseState();
+
+    return mousetype;
+  }
+
+  const char *mouseType[] = { "Unknown","Bus","Serial",
+                              "InPort","PS/2","HP" };
+
+  class MouseApp : public TApplication
+  {
+
+  public:
+      MouseApp();
+
+      virtual void handleEvent (TEvent& event);
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1558
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  September 1, 1993                        PAGE  :  5/6
+
+    TITLE  :  Saving/Restoring the mouse state in Turbo Vision
+
+
+
+
+      static TMenuBar *initMenuBar (TRect);
+      static TStatusLine *initStatusLine (TRect);
+  };
+
+  MouseApp::MouseApp() :
+      TProgInit( &MouseApp::initStatusLine,
+                 &MouseApp::initMenuBar,
+                 &MouseApp::initDeskTop
+               )
+  {
+  }
+
+  void MouseApp::handleEvent (TEvent& event)
+  {
+    int type;
+    char s[50];
+
+    TApplication::handleEvent (event);
+    if (event.what == evCommand)
+    {
+      switch (event.message.command)
+      {
+        case cmGetMouseType:
+          type = getMouseType();
+          if (type==-1)
+            messageBox( "Mouse Not Installed", cmOK );
+          else {
+            if ((type<0)||(type>5)) type=0;
+            sprintf (s, "Mouse type: %s.", mouseType[type] );
+            messageBox (s, cmOK);
+          }
+          clearEvent( event );
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  TMenuBar *MouseApp::initMenuBar (TRect r)
+  {
+    r.b.y = r.a.y+1;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1558
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  September 1, 1993                        PAGE  :  6/6
+
+    TITLE  :  Saving/Restoring the mouse state in Turbo Vision
+
+
+
+
+    return new TMenuBar (r,
+      *new TSubMenu ("~T~est Mouse Save", kbAltT) +
+      *new TMenuItem ("~G~et Mouse Type", cmGetMouseType, kbAltG)
+    );
+  }
+
+  TStatusLine *MouseApp::initStatusLine (TRect r)
+  {
+    r.a.y = r.b.y-1;
+    return new TStatusLine (r,
+      *new TStatusDef (0, 0xFFFF) +
+      *new TStatusItem ("~Alt-X~ Exit", kbAltX, cmQuit) +
+      *new TStatusItem (0, kbF10, cmMenu)
+    );
+  }
+
+  int main()
+  {
+    MouseApp testIt;
+    testIt.run();
+    return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

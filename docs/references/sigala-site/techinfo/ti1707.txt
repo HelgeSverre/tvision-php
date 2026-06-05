@@ -1,0 +1,264 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1707
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 12, 1993                         PAGE  :  1/4
+
+    TITLE  :  Broadcast to close a Turbo Vision Modeless Dialog
+
+
+
+
+  /*
+    This is a sample program that demonstrates how to send a
+    broadcast to tell a modeless view to close itself.
+  */
+
+  #include <iostream.h>
+
+  #define Uses_TApplication
+  #define Uses_TDeskTop
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+
+  #include <tv.h>
+  #include <tkeys.h>
+  #include <util.h>
+
+  const unsigned int cmMakeView       = 100;
+  const unsigned int cmRemoveView     = 101;
+  const unsigned int cmRemoveYourself = 102;
+
+  class TMyView : public TView
+  {
+  private:
+    virtual void handleEvent (TEvent& event);
+
+  public:
+    TMyView (TRect r) :
+      TView (r)
+    {
+      // Tell this view that it can receive broadcast messages.
+      //
+      eventMask |= evBroadcast;
+    };
+  };
+
+  void TMyView::handleEvent (TEvent& event)
+  {
+    if  (event.what == evBroadcast)
+    {
+      switch (event.message.command)
+      {
+        case  cmRemoveYourself:
+          // Tell this view to remove itself.  After removing this
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1707
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 12, 1993                         PAGE  :  2/4
+
+    TITLE  :  Broadcast to close a Turbo Vision Modeless Dialog
+
+
+
+
+          // view, don't execute any other code that relies on
+          // the view - it doesn't exist anymore!
+          //
+          TProgram::deskTop->remove (this);
+          break;
+      }
+    }
+    // OK to execute this code after removing the view because it
+    // doesn't rely on the TMyView that we just removed.
+    //
+    TView::handleEvent (event);
+  }
+
+  class TMyApplication : public TApplication
+  {
+  private:
+    static char nextX,  // Where to put
+                nextY;  // the view next
+
+    static TMenuBar *initMenuBar (TRect r);
+    virtual void handleEvent (TEvent& event);
+
+  public:
+    TMyApplication () :
+      TProgInit (&TApplication::initStatusLine,
+                 &TMyApplication::initMenuBar,
+                 &TApplication::initDeskTop)
+    {
+    };
+  };
+  char TMyApplication::nextX = 0;
+  char TMyApplication::nextY = 0;
+
+  TMenuBar  *TMyApplication::initMenuBar (TRect r)
+  {
+    r.b.y  = r.a.y + 1;
+    return new TMenuBar (r,
+      *new TSubMenu ("~E~xample", kbAltE) +
+        *new TMenuItem ("~M~ake Modeless View", cmMakeView,
+                        kbAltM, hcNoContext, "Alt-M") +
+        *new TMenuItem ("~R~emove All Views", cmRemoveView,
+                        kbAltR, hcNoContext, "Alt-R")
+      );
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1707
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 12, 1993                         PAGE  :  3/4
+
+    TITLE  :  Broadcast to close a Turbo Vision Modeless Dialog
+
+
+
+
+  }
+
+  void  TMyApplication::handleEvent (TEvent& event)
+  {
+    if  (event.what == evCommand)
+    {
+      switch (event.message.command)
+      {
+        case  cmMakeView:
+          // Insert a new TMyView into the deskTop.
+          //
+          TRect r;
+          r.a.x = nextX++;
+          r.a.y = nextY++;
+          r.b.x  = r.a.x + 10;
+          r.b.y = r.a.y + 10;
+
+          TMyView *newView  = new TMyView (r);
+          TProgram::deskTop->insert (newView);
+          break;
+        case  cmRemoveView:
+          // Tell any TMyView objects that are inserted into the
+          // deskTop to remove themselves.
+          //
+          message (TProgram::deskTop, evBroadcast,
+                   cmRemoveYourself, this);
+          nextX = nextY = 0;
+          break;
+      }
+    }
+    TApplication::handleEvent (event);
+  };
+
+  int  main (void)
+  {
+    TMyApplication  MyApp;
+
+    MyApp.run();
+    MyApp.shutDown();
+    return 0;
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1707
+  VERSION  :  All
+       OS  :  DOS
+     DATE  :  October 12, 1993                         PAGE  :  4/4
+
+    TITLE  :  Broadcast to close a Turbo Vision Modeless Dialog
+
+
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

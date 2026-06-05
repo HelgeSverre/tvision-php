@@ -1,0 +1,66 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1398
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/1
+
+    TITLE  :  tools.h++ from Rogue Wave conflicts with Turbo Vision
+
+
+
+
+  Tools.h++ from Rogue Wave conflicts with Turbo Vision.
+
+  The header file defs.h from Rogue Wave Tools.h++ contains these
+  lines:
+
+      // The following is for your convenience and can be removed
+      // if it conflicts with some other package:
+      #define Boolean RWBoolean
+
+  If you are using Tools.h++ with Turbo Vision, it will lead to
+  conflicts since TV has the following definition for Boolean:
+
+      enum Boolean { TRUE, FALSE };
+
+  Commenting out the #define in defs.h from Tools.h++ resolves the
+  conflict.
+
+  In the case where this was initially encountered, a virtual
+  function being redefined in a derived class was seen by the
+  compiler to have a different signature. Thus, instead of being a
+  redefinition, it hid the base class function. Then a call to
+  (baseClass*)->virtualFunction got the base class function instead
+  of the intended derived class' version.
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

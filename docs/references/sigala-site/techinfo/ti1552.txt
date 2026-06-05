@@ -1,0 +1,726 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                        PAGE  :  1/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+  /*---------------------------- MAKEFILE ---------------------
+
+  .AUTODEPEND
+
+  #       *Translator Definitions*
+  CC = bcc +CURPOS.CFG
+  TASM = TASM
+  TLIB = tlib
+  TLINK = tlink
+  LIBPATH = F:\BORLANDC\LIB;F:\BORLANDC\TVISION\LIB
+  INCLUDEPATH = F:\BORLANDC\INCLUDE;F:\BORLANDC\TVISION\INCLUDE
+
+
+  #       *Implicit Rules*
+  .c.obj:
+  $(CC) -c {$< }
+
+  .cpp.obj:
+  $(CC) -c {$< }
+
+  #       *List Macros*
+
+
+  EXE_dependencies =  \
+  curpos.obj \
+  tscreen.obj \
+  tview.obj
+
+  #       *Explicit Rules*
+  curpos.exe: curpos.cfg $(EXE_dependencies)
+  $(TLINK) /v/x/c/P-/L$(LIBPATH) @&&|
+  c0l.obj+
+  curpos.obj+
+  tscreen.obj+
+  tview.obj
+  curpos
+  # no map file
+  graphics.lib+
+  tv.lib+
+  emu.lib+
+  mathl.lib+
+  cl.lib
+  |
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                        PAGE  :  2/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+  #       *Individual File Dependencies*
+  curpos.obj: curpos.cfg curpos.cpp tscreen.cpp tview.cpp
+
+  #       *Compiler Configuration File*
+  curpos.cfg: curpos.mak
+  copy &&|
+  -ml
+  -v
+  -vi-
+  -weas
+  -wpre
+  -I$(INCLUDEPATH)
+  -L$(LIBPATH)
+  | curpos.cfg
+
+
+  ----------------- ENDING OF MAKEFILE  ------------------*/
+
+  // SOURCE CODE.
+
+  /*-------------------------------------------------*/
+  /*   Copyright (c) 1993 by Borland International   */
+  /*   Example showing how to monitor the hardware   */
+  /*   cursor location in a TurboVision dialog box.  */
+  /*-------------------------------------------------*/
+
+  #define Uses_TApplication
+  #define Uses_TProgram
+  #define Uses_TDialog
+  #define Uses_TStaticText
+  #define Uses_TScreen
+  #define Uses_TInputLine
+  #define Uses_TKeys
+  #define Uses_TRect
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+  #define Uses_TMenuItem
+  #define Uses_TStatusLine
+  #define Uses_TStatusItem
+  #define Uses_TStatusDef
+  #define Uses_TDeskTop
+  #define Uses_MsgBox
+  #include <tv.h>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                        PAGE  :  3/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+  #include <stdio.h>
+  #include <string.h>
+  #include <dos.h>
+
+  #define INPUTLINEMAX 20
+
+  // assign open dialog menu choice
+  const int cmOpenDialog =  200;
+
+  // assign about dialog menu choice
+  const int cmAboutDialog = 201;
+
+
+  //
+  // About dialog box
+  //  About dialog box features updating display of
+  // the current time.
+  //
+  class TAboutTimeDialog : public TDialog
+  {
+      private:
+      char CurrentTime[50];     // current time
+      TInputLine *TimeDisplay;  // Inputline to display
+      // the time
+
+      protected:
+
+      // Get the time string
+      // from DOS and store in date_time
+      void GetTimeString(char *date_time);
+
+      public:
+
+      TAboutTimeDialog(char *Title);
+
+      // implement idle function for time updating
+      void idle(void);
+
+      virtual void handleEvent(TEvent &theEvent);
+  };
+
+  void TAboutTimeDialog::GetTimeString(char *dt)
+  {
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                        PAGE  :  4/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+      struct dostime_t DosTime;
+
+      // call dos for time.
+      _dos_gettime(&DosTime);
+
+      // create formated string for time.
+      sprintf(dt, "HOURS: %2d MINUTES: %2d SECONDS %2d.%2d",
+      DosTime.hour, DosTime.minute,
+      DosTime.second, DosTime.hsecond);
+  }
+
+  TAboutTimeDialog::TAboutTimeDialog(char *Title):
+     TDialog( TRect(5,5,TScreen::screenWidth-5,
+                        TScreen::screenHeight-5),Title),
+              TWindowInit(&TDialog::initFrame)
+  {
+      // Create input line to display current time.
+      TimeDisplay = new TInputLine (TRect(1,size.y-3,
+                                   40,size.y-2),50);
+      TimeDisplay->options &= ~ofSelectable;
+      TimeDisplay->options |= ofCenterX;
+
+      // Insert about box information text
+      insert( new TStaticText(TRect(1, 1,TScreen::screenWidth-11,
+                              TScreen::screenHeight-11),
+                              "\003Turbo Vision Example\n\003\n"
+                              "\003C++ Version\n\003\n"
+                              "\003Copyright (c) 1993\n\003\n"
+                              "\003Borland International"
+      ));
+
+      if (TProgram::application->validView(TimeDisplay))
+      insert(TimeDisplay);
+  }
+
+  //
+  // Update the current time in the about dialog box.
+  //
+  void TAboutTimeDialog::idle(void)
+  {
+      GetTimeString(CurrentTime);
+      TimeDisplay->setData(CurrentTime);
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                        PAGE  :  5/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+  void TAboutTimeDialog::handleEvent(TEvent &theEvent)
+  {
+      switch(theEvent.what)
+      {
+          // Call the idle function when no
+          // other events need processing.
+          case evNothing:
+          idle();
+          break;
+
+          default:
+          break;
+      }
+
+      TDialog::handleEvent(theEvent);
+  }
+
+  //
+  // Dialog that monitors the location of the cursor.
+  //
+  class TCursorDialog : public TDialog {
+  private:
+    TPoint GetCursorLocation(void);
+    TInputLine *ptrStaticText;
+
+  protected:
+    void UpdateCursor(void);
+
+  public:
+    TCursorDialog(TRect &r);
+    virtual void handleEvent(TEvent &TheEvent);
+  };
+
+  //
+  //  Get current cursor location or returns TPoint(-1,-1)
+  //  when the cursor is not on the screen(deactivated).
+  //
+  TPoint TCursorDialog::GetCursorLocation(void)
+  {
+      TPoint p = {-1,-1};
+
+      //
+      //if cursor turned off, return tpoint with -1
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                        PAGE  :  6/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+      //
+      if( TScreen::getCursorType() == 0x2000 )
+      return p;
+
+      //
+      // Call BIOS and get the current cursor location
+      //
+      asm mov ah, 3
+      asm mov bh, 0
+      asm int 0x10
+      p.y = _DH;
+      p.x = _DL;
+
+      //
+      // Return the local coordinates in the current TView
+      //
+      return makeLocal(p);
+  }
+
+
+  TCursorDialog::TCursorDialog(TRect &r):
+    TDialog(r, "The Cursor Dialog"),
+    TWindowInit(&TDialog::initFrame)
+  {
+      // Create static text to display cursor location.
+      ptrStaticText = new TInputLine(TRect(5,1, 30,2), 40);
+      ptrStaticText->options &= ~ofSelectable;
+      ptrStaticText->options |= ofCenterX;
+
+      if (TProgram::application->validView(ptrStaticText))
+      insert(ptrStaticText);
+
+  }
+
+  void TCursorDialog::handleEvent(TEvent &TheEvent)
+  {
+      switch(TheEvent.what)
+      {
+          //
+          // Update the cursor location when
+          // there are not events to process.
+          //
+          case evNothing:
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                        PAGE  :  7/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+          UpdateCursor();
+          break;
+
+          case evKeyDown:
+          switch(TheEvent.keyDown.keyCode)
+          {
+              case kbTab:
+              break;
+              default:
+              break;
+          }
+          break;
+
+          default:
+          break;
+      }
+
+      TDialog::handleEvent(TheEvent);
+  }
+
+  void TCursorDialog::UpdateCursor(void)
+  {
+      TPoint pt;
+      char buffer[55];
+
+      // Get the local location of the cursor
+      pt = GetCursorLocation();
+
+      // Check if cursor is off screen
+      if(pt.x != -1 )
+        sprintf(buffer, "LOCATION X: %2u Y: %2u", pt.x, pt.y);
+      else
+      // Notify cursor off screen
+      sprintf(buffer, "CURSOR OFF SCREEN");
+
+      ptrStaticText->setData(buffer);
+  }
+
+  class TCursorExApp : public TApplication
+  {
+      private:
+      TCursorDialog *ptrCursorDialog;
+      TAboutTimeDialog *ptrAboutDialog;
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                        PAGE  :  8/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+      TInputLine *ptrInputLineArray[6];
+
+      void aboutDialog(void);
+      void createDialog(void);
+
+      public:
+      TCursorExApp();
+      virtual void handleEvent(TEvent &TheEvent);
+      static TStatusLine *initStatusLine( TRect r );
+      static TMenuBar *initMenuBar( TRect r );
+  };
+
+  void TCursorExApp::aboutDialog(void)
+  {
+      ptrAboutDialog = new TAboutTimeDialog("About Cursor
+  Watcher");
+
+      execView(ptrAboutDialog);
+      destroy(ptrAboutDialog);
+  }
+
+  void TCursorExApp::createDialog(void)
+  {
+      // Rectangle for dialog box relative to the desktop
+      TRect rd(5,5,
+      TScreen::screenWidth - 5, TScreen::screenHeight -5);
+      TStaticText *ptrInputLabel;
+      char buffer[25];
+
+      ptrCursorDialog = new TCursorDialog(rd);
+
+      for (int i = 0 ; i < 6 ; i+=2)
+      {
+          ptrInputLineArray[i] =
+          new TInputLine (TRect(12, i+5,
+          12+INPUTLINEMAX, i+6), INPUTLINEMAX);
+
+          sprintf(buffer,"INPUTLINE: %d", i);
+          ptrInputLabel = new TStaticText(TRect(12, i+4,
+                              12+strlen(buffer), i+5), buffer);
+
+          if (validView(ptrInputLabel))
+          ptrCursorDialog->insert(ptrInputLabel);
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                        PAGE  :  9/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+          if (validView(ptrInputLineArray[i]))
+          ptrCursorDialog->insert(ptrInputLineArray[i]);
+
+          ptrInputLineArray[i+1] =
+              new TInputLine (TRect(19 + INPUTLINEMAX, i+5,
+                  19 + (INPUTLINEMAX*2), i+6), INPUTLINEMAX);
+
+          sprintf(buffer,"INPUTLINE: %d", i+1);
+          ptrInputLabel = new TStaticText( TRect(19+INPUTLINEMAX,
+                          i+4, 19+strlen(buffer) + INPUTLINEMAX,
+                          i+5), buffer);
+
+          if (validView(ptrInputLabel))
+          ptrCursorDialog->insert(ptrInputLabel);
+
+
+          if (validView(ptrInputLineArray[i+1]))
+          ptrCursorDialog->insert(ptrInputLineArray[i+1]);
+      }
+
+      if (validView(ptrCursorDialog))
+      execView(ptrCursorDialog);
+
+  }
+
+  TCursorExApp::TCursorExApp() :
+  TProgInit( &TCursorExApp::initStatusLine,
+             &TCursorExApp::initMenuBar,
+             &TCursorExApp::initDeskTop )
+  {
+  }
+
+  void TCursorExApp::handleEvent(TEvent &TheEvent)
+  {
+
+      TApplication::handleEvent(TheEvent);
+
+      switch(TheEvent.what)
+      {
+          case evCommand:
+
+          // Process menu choices from the application handleEvent
+          switch (TheEvent.message.command)
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                       PAGE  :  10/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+          {
+              case cmOpenDialog:
+              createDialog();
+              break;
+
+              case cmAboutDialog:
+              aboutDialog();
+              break;
+
+              default:
+              break;
+          }
+
+          break;
+          default:
+          break;
+      }
+
+  }
+
+  TStatusLine *TCursorExApp::initStatusLine(TRect r)
+  {
+      r.a.y = r.b.y - 1;     // move top to 1 line above bottom
+      return new TStatusLine( r,
+      *new TStatusDef( 0, 0xFFFF ) +
+      // set range of help contexts
+      *new TStatusItem( 0, kbF10, cmMenu ) +
+      *new TStatusItem( "~Alt-X~ Exit", kbAltX, cmQuit )  );
+  }
+
+  TMenuBar *TCursorExApp::initMenuBar( TRect r )
+  {
+
+      r.b.y = r.a.y + 1;
+      return new TMenuBar( r,
+        *new TSubMenu( "~A~ction", kbAltA )+
+        *new TMenuItem("~O~pen Dialog", cmOpenDialog, kbF1,
+             hcNoContext, "F1")+
+        *new TMenuItem("~A~bout", cmAboutDialog, kbF2,
+             hcNoContext,"F2")+
+        *new TMenuItem("~E~xit", cmQuit, kbF3,
+             hcNoContext,"F3") );
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1552
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                       PAGE  :  11/11
+
+    TITLE  :  Turbo Vision example of determining cursor position
+
+
+
+
+  int main()
+  {
+      TCursorExApp TheApplication;
+      TheApplication.run();
+      return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,264 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1369
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/4
+
+    TITLE  :  Changing the color of shadows in Turbo Vision
+
+
+
+
+  /****************************************************************
+  *                                                               *
+  * TVSHAD.CPP: This program demonstrates how to change the color *
+  * of the shadows for Turbo Vision TViews.  All one need do is   *
+  * change the value of the external unsigned char shadowAttr and *
+  * force a redraw of either the desktop or application object.   *
+  * Note that there is only one color for all the shadows of all  *
+  * the views.  Distinct shadow colors for different views is not *
+  * supported and is a nontrivial modification of the library.    *
+  *                                                               *
+  *   The heart of this program is the external declaration for   *
+  *   shadowAttr and the redrawing of the desktop object.         *
+  *                                                               *
+  *****************************************************************
+
+  #define Uses_TRect
+  #define Uses_TKeys
+  #define Uses_TEvent
+  #define Uses_TButton
+  #define Uses_TStaticText
+  #define Uses_TDialog
+  #define Uses_TFrame
+  #define Uses_TMenu
+  #define Uses_TMenuItem
+  #define Uses_TMenuBar
+  #define Uses_TDeskTop
+  #define Uses_TProgram
+  #define Uses_TApplication
+  #include <tv.h>
+
+  #pragma hdrstop
+
+
+  /*
+  * command messages used.
+  */
+  const unsigned int ShadowTest = 100;      // Demo command.
+  const unsigned int cmCycle = 101;
+
+  extern uchar shadowAttr;  // Byte that represents shadow color.
+
+
+  /*
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1369
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/4
+
+    TITLE  :  Changing the color of shadows in Turbo Vision
+
+
+
+
+  * Dialog box to change color of shadow attribute.
+  */
+
+  class TShadowDialog : public TDialog
+  {
+
+  public:
+
+       TShadowDialog();
+       virtual void handleEvent( TEvent& event );
+
+  };
+
+  TShadowDialog::TShadowDialog() :
+       TDialog( TRect(0,0,40,12), "Shadow Cycle" ),
+       TWindowInit( initFrame )
+  {
+       insert( new TStaticText( TRect(2,2,36,6),
+  "\x3Press <Cycle> Button\n\x3\n\x3to change color of shadow\n"
+            ));
+       insert( new TButton( TRect(5,7,15,9), "~C~ycle", cmCycle,
+                 bfNormal ));
+       insert( new TButton( TRect(25,7,35,9), "O~K", cmOK,
+            bfDefault ));
+       options |= ofCentered;
+  }
+
+
+  void TShadowDialog::handleEvent( TEvent& event )
+  {
+       TDialog::handleEvent( event );
+
+       if(  event.what == evCommand &&
+            event.message.command == cmCycle )
+       {
+            shadowAttr++;     // Change the color of the shadow.
+            TProgram::deskTop->drawView();  // Redraw the desktop.
+            clearEvent( event );
+       }
+  }
+
+
+  /*
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1369
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/4
+
+    TITLE  :  Changing the color of shadows in Turbo Vision
+
+
+
+
+  * Application object declaration
+  */
+
+  class TTestApp : public TApplication
+  {
+
+  public:
+
+       TTestApp() : TApplication(),
+            TProgInit( initStatusLine, initMenuBar, initDeskTop ){}
+       static TMenuBar *initMenuBar( TRect r );
+       virtual void handleEvent( TEvent& event );
+
+  };
+
+
+  TMenuBar *TTestApp::initMenuBar( TRect r )
+  {
+       r.b.y = r.a.y + 1;
+       return new TMenuBar( r, new TMenu(
+            *new TMenuItem( "~A~bout", ShadowTest, kbAltA )
+            ));
+  }
+
+
+  void TTestApp::handleEvent( TEvent& event )
+  {
+       TApplication::handleEvent( event );
+
+       if(  event.what == evCommand &&
+            event.message.command == ShadowTest )
+       {
+            TDialog *TD=(TDialog *)validView( new TShadowDialog );
+
+            if( TD != 0 )
+            execView( TD );
+
+            destroy( TD );
+       }
+  }
+
+
+  /*
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1369
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/4
+
+    TITLE  :  Changing the color of shadows in Turbo Vision
+
+
+
+
+  * Main()
+  */
+
+  int main()
+  {
+       TTestApp TB;
+       TB.run();
+       return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

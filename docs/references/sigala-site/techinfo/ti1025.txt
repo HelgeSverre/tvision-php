@@ -1,0 +1,132 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1025
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  1/2
+
+    TITLE  :  Optimizing Screen Updates with Turbo Vision v3.1
+
+
+
+
+  PROBLEM:
+  --------
+
+      Turbo Vision with the Borland C++ and Application Frameworks
+  3.1 package seems very slow, much slower that the previous
+  version, in fact.  What happened and how can I fix it?
+
+
+  SOLUTION:
+  ---------
+
+      The problem is twofold:  One, snow checking was inadvertently
+  turned on by default and two, the new operator that is in TV.LIB
+  has debugging code compiled in with it.  Fortunately, the
+  solution to these problems is very simple.  As a Borland C++ and
+  Application Frameworks customer, you also have the source code to
+  Turbo Vision.  You will need it to fix these problems, and here
+  is how you do it.
+
+      (1)  To fix the snow checking problem, go to the
+  TVISION\SOURCE directory of the product and edit the file
+  TSCREEN.CPP.  Change line 42 from
+
+         Boolean near TScreen::checkSnow = True;
+
+      to
+
+         Boolean near TScreen::checkSnow = False;
+
+      Recompile the module with the following command line.  You
+  may need to make adjustments to the include directory path for
+  the compiler to find <tv.h>.  (See the 3.1 User's Guide p. 172
+  and p. 174-177 for details.)
+
+         bcc -c -P -O1 -ml tscreen.cpp
+         tlib /0 ..\lib\tv.lib -+tscreen.obj
+
+      This will compile TSCREEN.CPP and add it to the Turbo Vision
+  Library for later use.  If you only installed the Integrated
+  Development environment on your system, you can rebuild this
+  module by setting the following options and compiling
+  TSCREEN.CPP.  Once the module has been compiled, execute the TLIB
+  command shown above.
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1025
+  VERSION  :  3.1
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  2/2
+
+    TITLE  :  Optimizing Screen Updates with Turbo Vision v3.1
+
+
+
+
+       Options | Compiler | Optimizations:
+                           Set to smallest code.
+
+       Options | Compiler | Code Generation:
+                           Set for large memory model.
+
+       Options | Directories:
+                           Set the correct include paths.
+
+
+      (2)  To remove the debugging code from the new operator, you
+  only need to recompile the source for that module.  Recompile
+  NEW.CPP with the following command line.  As in (1), you may need
+  to make adjustments to the include paths used by the compiler.
+
+          bcc -c -P -O1 -ml -DNDEBUG new.cpp
+          tlib /0 ..\lib\tv.lib -+new.obj
+
+      The -DNDEBUG defines the NDEBUG symbol and will cause
+  compilation of NEW.CPP without the extra debugging code.  If you
+  only installed the IDE, set the options listed above, and also
+  set the following.  Once the module has been compiled, execute
+  the TLIB command shown above.
+
+          Options | Compiler | Code Generation | Defines:
+                      Add NDEBUG to this line.
+
+  Upon performing these two steps, the Turbo Vision library should
+  again be performing at the speed it had in previous versions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

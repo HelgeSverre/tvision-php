@@ -1,0 +1,528 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1701
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 7, 1993                          PAGE  :  1/8
+
+    TITLE  :  Turbo Vision: Streaming a user defined dialog
+
+
+
+
+  //=============================================================
+  //  Turbo Vision - Streaming a User Defined Dialog
+  //
+  //  - This sample code demonstrates a method of creating a
+  // user defined  Dialog box with unique data members and
+  // handleEvent, executing the  Dialog box, streaming it out
+  // to disk, retrieving it from disk and  reexecuting it.
+  //
+  //  - Please refer to Chapter 8 in the Turbo Vision User's Guide
+  //  for more information on streamable objects.  TI #1023
+  // also provides  detailed information about using Turbo
+  // Vision Streams.
+  //  - Compile with Bcc -ml strmdlg.cpp gadgets.cpp tv.lib
+  //
+  //  - Note: GADGETS.CPP can be found in the TVISION\DEMOS
+  // directory of  your C++ product.
+  //
+  //=============================================================
+
+  //----------------- TV "Uses" ---------------------------------
+  #define Uses_MsgBox
+  #define Uses_TProgram
+  #define Uses_TApplication
+  #define Uses_TKeys
+  #define Uses_TRect
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+  #define Uses_TMenuItem
+  #define Uses_TStatusLine
+  #define Uses_TStatusItem
+  #define Uses_TStatusDef
+  #define Uses_TDeskTop
+  #define Uses_TView
+  #define Uses_TWindow
+  #define Uses_TFrame
+  #define Uses_TDialog
+  #define Uses_TButton
+  #define Uses_TSItem
+  #define Uses_TMenu
+  #define Uses_TObject
+  #define Uses_TStreamable
+  #define Uses_TResourceCollection
+  #define Uses_TStaticText
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1701
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 7, 1993                          PAGE  :  2/8
+
+    TITLE  :  Turbo Vision: Streaming a user defined dialog
+
+
+
+
+  //----------------------- stream "Uses" -----------------------
+  #define Uses_ifpstream
+  #define Uses_ofpstream
+  #define Uses_TStreamableClass
+  #define Uses_ipstream
+  #define Uses_opstream
+
+  #include "gadgets.h"
+  #include <stdio.h>         // for sprintf()
+  #include <tv.h>            // Need TV.H before the __LINK Macros
+
+
+  //-------------------------------------------------------------
+  //  You must register every TV class you intend to use.
+  //  Attempting to stream a class which is not registered
+  //  will cause the program to crash.
+  //-------------------------------------------------------------
+  __link( RButton )
+  __link( RFrame )
+  __link( RResourceCollection )
+  __link( RDialog )
+  __link( RStaticText )
+
+
+  //------------ define our message constants ------------------
+  const int cmAbout   = 100;
+  const int cmExit    = 101;
+  const int cmSpace   = 102;
+  const int cmDialog1 = 103;
+
+  //---------------- filename for streaming ---------------------
+
+  const char *FILE_NAME = "strmdlg.sav";
+
+
+  //-------------------------------------------------------------
+  //     This is an example of a user defined Dialog box.
+  // Although     we inherit the streamable aspects of TDialog,
+  // we will need     to override several member functions
+  // inorder to provide     streamability for this new class.
+  //
+  //     NOTICE: The overridden WRITE, READ, BUILD, and
+  //       STREAMABLENAME member functions. We also
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1701
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 7, 1993                          PAGE  :  3/8
+
+    TITLE  :  Turbo Vision: Streaming a user defined dialog
+
+
+
+
+  //       need the static NAME data member.
+  //
+  //-------------------------------------------------------------
+  class TMyDialog: public TDialog
+  {
+      public:
+
+      char buffer[60];
+      int var1, var2, flag;
+
+      virtual void write( opstream& os);
+      virtual void *read( ipstream& );
+
+      static const char * const name;
+      static TStreamable *build();
+
+      TMyDialog( const TRect& bounds, const char *aTitle) :
+      TDialog( bounds, aTitle),
+      TWindowInit( initFrame )
+      {
+          // my new data members
+          var1 = 37;
+          // will need to be streamed.
+          var2 = 99;
+          //turn off the move option.
+          flags ^= wfMove;
+      }
+
+      // override the handle event
+      virtual void handleEvent( TEvent& );
+
+      protected:
+
+      TMyDialog( StreamableInit  ) :
+      TDialog( streamableInit ), TWindowInit( streamableInit ) {};
+
+      private:
+
+      virtual const char *streamableName() const
+      { return name; }
+  };
+
+  /*-----------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1701
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 7, 1993                          PAGE  :  4/8
+
+    TITLE  :  Turbo Vision: Streaming a user defined dialog
+
+
+
+
+  /* Build a skeleton for our new object.
+  \*-----------------------------------------------------------*/
+  TStreamable *TMyDialog::build()
+  {
+      return new TMyDialog( streamableInit );
+  }
+
+  /*----------------------------------------------------------
+   Notice how we write out the new data members of our class
+    (TMyDialog).
+  ----------------------------------------------------------*/
+  void TMyDialog::write( opstream& os)
+  {
+      TDialog::write( os );
+      os << var1 << var2;
+  }
+
+  /*--------------------------------------------------------
+   Here we read in the new data members of our class(TMyDialog).
+   -----------------------------------------------------------*/
+  void *TMyDialog::read( ipstream& is )
+  {
+      TDialog::read( is );
+      is >> var1 >> var2;
+      return this;
+  }
+
+  //------- initialize the static data member ----------------\\
+  const char * const TMyDialog::name = "TMyDialog";
+
+  /*------------------------------------------------------------
+    Overload the insertion and extraction operators for our new
+    class( TMyDialog ).
+  \*-----------------------------------------------------------*/
+  inline ipstream& operator >> ( ipstream& is, TMyDialog& cl )
+  {    return is >> ( TStreamable& )cl;    }
+
+  inline ipstream& operator >> ( ipstream& is, TMyDialog*& cl )
+  {    return is >> (void *&)cl;           }
+
+  inline opstream& operator << ( opstream& os, TMyDialog& cl )
+  {    return os << ( TStreamable& )cl;    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1701
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 7, 1993                          PAGE  :  5/8
+
+    TITLE  :  Turbo Vision: Streaming a user defined dialog
+
+
+
+
+  inline opstream& operator << ( opstream& os, TMyDialog* cl )
+  {    return os << (TStreamable *)cl;     }
+
+  //-------------- Register our new class explictly------------\\
+  TStreamableClass RMyDialog(  TMyDialog::name,
+  TMyDialog::build,
+  __DELTA(TMyDialog) );
+
+  /*-----------------------------------------------------------
+   Overloaded handle event.
+  \*---------------------------------------------------------*/
+  void TMyDialog::handleEvent( TEvent& event )
+  {
+      if( event.what == evCommand )
+      {
+          switch( event.message.command )
+          {
+              case cmOK:
+              sprintf( buffer, "Var #1 is: %d  Var #2 is: %d",
+                     var1, var2);
+              messageBox( buffer, mfInformation | mfOKButton);
+              clearEvent( event );
+              break;
+          }
+      }
+      TDialog::handleEvent( event );
+  }
+
+  class TMyApp : public TApplication
+  {
+      public:
+      TMyApp();
+      static TMenuBar *initMenuBar( TRect );
+      void handleEvent(TEvent& event);
+      void Dialog1(void);
+      void idle(void);
+      THeapView *heap;
+
+  };
+
+  TMyApp::TMyApp() :
+     TApplication(),
+     TProgInit( initStatusLine, initMenuBar, initDeskTop )
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1701
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 7, 1993                          PAGE  :  6/8
+
+    TITLE  :  Turbo Vision: Streaming a user defined dialog
+
+
+
+
+  {
+      // Create the heap view.
+      TRect r = getExtent();
+      r.a.x = r.b.x - 13;     r.a.y = r.b.y - 1;
+      heap = new THeapView( r );
+      insert(heap);
+
+  }
+
+  void TMyApp::idle()
+  {
+      TProgram::idle();
+      if (heap != 0 )
+      {
+          heap->update();
+      }
+  }
+
+  void TMyApp::Dialog1(void)
+  {
+      char *text =
+        "This Dialog will be streamed out to disk... then"\
+        " streamed back and executed again...";
+
+      // make initial dialog..........
+      TMyDialog *pd = new TMyDialog( TRect( 5,1,75,20)
+                                          , "Streaming along...");
+
+      // open output stream....check for valid
+      ofpstream of( FILE_NAME, ios::out | ios::binary );
+      if( !of )
+      {
+          messageBox("Error opening output file!", mfError );
+          return;
+      }
+
+      // if valid insert buttons and execute
+      if( validView( pd ) )
+      {
+          pd->insert( new TStaticText( TRect(10,3,60, 15),
+                                            text) );
+          pd->insert( new TButton(TRect(10,14,25,16)
+                                       , "Variables", cmOK,
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1701
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 7, 1993                          PAGE  :  7/8
+
+    TITLE  :  Turbo Vision: Streaming a user defined dialog
+
+
+
+
+                                       bfNormal) );
+          pd->insert( new TButton(TRect(10,10,25,12)
+                                       , "Continue", cmCancel,
+                                       bfDefault) );
+          deskTop->execView( pd );
+      }
+
+      messageBox("Streaming Dialog to disk now...",
+                mfInformation|mfOKButton);
+      of << pd;        // stream dialog out to disk
+
+      of.close();      // close the output file
+      destroy(pd);     // destroy the dialog
+
+      //--- stream the dialog back in from disk ----
+
+      TMyDialog  *dg = NULL;          // pointer to a TMyDialog
+
+      ifpstream ifps( FILE_NAME );       // open input stream
+      if( !ifps )                        // open correctly?
+      {
+          messageBox("Error opening input file!", mfError);
+          return ;
+      }
+
+      messageBox("Streaming Dialog back from disk...",
+                mfInformation|mfOKButton);
+      ifps >> dg;                     // stream in the dialog
+
+      if( validView( dg ) )
+      {
+          // execute the dialog again
+          deskTop->execView( dg );
+      }
+      destroy(dg);
+  }
+
+  /*------------------------------------------------------------
+  Application handleEvent...
+  \*-----------------------------------------------------------*/
+  void TMyApp::handleEvent(TEvent& event)
+  {
+      TApplication::handleEvent( event );
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1701
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 7, 1993                          PAGE  :  8/8
+
+    TITLE  :  Turbo Vision: Streaming a user defined dialog
+
+
+
+
+      if( event.what == evCommand )
+      {
+          switch( event.message.command)
+          {
+              case cmDialog1:
+              Dialog1();
+              break;
+
+              default:
+              break;
+          }
+          clearEvent( event );
+      }
+  }
+
+  TMenuBar *TMyApp::initMenuBar( TRect r )
+  {
+      r.b.y = r.a.y + 1;
+
+      TMenuItem *one =
+      new TMenuItem("~E~xit", cmQuit, kbAltX, hcNoContext, 0);
+
+      TMenuItem *two =
+      new TMenuItem("~\xF0~", cmDialog1, kbAltSpace,
+                    hcNoContext,0, one);
+
+      return new TMenuBar( r, new TMenu( *two ));
+  }
+
+  int main()
+  {
+      TMyApp myApp;
+      myApp.run();
+      return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+

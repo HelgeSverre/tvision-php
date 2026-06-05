@@ -1,0 +1,462 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1541
+  VERSION  :  3.X
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/7
+
+    TITLE  :  Using cmReleasedFocus message to update a dialog box
+
+
+
+
+    //============================================================
+    //  The following example routines have been provided by the
+    // Technical  Support staff at Borland International.  They
+    // are provided as a  courtesy and not as part of a Borland
+    // product, and as such, are  provided without the assurance
+    // of technical support or any specific  guarantees.
+    //============================================================
+    //
+    //  Turbo Vision - Responding to cmReleased events in a
+    // Dialog box and changing other fields in the Dialog
+    // based on the value of a control.
+    //
+    //  TO BUILD: BCC -ml focus.cpp tv.lib
+    //------------------------------------------------------------
+    #define Uses_THistory
+    #define Uses_MsgBox
+    #define Uses_TProgram
+    #define Uses_TApplication
+    #define Uses_TKeys
+    #define Uses_TRect
+    #define Uses_TMenuBar
+    #define Uses_TSubMenu
+    #define Uses_TMenuItem
+    #define Uses_TStatusLine
+    #define Uses_TStatusItem
+    #define Uses_TStatusDef
+    #define Uses_TDeskTop
+    #define Uses_TView
+    #define Uses_TWindow
+    #define Uses_TFrame
+    #define Uses_TScroller
+    #define Uses_TScrollBar
+    #define Uses_TDialog
+    #define Uses_TButton
+    #define Uses_TSItem
+    #define Uses_TCheckBoxes
+    #define Uses_TRadioButtons
+    #define Uses_TLabel
+    #define Uses_TInputLine
+    #define Uses_TMenu
+
+    #include <string.h>
+    #include <stdio.h>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1541
+  VERSION  :  3.X
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/7
+
+    TITLE  :  Using cmReleasedFocus message to update a dialog box
+
+
+
+
+    #include <stdlib.h>
+    #include <tv.h>
+
+    const int cmAbout    = 100;
+    const int cmDialog1  = 101;
+
+    //
+    // define, instantiate and initialize the dialog transfer
+    // structure
+    struct dialogstruct
+    {
+        ushort chk;
+        ushort rad;
+        char first[30];
+        char last[30];
+    } s = { 0, 0, "", ""},
+      olds = s;  // old State of dialog
+
+
+    //
+    // Subclass the TDialog class to add new functionality
+    //
+    class myDialog : public TDialog
+    {
+    private:
+        // keep a pointer to the radiobutton in the dialog
+        // This pointer will be used later in the handleEvent of
+        // the class
+        TRadioButtons *radioPtr;
+
+        public:
+        myDialog(const TRect& bounds, const char *aTitle);
+        void handleEvent( TEvent& event);
+
+    };
+
+
+    //
+    // class constructor for my new dialog class "myDialog"
+    //
+    myDialog::myDialog(const TRect& bounds, const char *aTitle)
+                      : TDialog( bounds, aTitle),
+    TWindowInit(initFrame)
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1541
+  VERSION  :  3.X
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/7
+
+    TITLE  :  Using cmReleasedFocus message to update a dialog box
+
+
+
+
+    {
+
+        TView *b;
+
+        //
+        //make and insert checkBoxes
+        //
+        b = new TCheckBoxes( TRect( 3, 3, 41, 7),
+                             new TSItem( "Assembly",
+                             new TSItem( "Basic",
+                             new TSItem( "Debugger",
+                             new TSItem( "Profiler",
+                             new TSItem( "Engine",
+                             new TSItem( "Windows",
+                             new TSItem( "Letters",
+                             new TSItem( "OWL",
+                             new TSItem( "TV",
+                             new TSItem( "DOS",
+                             new TSItem( "OS/2",
+                             new TSItem( "C++", 0 )
+                              ))))))))))));
+        insert( b );
+        insert( new TLabel( TRect( 2, 2, 10, 3), "~P~roduct", b ));
+
+        // make and insert the radioButtons
+        b = new TRadioButtons( TRect( 3, 10, 41, 13),
+                            new TSItem( "Do Nothing",
+                            new TSItem( "Check All and enter Name",
+                            new TSItem( "Clear All fields", 0)
+                           )));
+        insert( b );
+        insert( new TLabel( TRect( 2, 9, 13, 10), "~M~ain Duty",
+                                 b ));
+
+        // set the class global pointer to the radiobuttons pointer
+        radioPtr = (TRadioButtons *)b;
+
+        // make and insert the name inputline
+        b = new TInputLine( TRect( 3, 15, 41, 16 ), 30 );
+        insert( b );
+        insert( new TLabel( TRect( 2, 14, 34, 15 )
+                                 ,"~F~irst Name", b ));
+        insert( new THistory( TRect( 39, 15, 42, 16),(TInputLine *)
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1541
+  VERSION  :  3.X
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/7
+
+    TITLE  :  Using cmReleasedFocus message to update a dialog box
+
+
+
+
+                                                     b, 101 ));
+
+        // make and insert the last name inputline
+        b = new TInputLine( TRect( 3, 18, 41, 19 ), 30 );
+        insert( b );
+        insert( new TLabel(TRect( 2, 17, 34, 18 ),"~L~ast Name",
+                                b ));
+        insert (new THistory (TRect (39, 18, 42, 19),
+                (TInputLine *) b, 102 ));
+
+        // make and insert buttons
+        insert( new TButton( TRect( 5, 20, 13, 22 )
+                                  ,"~O~k",cmOK,bfDefault ));
+        insert( new TButton( TRect( 28, 20, 38, 22 )
+                                  ,"~C~ancel",cmCancel,bfNormal ));
+
+        // set the initial data into the dialog box
+        setData( &s );
+
+    }
+
+    //
+    //if the event is a broadcast of type cmReleasedFocus and it
+    // was sentby the radioButton then getData(), take action
+    // base on the currentvalue of the radioButtons
+    //
+    void myDialog::handleEvent( TEvent& event)
+    {
+
+        if( event.what == evCommand )
+        {
+            switch( event.message.command)
+            {
+                case cmCancel:
+                  // Wants to cancel changes.
+                  //
+                  s = olds;  // Restore old state
+                  break;
+
+                default:
+                break;
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1541
+  VERSION  :  3.X
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/7
+
+    TITLE  :  Using cmReleasedFocus message to update a dialog box
+
+
+
+
+        else if ( event.what & evBroadcast &&
+                  event.message.command == cmReleasedFocus )
+        {
+            if( event.message.infoPtr == radioPtr )
+            {
+                olds = s;  // Save old state of dialog
+                getData( &s );
+                if( s.rad == 1 )
+                {
+                    strcpy(s.first, "Frank" );
+                    strcpy(s.last, "Borland" );
+                    s.chk = 4095;
+                    setData(&s);
+                }
+                else if( s.rad == 2 )
+                {
+                    strcpy(s.first, "");
+                    strcpy(s.last, "");
+                    s.chk = 0;
+                    setData(&s);
+                }
+            }
+        }
+
+        // call TDialog's handleEvent _after_ our processing
+        // otherwise itwill handle the cmReleasedFocus events
+        TDialog::handleEvent( event );
+
+    }
+
+    //
+    // main application class
+    //
+    class TMyApp : public TApplication
+    {
+    private:
+        public:
+        TMyApp();
+        static TMenuBar *initMenuBar( TRect );
+        static TStatusLine *initStatusLine( TRect );
+        void handleEvent(TEvent& event);
+
+        protected:
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1541
+  VERSION  :  3.X
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  6/7
+
+    TITLE  :  Using cmReleasedFocus message to update a dialog box
+
+
+
+
+        void Dialog1(void);
+
+    };
+
+
+    //
+    // member function of TMyApp which creates and executes a
+    // "myDialog"
+    void TMyApp::Dialog1()
+    {
+        myDialog *pd = new myDialog( TRect( 18, 0, 62, 23),
+                                     "Operator Input" );
+        if( pd )
+        {
+            deskTop->execView( pd );
+            destroy( pd );
+        }
+    }
+
+
+    TMyApp::TMyApp() :
+      TProgInit( initStatusLine, initMenuBar, initDeskTop )
+    {}
+
+    //
+    // TMyApp handleEvent processes the menuBar and statusLine
+    // commands
+    void TMyApp::handleEvent(TEvent& event)
+    {
+        TApplication::handleEvent( event );
+
+        if( event.what == evCommand )
+        {
+            switch( event.message.command)
+            {
+                case cmDialog1:
+                Dialog1();
+                break;
+
+                default:
+                break;
+            }
+            clearEvent( event );
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1541
+  VERSION  :  3.X
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  7/7
+
+    TITLE  :  Using cmReleasedFocus message to update a dialog box
+
+
+
+
+        }
+
+    }
+
+    TStatusLine *TMyApp::initStatusLine(TRect r)
+    {
+        r.a.y = r.b.y - 1;
+
+        return new TStatusLine( r,
+        *new TStatusDef( 0, 0xFFFF) +
+        *new TStatusItem( "~Alt-X~ Exit", kbAltX, cmQuit)
+        );
+    }
+
+
+    TMenuBar *TMyApp::initMenuBar( TRect r )
+    {
+        r.b.y = r.a.y + 1;
+
+        TMenuItem *one =
+        new TMenuItem("~E~xit",cmQuit,kbAltX,hcNoContext, 0, 0);
+
+        TMenuItem *two =
+        new TMenuItem("~D~ialog",cmDialog1,kbAltD,hcNoContext,0,
+                     one);
+
+        return new TMenuBar( r, new TMenu( *two ));
+    }
+
+    int main()
+    {
+        TMyApp myApp;
+        myApp.run();
+        return 0;
+    }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+

@@ -1,0 +1,264 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1773
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 25, 1994                         PAGE  :  1/4
+
+    TITLE  :  How to build DOS applications in Borland C++ 4.0
+
+
+
+
+  Borland C++ version 4.0 (BC4) expands programming power for DOS
+  developers by increasing the capabilities for the compiler,
+  linker, debugger, and browser.  For example the Turbo Vision
+  libraries can now be rebuilt with full debug information, linked
+  into your TV application and debugged with Turbo Debugger (see
+  TI1752 for instructions on how to do this).  Then if you like you
+  can Browse your TV application and print out the full class
+  hierarchy.
+
+  What this document will focus on is using the new Windows based
+  IDE for DOS development.  It is a very simple process once you
+  discover where to tell the IDE you want to create DOS targets.
+
+  First lets build the infamous "Hello World" program to show how
+  to build a single source DOS application.
+
+  1.  First double click on the BC++ icon and load the BC 4.0 IDE.
+  2.  In the File menu select New for a empty edit window.
+  3.  Now type in the following code for the "Hello World" program.
+
+     #include <stdio.h>
+     #include <conio.h>
+
+     int main()
+     {
+        printf("Welcome DOS programmer's");
+        getch();
+
+        return 0;
+     }
+
+  4.  Move the mouse cursor anywhere within the Edit window, and
+  click the right mouse button once.  This activates the SpeedMenu
+  for the edit window, now double click on the "Target Expert".  If
+  you don't have a mouse use Alt-F10 to display the SpeedMenu
+  then 'X' to activate the TargetExpert.
+
+  5.  The Target Expert dialog contains a list box called
+  "Platform"
+  where you can select the target platform for your application.
+  Click the down-arrow next to the Platform field to see the plat-
+  forms supported.  Move the highlight bar to "DOS Standard" and
+  press the Enter key to select DOS Standard.  Now click the OK
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1773
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 25, 1994                         PAGE  :  2/4
+
+    TITLE  :  How to build DOS applications in Borland C++ 4.0
+
+
+
+
+  button to close the dialog and return to the edit window.
+
+  Like all Windows applications if you don't have a mouse the tab
+  key will cycle you through the different fields and buttons.  In
+  list boxes, the up and down arrows scroll you through the list.
+  For toggle items like checkboxes the spacebar toggles whether
+  the item is on or off.
+
+  Then next we need to select a memory model.  Below Platform is
+  the
+  Target Model list where you select the memory model for your
+  program.  Like the Platform list, clicking the down-arrow will
+  open the list and up and down arrows will scroll though the
+  different models.  Select Small model for our example.
+
+  The last item to set is the group of Standard Libraries check
+  boxes on the right hand side of the Target Expert. This list of
+  libraries changes according to the Target Type and Platform you
+  select.  For our example the Runtime library is all we need.  So
+  toggle off the BGI and Class Library.  Now click the OK button to
+  confirm the new settings and return to the edit window.
+
+  That's all there is to do to let the IDE know you want to create
+  a DOS application.  As you can tell, the Target Expert is
+  something you will have to set for every project, but it only
+  involves a couple clicks of the mouse.
+
+  6.  In previous versions of BC the "Compile" menu is where you
+  would compile, build, or make your applications.  With BC 4.0 the
+  "Project" menu is where those commands are located now.  Go to
+  the
+  Project menu select Build All and make the "Hello" program.
+
+  7.  Another change is that there is no longer a "Run" menu as
+  before.  Now the commands that were in the "Run" menu have been
+  moved to the "Debug" menu.  Enter the Debug menu and select the
+  "Run" command to execute the "Hello program.
+
+  8.  BC 4.0's built-in debugger cannot debug DOS applications, but
+  the "Tool" menu is already setup for Turbo Debugger.  In the
+  "Tool" menu, select Turbo Debugger and the IDE will launch the
+  DOS debugger and pass the name of your program to it.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1773
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 25, 1994                         PAGE  :  3/4
+
+    TITLE  :  How to build DOS applications in Borland C++ 4.0
+
+
+
+
+  Building a DOS application that requires multiple files is very
+  similar to the process used in previous versions of BC.  You will
+  create a new project and add your source files to the project.
+  The difference is that you set the Platform in the "New Project"
+  dialog.  The "New Project" dialog has a "Platform" list the same
+  as the Target Expert when you created the Hello World example.
+  If
+  you decide to change your target after creating your project you
+  access the TargetExpert in a different manner than you did for a
+  single file.  In the Project window single on the name of the
+  target, for example "hello [.exe]".  Now click the right mouse to
+  bring up the SpeedMenu.  On the SpeedMenu is TargetExpert.
+  Select
+  TargetExpert and everything after that is the same as you did
+  with a single file.  If you don't have a mouse, the up and down
+  arrow keys will let you change the target name and Alt-F10 brings
+  up the SpeedMenu.
+
+  Another difference from previous versions of BC is how EasyWin is
+  activated.  In previous versions if you used the Windows based
+  IDE
+  and wrote a simple DOS program like "Hello World" the compiler
+  would recognize it as a Non-Windows program and invoke EasyWin
+  putting a window around your program for you.  Since BC4's IDE
+  can create both DOS and Windows applications you now have to tell
+  the IDE you want to create an EasyWin application.  This again is
+  done with the TargetExpert except this time the Platform is
+  Windows 3.x (16).  Then in the list of Target Types select
+  EasyWin[.exe].
+
+  The main things you will have to adjust to from previous versions
+  of BC are selecting your target and learning the new menu system.
+  Since BC 4 uses a Windows IDE, it brings you the advantage of
+  running multiple tasks at one time.  For example while writing
+  this note I had my editor, BC 4.0, and Turbo Debugger all active
+  simultaneously.  Having all your favorite tools loaded and just
+  an
+  Alt-Tab away will help speed your development process.
+
+  Once you become more comfortable with the Project Manager you can
+  build projects that create both DOS and Windows executables.
+  Since these days most projects have to support both DOS and
+  Windows the Project Manager can help you maintain both targets in
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1773
+  VERSION  :  4.0
+       OS  :  DOS, WIN
+     DATE  :  January 25, 1994                         PAGE  :  4/4
+
+    TITLE  :  How to build DOS applications in Borland C++ 4.0
+
+
+
+
+  one project file.  What you will do is create a second target,
+  then set each target for the appropriate platform.  Then create a
+  Source Pool for the code that is common to both targets.  Finally
+  add the code specific to each platform to the proper target.
+  Once
+  configured, you can maintain your common and specific code
+  and build your DOS or Windows target as necessary.  In the
+  \BC4\EXAMPLES\IDE\SRCPOOL directory is a example project
+  illustrating how to build a multi-target project with a source
+  pool.
+
+  Additionally the new IDE will automatically convert your old
+  projects file (.PRJ) to the new .IDE file format and will set the
+  Target Expert for you during the conversion.  Once you are
+  familiar with the TargetExpert and task switching in Windows you
+  will find the new IDE more powerful than the previous DOS IDE.
+
+  For more information on the Project Manager, TargetExpert, and
+  Source Pools, see Chapter Two of the Users Guide.
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

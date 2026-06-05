@@ -1,0 +1,528 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1033
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  1/8
+
+    TITLE  :  Example of derived TListViewer for Turbo Vision.
+
+
+
+
+
+
+  // ============ //
+  // TESTLIST.CPP //
+  // ============ //
+
+  #define Uses_TRect
+  #define Uses_TKeys
+  #define Uses_TEvent
+  #define Uses_TDialog
+  #define Uses_TListViewer
+  #define Uses_TMenu
+  #define Uses_TMenuItem
+  #define Uses_TMenuBar
+  #define Uses_TDeskTop
+  #define Uses_TApplication
+  #include <tv.h>
+
+  #pragma   hdrstop
+  #include "testlist.h"
+
+
+  class TTestApp : public TApplication
+  {
+  public:
+       TTestApp() : TApplication(),
+                   TProgInit( initStatusLine, initMenuBar,
+                   initDeskTop )
+       {}
+       static TMenuBar *initMenuBar( TRect r );
+       virtual void handleEvent( TEvent& event );
+  };
+
+
+
+  TMenuBar *TTestApp::initMenuBar( TRect r )
+  {
+       r.b.y = r.a.y + 1;
+       return new TMenuBar( r, new TMenu(
+                      *new TMenuItem( "~L~ist", cmTTList, kbAltL )
+                         ));
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1033
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  2/8
+
+    TITLE  :  Example of derived TListViewer for Turbo Vision.
+
+
+
+
+  void TTestApp::handleEvent( TEvent& event )
+  {
+       TApplication::handleEvent( event );
+
+       if(  event.what == evCommand &&
+            event.message.command == cmTTList )
+       {
+            TView *TTLD = (TView *) validView(
+                                          new TTestListDialog
+                                             );
+            if( TTLD != 0 )
+                 deskTop->insert( TTLD );
+            clearEvent( event );
+       }
+  }
+
+
+
+  int main()
+  {
+      TTestApp TB;
+      TB.run();
+      return 0;
+  }
+
+
+
+
+
+
+  // ------------ //
+  // LISTVIEW.CPP //
+  // ------------ //
+
+  #define Uses_TPoint
+  #define Uses_TRect
+  #define Uses_TKeys
+  #define Uses_TEvent
+  #define Uses_TDialog
+  #define Uses_TButton
+  #define Uses_TScrollBar
+  #define Uses_TListViewer
+  #define Uses_MsgBox
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1033
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  3/8
+
+    TITLE  :  Example of derived TListViewer for Turbo Vision.
+
+
+
+
+  #include <tv.h>
+  #include <string.h>
+
+  #pragma hdrstop
+  #include "testlist.h"
+
+  /*
+   *   Data for list viewer: a collection of 80's & 90's rock
+   *   titles with a few earlier ones thrown in for kicks...
+   */
+  char *songTitles[] =
+  {
+       "When You Don't See Me",
+       "Until the End of the World",
+       "I'm Too Sexy",
+       "Hungry Like the Wolf",
+       "I Can't Get Enough",
+       "You Got Another Thing Coming",
+       "His Circle and Hers Meet",
+       "Would I Lie To You?",
+       "I Melt With You",
+       "Forever Young",
+       "Blue Monday",
+       "Owner of a Lonely Heart",
+       "Oh L'Amour",
+       "Shock the Monkey",
+       "If You Love Somebody Set Them Free",
+       "Tainted Love",
+       "Helpless Automaton",
+       "I Can't Drive 55!",
+       "Life is a Long Road",
+       "Talk Talk"
+  };
+
+  const int MAXSTRINGS = (sizeof(songTitles) / sizeof( char * ));
+  const int MAXLENGTH  = 36;      // Length of longest song title.
+
+
+  /*****************************************************************\
+   *
+   * class TTestList
+   *
+   *
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1033
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  4/8
+
+    TITLE  :  Example of derived TListViewer for Turbo Vision.
+
+
+
+
+   *
+   *****************************************************************
+   * TTestList::TTestList
+   *   Initializes range of list viewer, sets maximum length of
+   * individual strings and sets the grow modes so the viewer will
+   * grow and shrink with the dialog box window.
+  \*****************************************************************/
+
+  TTestList::TTestList( TRect& r,
+                        TScrollBar *aHSB,
+                        TScrollBar *aVSB ) :
+  TListViewer( r, 1, aHSB, aVSB )
+  {
+       maxWidth = MAXLENGTH;
+       setRange( MAXSTRINGS );
+       growMode |= gfGrowHiX | gfGrowHiY;
+  }
+
+
+
+  /****************************************************************\
+   * TTestList::setRange
+   *   In addition to setting the range of the listviewer and the
+   *   vertical scrollbar, this also sets the horizontal scrollbar.
+   *
+  \****************************************************************/
+
+  void TTestList::setRange( short range )
+  {
+       TListViewer::setRange( range );
+       if( hScrollBar != 0 )
+            hScrollBar->setRange( 0, maxWidth - size.x );
+  }
+
+
+
+  /****************************************************************\
+   * TTestList::getText
+   *        Copies the appropriate string into the buffer passed
+   *        in.  If 'item' is out of range, it copies a NULL
+   *         string.
+  \****************************************************************/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1033
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  5/8
+
+    TITLE  :  Example of derived TListViewer for Turbo Vision.
+
+
+
+
+  void TTestList::getText( char *dest, short item, short maxLen )
+  {
+       if( item >= 0 && item < MAXSTRINGS )
+            strncpy(dest, songTitles[item], maxLen);
+       else
+            dest[0] = '\0';
+  }
+
+
+
+  /****************************************************************\
+   * TTestList::changeBounds
+   *        If the user resizes the list viewer and there is only
+   *   one column, the horizontal scrollbar may need to be
+   *   activated if the viewer is too small (or deactivated if the
+   *   viewer is now large enough for a complete display.)  So we
+   *   check for that.  Ditto for the vertical scrollbar.
+  \****************************************************************/
+
+  void TTestList::changeBounds( const TRect& bounds )
+  {
+       TListViewer::changeBounds( bounds );
+       if( numCols == 1 &&  hScrollBar != 0 )
+            hScrollBar->setParams(
+                                hScrollBar->value,  // current
+                                                    // position in
+                                                    // bar
+                                0,                  // minimum
+                                                    // length
+                                                    // (usually 0)
+                                maxWidth - size.x,  // max length
+                                                    // minus width
+                                                    // of viewer
+                                size.x - 1,         // page keys
+                                                    // step a full
+                                                    // viewer width
+                                1                   // arrow keys
+                                                    // step one
+                                                    // character
+                                );
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1033
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  6/8
+
+    TITLE  :  Example of derived TListViewer for Turbo Vision.
+
+
+
+
+  /****************************************************************\
+   * TTestList::handleEvent
+   *        We need to handle double click messages, ensuring that
+   *        the mouse is on top of a valid list item and that it
+   *        was the left button.   We also need to pass arrow
+   *        keystrokes on to the horizontal scroll bar.  Vertical
+   *        scrollbar is already handled by TListViewer.
+  \*****************************************************************/
+
+  void TTestList::handleEvent( TEvent& event )
+  {
+       if(  event.what == evMouseDown &&
+            event.mouse.doubleClick &&
+            event.mouse.buttons & mbLeftButton
+         )
+      {
+            TPoint mouse = makeLocal( event.mouse.where );
+            if( focused == mouse.y + topItem )
+            {
+                 selectItem( focused );        // handle
+                                               // doubleClick
+                 clearEvent( event );
+                 return;
+            }
+       }
+       else
+            TListViewer::handleEvent( event ); // Chain event
+                                               // handlers
+  }
+
+
+
+  /****************************************************************\
+   *
+   *
+   * class TTestListDialog
+   *
+   *
+   *
+   * TTestListDialog::TTestListDialog
+   *        Constructor for the dialog box.  It simply encapsulates
+   *   the various components: the scrollbars and list viewer, and
+   *   sets various flags for the box such as enabling broadcast
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1033
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  7/8
+
+    TITLE  :  Example of derived TListViewer for Turbo Vision.
+
+
+
+
+   *   messages, allowing moving and resizing, etc.
+  \****************************************************************/
+
+  TTestListDialog::TTestListDialog() :
+       TDialog( TRect( 0,0,32,14 ), "Song Titles" ),
+       TWindowInit( initFrame )
+  {
+       TScrollBar *VSB = new TScrollBar( TRect(31,1,32,13) );
+       TScrollBar *HSB = new TScrollBar( TRect(1,13,31,14) );
+       HSB->options |= ofPostProcess;
+
+       insert( VSB );
+       insert( HSB );
+       insert( new TTestList( TRect(1,1,31,13), HSB, VSB ));
+
+       selectNext( False );
+       options |= ofCentered;
+       eventMask |= evBroadcast;
+       flags = wfMove | wfGrow | wfZoom | wfClose;
+  }
+
+
+
+  /****************************************************************\
+   * TTestListDialog::handleEvent
+   *        This event hander is there to pop up a message box
+   *   whenever the user selects an item in the list box.  It
+   *   demonstrates how to catch and deal with the
+   *   cmListItemSelected message.
+  \****************************************************************/
+  void TTestListDialog::handleEvent( TEvent& event )
+  {
+       TDialog::handleEvent( event );
+
+       if( event.what == evBroadcast &&
+            event.message.command == cmListItemSelected )
+       {
+            TTestList *TBL = (TTestList *) event.message.infoPtr;
+            char buffer[MAXLENGTH + 2] = "\003";
+
+            TBL->getText( buffer+1, TBL->focused, MAXLENGTH + 1 );
+            messageBox( buffer, mfInformation | mfOKButton );
+            clearEvent( event );
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1033
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 23, 1992                         PAGE  :  8/8
+
+    TITLE  :  Example of derived TListViewer for Turbo Vision.
+
+
+
+
+       }
+  }
+
+
+
+  /****************************************************************\
+   * TTestDialog::sizeLimits
+   *        This function forces a reasonable minimum size for the
+   *   dialog box that is smaller than the system default.
+   ***********************************************************************/
+
+  void TTestListDialog::sizeLimits( TPoint& min, TPoint& max )
+  {
+       TDialog::sizeLimits( min, max );
+       min.y = 7;
+  }
+
+
+
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

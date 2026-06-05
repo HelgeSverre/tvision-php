@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1557
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  1/5
+
+    TITLE  :  Creating red error dialog boxes in Turbo Vision
+
+
+
+
+  //**********************************************************
+  //
+  //  This program declares a new type ErrorDialog, which is
+  //  identical to TDialog except it uses a red color scheme.
+  //  It is usefull for displaying error messages.
+  //
+  //**********************************************************
+
+  #define Uses_TKeys
+  #define Uses_TApplication
+  #define Uses_TEvent
+  #define Uses_TRect
+  #define Uses_TDialog
+  #define Uses_TStaticText
+  #define Uses_TButton
+  #define Uses_TMenuBar
+  #define Uses_TSubMenu
+  #define Uses_TMenuItem
+  #define Uses_TStatusLine
+  #define Uses_TStatusItem
+  #define Uses_TStatusDef
+  #define Uses_TDeskTop
+  #include <tv.h>
+
+  const cmTestNormalDialog = 100;
+  const cmTestErrorDialog  = 101;
+
+  //
+  //  This is the palette that will be added to TProgram's
+  //  palette.  The ErrorDialog will then reference these
+  //  palette entries.
+  //
+
+  #define cpErrorApp "\x40\x4F\x4E\x46\x46\x40\x40\x4F\x4E" \
+                     "\x70\x7B\x7F\x78\x7E\x40\x40\x4F\x4E" \
+                     "\x4F\x4F\x4E\x40\x46\x46\x46\x40\x4F" \
+                     "\x4E\x46\x4E\x40\x40"
+
+  //
+  //  This is the palette for ErrorDialog.  It references
+  //  entries 64-95 (0x40 - 0x5F) in its parents dialog.
+  //
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1557
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  2/5
+
+    TITLE  :  Creating red error dialog boxes in Turbo Vision
+
+
+
+
+  #define cpErrorDialog "\x40\x41\x42\x43\x44\x45\x46\x47\x48" \
+                        "\x49\x4A\x4B\x4C\x4D\x4E\x4F" \
+                        "\x50\x51\x52\x53\x54\x55\x56\x57\x58" \
+                        "\x59\x5A\x5B\x5C\x5D\x5E\x5F"
+
+  //
+  //  Define a new dialog that has uses the red palette
+  //
+
+  class ErrorDialog : public TDialog {
+  public:
+    ErrorDialog( TRect& r, const char *errorText );
+    virtual TPalette& getPalette() const;
+  };
+
+  //
+  // constructor is identical to TDialog, so it can be used
+  // anywhere a TDialog is used
+  //
+
+  ErrorDialog::ErrorDialog( TRect& r, const char *title ):
+    TDialog( r, title ),
+    TWindowInit( TDialog::initFrame ) {
+  }
+
+  //
+  // use the Red palette instead of the standard TDialog palette
+  //
+  // NOTE: cpErrorDialog defines the palette for an ErrorDialog.
+  //       This palette references entries in the TApplication
+  //       palette which normally are not defined.  See below
+  //       where TApplication adds the necessary red palette
+  //       entries to its palette
+
+  TPalette& ErrorDialog::getPalette() const {
+    static TPalette
+         errorPalette( cpErrorDialog, sizeof(cpErrorDialog)-1);
+    return errorPalette;
+  }
+
+  class TestApp : public TApplication
+  {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1557
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  3/5
+
+    TITLE  :  Creating red error dialog boxes in Turbo Vision
+
+
+
+
+  public:
+
+      TestApp();
+
+      virtual void handleEvent( TEvent& event );
+      static TMenuBar *initMenuBar( TRect );
+      static TStatusLine *initStatusLine( TRect );
+      TPalette& getPalette() const;
+
+  private:
+      void testDialog( Boolean );
+  };
+
+  //
+  //  The normal application palette only has 64 entries (0-63)
+  //  so we add our new entries to the end, creating palette
+  //  entries 64-95 for our ErrorDialog box.
+  //
+
+  TPalette& TestApp::getPalette() const {
+    static TPalette newColor( cpColor cpErrorApp,
+                              sizeof(cpColor cpErrorApp)-1 );
+    return newColor;
+  }
+
+  TestApp::TestApp() :
+      TProgInit( &TestApp::initStatusLine,
+                 &TestApp::initMenuBar,
+                 &TestApp::initDeskTop
+               ) {
+  }
+
+  void TestApp::testDialog( Boolean errorMode ) {
+    TDialog *d;
+
+    if (errorMode)
+      d=new ErrorDialog( TRect( 25, 5, 55, 16 ), "Fatal Error!");
+    else
+      d=new TDialog( TRect( 25, 5, 55, 16 ), "Fatal Error!");
+
+    d->insert( new TStaticText( TRect( 3, 5, 15, 6 ),
+                                 "What now?" ));
+    d->insert( new TButton( TRect( 16, 2, 28, 4 ), "Abort",
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1557
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  4/5
+
+    TITLE  :  Creating red error dialog boxes in Turbo Vision
+
+
+
+
+                              cmCancel, bfNormal ) );
+    d->insert( new TButton( TRect( 16, 4, 28, 6 ), "Retry",
+                              cmCancel, bfNormal ) );
+    d->insert( new TButton( TRect( 16, 6, 28, 8 ), "Fail",
+                              cmCancel, bfNormal ) );
+    d->insert( new TButton( TRect( 16, 8, 28, 10 ), "FooBar",
+                              cmCancel, bfNormal ) );
+
+    TProgram::deskTop->execView( d );
+    TObject::destroy(d);
+  }
+
+  void TestApp::handleEvent( TEvent& event ) {
+    TApplication::handleEvent( event );
+    if( event.what == evCommand ) {
+      switch( event.message.command ) {
+        case cmTestErrorDialog:
+          testDialog( True );
+          clearEvent( event );
+          break;
+        case cmTestNormalDialog:
+          testDialog( False );
+          clearEvent( event );
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  TMenuBar *TestApp::initMenuBar( TRect r )
+  {
+    r.b.y = r.a.y+1;
+
+    return new TMenuBar( r,
+      *new TSubMenu( "~D~ialogs", kbAltD ) +
+        *new TMenuItem( "~E~rror Dialog...",
+                        cmTestErrorDialog, kbAltE ) +
+        *new TMenuItem( "~N~ormal Dialog...",
+                        cmTestNormalDialog, kbAltN )+
+         newLine() +
+        *new TMenuItem( "E~x~it", cmQuit, cmQuit, hcNoContext,
+                        "Alt-X" )
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1557
+  VERSION  :  3.x
+       OS  :  DOS
+     DATE  :  October 25, 1993                         PAGE  :  5/5
+
+    TITLE  :  Creating red error dialog boxes in Turbo Vision
+
+
+
+
+        );
+  }
+
+  TStatusLine *TestApp::initStatusLine( TRect r )
+  {
+    r.a.y = r.b.y-1;
+    return new TStatusLine( r,
+      *new TStatusDef( 0, 0xFFFF ) +
+        *new TStatusItem( "~Alt-X~ Exit", kbAltX, cmQuit ) +
+        *new TStatusItem( 0, kbF10, cmMenu )
+      );
+  }
+
+  int main()
+  {
+    TestApp testApp;
+    testApp.run();
+    return 0;
+  }
+
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

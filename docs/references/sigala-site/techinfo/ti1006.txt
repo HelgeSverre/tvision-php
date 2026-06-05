@@ -1,0 +1,132 @@
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1006
+  VERSION  :  3.0
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  1/2
+
+    TITLE  :  Overlaying Turbo Vision
+
+
+
+
+  BACKGROUND
+       Understand that in order to create an overlaid version of
+       the Turbo Vision source code YOU MUST:
+
+            Have the Turbo Assembler Available
+
+            Place debugging information in only those modules in
+            which you plan to debug as TLink may not be able to
+            accommodate the request.
+
+       If you have a copy of Turbo Assembler and are ready to
+       recompile the Turbo Vision source so that it contains
+       support for overlays, read on as the next section describes
+       how to do this.
+
+
+  RECOMPILING FOR OVERLAY SUPPORT
+       To recompile the source code for Turbo Vision to include
+       support for overlays you must do the following:
+
+            Change directories to the SOURCE directory which is
+            usually located in c:\borlandc\tvision\source.
+
+            Execute the following command:
+                 make -DOVERLAY -B
+
+       This will produce a new version of TV.LIB which supports
+       overlays.  It will also produce two .OBJ files, SYSINT.OBJ
+       and TEVENT.OBJ.  These two files contain code for TV's
+       interrupt handlers and CANNOT be overlayed.
+
+
+  IMPORTANT NOTICE
+       Be sure to use the same BC switches outlined in the makefile
+       when compiling your source code to be overlayed with the new
+       overlayed Turbo Vision library!
+
+       When building an overlayed application, you must be sure to
+       link with the three files SYSINT.OBJ, TEVENT.OBJ, and
+       TV.LIB.
+
+       The two .OBJ files must not be located in an overlay.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  PRODUCT  :  Borland C++                           NUMBER  :  1006
+  VERSION  :  3.0
+       OS  :  DOS
+     DATE  :  August 12, 1992                          PAGE  :  2/2
+
+    TITLE  :  Overlaying Turbo Vision
+
+
+
+
+       Your command line should look something like this:
+            bcc -Vs -B -ml -Yo myfile -Yo- sysint.obj tevent.obj -
+            Yo tv.lib
+
+       See the Programmer's Guide for details on the meanings of
+       the various Yo switches.
+
+
+  INCREASING PERFOMANCE
+       To improve performance of your now overlaid Turbo Vision
+       application you'll want to increase the size of the global
+       variable __ovrbuffer to 0x2000 or greater.
+
+  DISCLAIMER: You have the right to use this technical information
+  subject to the terms of the No-Nonsense License Statement that
+  you received with the Borland product to which this information
+  pertains.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -5,3 +5,7 @@ parameters:
         - tests
         - bin
         - examples
+    excludePaths:
+        # Pest fluent group()/skip() chains + Chrome/ImageMagick shell-out glue;
+        # not analysable without the Pest PHPStan extension, no library logic here.
+        - tests/Visual/VisualSnapshotTest.php

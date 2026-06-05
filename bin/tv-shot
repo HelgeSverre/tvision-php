@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#
+# tv-shot — render an example app's frame to a PNG via the HTML renderer + headless
+# Chrome. The single rendering path shared by baseline generation and the visual
+# snapshot test, so their images are directly comparable.
+#
+# Usage: bin/tv-shot <example.php> <out.png> [cols=80] [rows=25]
+set -euo pipefail
+
+example="${1:?usage: tv-shot <example.php> <out.png> [cols] [rows]}"
+out="${2:?usage: tv-shot <example.php> <out.png> [cols] [rows]}"
+cols="${3:-80}"
+rows="${4:-25}"
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+html="$(mktemp -t tvshot).html"
+trap 'rm -f "$html"' EXIT
+
+php "$root/bin/tv-render" "$example" "$html" "$cols" "$rows" >/dev/null
+
+chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+if [ ! -x "$chrome" ]; then
+  chrome="$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)"
+fi
+if [ -z "${chrome:-}" ] || { [ ! -x "$chrome" ] && ! command -v "$chrome" >/dev/null 2>&1; }; then
+  echo "tv-shot: no Chrome/Chromium found" >&2
+  exit 3
+fi
+
+"$chrome" --headless=new --hide-scrollbars --force-device-scale-factor=1 \
+  --window-size=820,420 --screenshot="$out" "file://$html" >/dev/null 2>&1

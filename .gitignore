@@ -19,3 +19,6 @@ composer.lock
 .vscode/
 .DS_Store
 *.swp
+
+# Visual snapshot test output (baselines ARE committed)
+/tests/Visual/__output__/

@@ -1,0 +1,63 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * tv-render — boot an example app headlessly and render one frame to an HTML file
+ * (a coloured monospace grid). Pairs with a headless-Chrome screenshot for visual
+ * snapshot testing and human eyeballing.
+ *
+ * Usage: bin/tv-render <example.php> <out.html> [cols=80] [rows=25]
+ */
+
+use HelgeSverre\TurboVision\Application\Application;
+use HelgeSverre\TurboVision\Drivers\HeadlessDriver;
+use HelgeSverre\TurboVision\Rendering\HtmlRenderer;
+use HelgeSverre\TurboVision\Terminal\Screen;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$examplePath = $argv[1] ?? null;
+$outPath = $argv[2] ?? null;
+$cols = (int) ($argv[3] ?? 80);
+$rows = (int) ($argv[4] ?? 25);
+
+if ($examplePath === null || $outPath === null) {
+    fwrite(STDERR, "Usage: bin/tv-render <example.php> <out.html> [cols] [rows]\n");
+    exit(2);
+}
+if (! is_file($examplePath)) {
+    fwrite(STDERR, "Example not found: {$examplePath}\n");
+    exit(2);
+}
+
+// Requiring the example defines its App class but does not run it (its run-guard
+// checks realpath($argv[0]) === the example, which is false here).
+$before = get_declared_classes();
+require $examplePath;
+$appClass = null;
+foreach (array_diff(get_declared_classes(), $before) as $class) {
+    if (is_subclass_of($class, Application::class)) {
+        $appClass = $class;
+    }
+}
+if ($appClass === null) {
+    fwrite(STDERR, "No Application subclass defined by {$examplePath}\n");
+    exit(2);
+}
+
+$driver = new HeadlessDriver($cols, $rows);
+/** @var Application $app */
+$app = new $appClass(new Screen($driver));
+$app->bootForTest();
+$app->drawAndFlushForTest();
+
+$back = $app->screen()?->back();
+if ($back === null) {
+    fwrite(STDERR, "App has no screen back buffer\n");
+    exit(1);
+}
+
+file_put_contents($outPath, (new HtmlRenderer())->render($back));
+fwrite(STDERR, "Rendered {$appClass} ({$cols}x{$rows}) -> {$outPath}\n");

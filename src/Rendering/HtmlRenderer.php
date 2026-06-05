@@ -1,0 +1,58 @@
+<?php
+
+declare(strict_types=1);
+
+namespace HelgeSverre\TurboVision\Rendering;
+
+use HelgeSverre\TurboVision\Drawing\Buffer;
+
+/**
+ * Renders a screen Buffer to a self-contained HTML document — a monospace grid of
+ * coloured cells using the canonical CGA/VGA RGB palette. Companion to DiffPresenter
+ * (which renders to ANSI): this one is for human eyeballing and pixel-diff visual
+ * snapshot tests, so it uses fixed RGB values independent of any terminal theme.
+ */
+final class HtmlRenderer
+{
+    /** Canonical CGA/VGA RGB for indices 0-15. */
+    private const array CGA = [
+        0 => '#000000', 1 => '#0000aa', 2 => '#00aa00', 3 => '#00aaaa',
+        4 => '#aa0000', 5 => '#aa00aa', 6 => '#aa5500', 7 => '#aaaaaa',
+        8 => '#555555', 9 => '#5555ff', 10 => '#55ff55', 11 => '#55ffff',
+        12 => '#ff5555', 13 => '#ff55ff', 14 => '#ffff55', 15 => '#ffffff',
+    ];
+
+    public function render(Buffer $buffer): string
+    {
+        $lines = '';
+
+        for ($y = 0; $y < $buffer->height; $y++) {
+            $line = '';
+            $x = 0;
+            while ($x < $buffer->width) {
+                $attr = $buffer->at($x, $y)->attr;
+                $run = '';
+                // Coalesce consecutive cells that share an attribute into one span.
+                while ($x < $buffer->width && $buffer->at($x, $y)->attr === $attr) {
+                    $run .= htmlspecialchars($buffer->at($x, $y)->char, ENT_QUOTES, 'UTF-8');
+                    $x++;
+                }
+                $line .= sprintf(
+                    '<span style="color:%s;background:%s">%s</span>',
+                    self::CGA[$attr & 0x0F],
+                    self::CGA[($attr >> 4) & 0x07],
+                    $run,
+                );
+            }
+            $lines .= $line . "\n";
+        }
+
+        return '<!doctype html><html><head><meta charset="utf-8"><style>'
+            . 'html,body{margin:0;padding:0;background:#000}'
+            . 'pre{margin:0;font:16px/1.0 "Menlo","DejaVu Sans Mono",monospace;'
+            . 'letter-spacing:0;white-space:pre;display:inline-block}'
+            . 'span{display:inline}</style></head><body><pre>'
+            . $lines
+            . '</pre></body></html>';
+    }
+}

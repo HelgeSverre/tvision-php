@@ -14,12 +14,15 @@ use HelgeSverre\TurboVision\Geometry\Point;
 /**
  * Pure, incremental decoder: raw terminal bytes -> DecodeResult (events + remainder).
  * Total by construction — unknown sequences are consumed and dropped, never thrown.
- * Targets the common xterm/VT subset used by M1; multi-terminal hardening is a
+ * Targets the common xterm/VT/rxvt subset used by M1; multi-terminal hardening is a
  * planned follow-up (see plan NOTE).
  */
 final class EscapeDecoder
 {
-    /** CSI final-byte (single char) -> navigation Key. */
+    /**
+     * CSI final-byte (single char) -> navigation Key.
+     * Includes lowercase rxvt variants (a=Up, b=Down, c=Right, d=Left).
+     */
     private const array CSI_LETTER = [
         'A' => Key::Up,
         'B' => Key::Down,
@@ -28,18 +31,23 @@ final class EscapeDecoder
         'H' => Key::Home,
         'F' => Key::End,
         'Z' => Key::ShiftTab,
+        // rxvt Shift+arrow lowercase forms
+        'a' => Key::Up,
+        'b' => Key::Down,
+        'c' => Key::Right,
+        'd' => Key::Left,
     ];
 
     /** CSI "<n>~" numeric parameter -> Key. */
     private const array CSI_TILDE = [
-        1 => Key::Home,
-        2 => Key::Insert,
-        3 => Key::Delete,
-        4 => Key::End,
-        5 => Key::PageUp,
-        6 => Key::PageDown,
-        7 => Key::Home,
-        8 => Key::End,
+        1  => Key::Home,
+        2  => Key::Insert,
+        3  => Key::Delete,
+        4  => Key::End,
+        5  => Key::PageUp,
+        6  => Key::PageDown,
+        7  => Key::Home,
+        8  => Key::End,
         11 => Key::F1,
         12 => Key::F2,
         13 => Key::F3,
@@ -54,7 +62,10 @@ final class EscapeDecoder
         24 => Key::F12,
     ];
 
-    /** SS3 final byte (\eO?) -> function Key. */
+    /**
+     * SS3 final byte (\eO?) -> function Key.
+     * Includes lowercase rxvt Ctrl+arrow variants (a=Up, b=Down, c=Right, d=Left).
+     */
     private const array SS3 = [
         'P' => Key::F1,
         'Q' => Key::F2,
@@ -66,18 +77,23 @@ final class EscapeDecoder
         'D' => Key::Left,
         'H' => Key::Home,
         'F' => Key::End,
+        // rxvt Ctrl+arrow lowercase forms sent as SS3
+        'a' => Key::Up,
+        'b' => Key::Down,
+        'c' => Key::Right,
+        'd' => Key::Left,
     ];
 
     public function decode(string $bytes): DecodeResult
     {
         /** @var list<Event> $events */
         $events = [];
-        $i = 0;
-        $len = strlen($bytes);
+        $i      = 0;
+        $len    = strlen($bytes);
 
         while ($i < $len) {
             $byte = $bytes[$i];
-            $ord = ord($byte);
+            $ord  = ord($byte);
 
             if ($byte === "\e") {
                 $consumed = $this->decodeEscape($bytes, $i, $len, $events);
@@ -98,14 +114,31 @@ final class EscapeDecoder
             }
 
             if ($ord >= 0x80) {
-                // UTF-8 multibyte lead: gather continuation bytes (0x80-0xBF).
+                // UTF-8 multibyte: determine how many continuation bytes are expected
+                // from the lead byte so we can defer the sequence when it is truncated.
+                $expected = $this->utf8ContinuationCount($ord);
+                if ($expected === -1) {
+                    // Invalid lead byte — emit as-is and advance.
+                    $events[] = Event::keyDown(new KeyDownEvent(0, $byte));
+                    $i++;
+
+                    continue;
+                }
+
+                // Check whether all continuation bytes are present in the buffer.
+                if ($i + $expected >= $len) {
+                    // Sequence is truncated — return the partial bytes as remainder.
+                    return new DecodeResult($events, substr($bytes, $i));
+                }
+
+                // Gather the continuation bytes (they must be 0x80-0xBF).
                 $j = $i + 1;
                 while ($j < $len && (ord($bytes[$j]) & 0xC0) === 0x80) {
                     $j++;
                 }
                 $grapheme = substr($bytes, $i, $j - $i);
                 $events[] = Event::keyDown(new KeyDownEvent(0, $grapheme));
-                $i = $j;
+                $i        = $j;
 
                 continue;
             }
@@ -131,13 +164,32 @@ final class EscapeDecoder
         return null;
     }
 
+    /**
+     * Return the number of UTF-8 continuation bytes expected after a lead byte,
+     * or -1 if the byte is not a valid UTF-8 lead byte.
+     */
+    private function utf8ContinuationCount(int $ord): int
+    {
+        if (($ord & 0xE0) === 0xC0) {
+            return 1; // 2-byte sequence
+        }
+        if (($ord & 0xF0) === 0xE0) {
+            return 2; // 3-byte sequence
+        }
+        if (($ord & 0xF8) === 0xF0) {
+            return 3; // 4-byte sequence
+        }
+
+        return -1; // invalid lead
+    }
+
     private function decodeControl(int $ord): Event
     {
         $key = match ($ord) {
             0x09 => Key::Tab,
             0x0D, 0x0A => Key::Enter,
             0x08, 0x7F => Key::Backspace,
-            default => null,
+            default    => null,
         };
 
         if ($key !== null) {
@@ -180,10 +232,38 @@ final class EscapeDecoder
             return 3;
         }
 
+        // ESC ESC … — double-escape passthrough (tmux/screen wraps inner sequences).
+        // If the byte following the second ESC would start a proper CSI or SS3 sequence
+        // ('[' or 'O'), strip the outer ESC silently and decode the inner sequence.
+        // Otherwise emit the first ESC as Key::Esc and consume only 1 byte so the
+        // second ESC is available for the next iteration.
+        if ($next === "\e") {
+            if ($i + 2 < $len) {
+                $after = $bytes[$i + 2];
+                if ($after === '[' || $after === 'O') {
+                    // Decode the inner escape sequence starting at i+1.
+                    $inner = $this->decodeEscape($bytes, $i + 1, $len, $events);
+                    if ($inner === 0) {
+                        // Inner sequence is incomplete — treat the whole thing as incomplete.
+                        return 0;
+                    }
+
+                    return 1 + $inner;
+                }
+            }
+
+            // Two bare ESC bytes (or ESC ESC followed by non-sequence byte):
+            // emit first ESC as Key::Esc, consume 1 byte; the second ESC will be
+            // processed on the next iteration or returned as remainder.
+            $events[] = Event::keyDown(new KeyDownEvent(Key::Esc->value));
+
+            return 1;
+        }
+
         // \e<letter> -> Alt+letter
         if (preg_match('/[A-Za-z]/', $next) === 1) {
             $altCase = 'Alt' . strtoupper($next);
-            $key = self::altKey($altCase);
+            $key     = self::altKey($altCase);
             if ($key !== null) {
                 $events[] = Event::keyDown(new KeyDownEvent($key->value));
             }
@@ -208,7 +288,7 @@ final class EscapeDecoder
         }
 
         // Scan parameter/intermediate bytes until a final byte (0x40-0x7E).
-        $j = $i + 2;
+        $j      = $i + 2;
         $params = '';
         while ($j < $len) {
             $c = $bytes[$j];
@@ -229,20 +309,49 @@ final class EscapeDecoder
     /** @param list<Event> $events */
     private function emitCsi(string $params, string $final, array &$events): void
     {
+        // Plain CSI letter with no parameters: direct navigation key.
         if ($params === '' && isset(self::CSI_LETTER[$final])) {
             $events[] = Event::keyDown(new KeyDownEvent(self::CSI_LETTER[$final]->value));
 
             return;
         }
 
+        // CSI <n>~ : function / navigation tilde sequence.
         if ($final === '~' && $params !== '' && ctype_digit($params)) {
             $n = (int) $params;
             if (isset(self::CSI_TILDE[$n])) {
                 $events[] = Event::keyDown(new KeyDownEvent(self::CSI_TILDE[$n]->value));
             }
+
+            return;
         }
 
-        // else: unknown CSI -> consumed and dropped (total decoder).
+        // CSI <params> <letter> with parameters: xterm modifier-parameter family
+        // and rxvt CSI-letter variants.
+        //
+        // Forms handled:
+        //   CSI 1 ; <mod> <letter>  — xterm modifier form (Shift/Alt/Ctrl + arrow)
+        //   CSI <n> <letter>        — xterm modifyFunctionKeys (e.g. CSI 1 P = F1)
+        //
+        // Strategy: ignore the parameter(s) and map the final byte using CSI_LETTER
+        // or SS3, emitting the base key without modifier metadata.
+        if ($params !== '' && isset(self::CSI_LETTER[$final])) {
+            $events[] = Event::keyDown(new KeyDownEvent(self::CSI_LETTER[$final]->value));
+
+            return;
+        }
+
+        // xterm modifyFunctionKeys: CSI <n> P/Q/R/S where P/Q/R/S are SS3 keys.
+        if ($params !== '' && isset(self::SS3[$final])) {
+            $events[] = Event::keyDown(new KeyDownEvent(self::SS3[$final]->value));
+
+            return;
+        }
+
+        // Kitty progressive-enhancement and other unrecognised CSI sequences:
+        // emit a synthetic KeyDown with keyCode=0 so callers can detect unknown
+        // sequences rather than having them silently vanish.
+        $events[] = Event::keyDown(new KeyDownEvent(0));
     }
 
     /**
@@ -252,7 +361,7 @@ final class EscapeDecoder
      */
     private function decodeMouse(string $bytes, int $i, int $len, array &$events): int
     {
-        $j = $i + 3; // skip "\e[<"
+        $j    = $i + 3; // skip "\e[<"
         $body = '';
         while ($j < $len) {
             $c = $bytes[$j];
@@ -276,23 +385,41 @@ final class EscapeDecoder
             return; // malformed -> drop
         }
 
-        $b = (int) $parts[0];
-        $x = (int) $parts[1] - 1; // 1-based -> 0-based
-        $y = (int) $parts[2] - 1;
+        $b     = (int) $parts[0];
+        $x     = (int) $parts[1] - 1; // 1-based -> 0-based
+        $y     = (int) $parts[2] - 1;
         $press = $final === 'M';
 
-        // Wheel events: b=64 (wheel-up), b=65 (wheel-down)
-        if ($b === 64 || $b === 65) {
-            $wheelDelta = $b === 64 ? -1 : 1;
-            $what = EventType::MouseMove; // wheel events are move-class in TV
-            $events[] = Event::mouse($what, new MouseEvent(new Point($x, $y), 0, false, $wheelDelta));
+        // Strip SGR modifier bits (shift=0x04, alt=0x08, ctrl=0x10) before
+        // dispatching on button/wheel/motion, so modifier combinations are correctly
+        // recognised (e.g. ctrl+wheel-down = 81 = 65|0x10 still decodes as wheel-down).
+        $rawB = $b & ~(0x04 | 0x08 | 0x10);
+
+        // Wheel events: base button code is 64 (wheel-up) or 65 (wheel-down).
+        // Bit 6 (0x40) is set for all wheel reports; bit 0 selects direction.
+        if (($rawB & 0x40) !== 0) {
+            $wheelDelta = ($rawB === 64) ? -1 : 1;
+            $what       = EventType::MouseMove; // wheel events are move-class in TV
+            $events[]   = Event::mouse($what, new MouseEvent(new Point($x, $y), 0, false, $wheelDelta));
 
             return;
         }
 
-        // Low 2 bits of $b select the button (0=left, 1=middle, 2=right).
-        $buttonBit = $press ? (1 << ($b & 0x03)) : 0;
-        $what = $press ? EventType::MouseDown : EventType::MouseUp;
+        // Motion events: bit 5 (0x20) signals a pointer-motion report.
+        // The terminal sends these when the mouse moves while a button is held
+        // (button-motion mode) or in any-motion mode.
+        if (($rawB & 0x20) !== 0) {
+            $events[] = Event::mouse(EventType::MouseMove, new MouseEvent(new Point($x, $y), 0));
+
+            return;
+        }
+
+        // Button press / release.
+        // For MouseUp we preserve the releasing button bit so callers can match it
+        // to the prior MouseDown (e.g. to distinguish right-button release from left).
+        $buttonIndex = $rawB & 0x03;
+        $buttonBit   = 1 << $buttonIndex;
+        $what        = $press ? EventType::MouseDown : EventType::MouseUp;
 
         $events[] = Event::mouse($what, new MouseEvent(new Point($x, $y), $buttonBit));
     }

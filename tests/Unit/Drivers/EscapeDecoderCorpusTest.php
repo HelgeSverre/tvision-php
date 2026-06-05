@@ -244,7 +244,9 @@ test(
             $expectedType = $isPress ? EventType::MouseDown : EventType::MouseUp;
             $expectedX = $col1 - 1;
             $expectedY = $row1 - 1;
-            $expectedButtons = $isPress ? (1 << $buttonIndex) : 0;
+            // MouseUp preserves the releasing button bit so callers can match it to the
+            // prior MouseDown (fixes multi-button ambiguity; previously always 0 on release).
+            $expectedButtons = 1 << $buttonIndex;
 
             expect($event->what)->toBe($expectedType, "{$label}: wrong EventType")
                 ->and($mouse->where->x)->toBe($expectedX, "{$label}: wrong x")

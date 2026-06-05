@@ -114,12 +114,13 @@ test('SGR mouse press decodes position (1-based -> 0-based) and button', functio
         ->and($mouse->buttons)->toBe(1); // left button bit
 });
 
-test('SGR mouse release decodes to a MouseUp with no buttons', function (): void {
+test('SGR mouse release preserves the releasing button bit so callers can match it to the prior MouseDown', function (): void {
+    // b=0 -> left button (index 0) -> buttons bit = 1<<0 = 1
     $result = (new EscapeDecoder())->decode("\e[<0;3;3m");
 
     expect($result->events)->toHaveCount(1)
         ->and($result->events[0]->what)->toBe(EventType::MouseUp)
-        ->and($result->events[0]->asMouse()?->buttons)->toBe(0);
+        ->and($result->events[0]->asMouse()?->buttons)->toBe(1); // bit 0 = left button
 });
 
 test('a lone trailing ESC is returned as remainder, not an event', function (): void {
@@ -144,11 +145,15 @@ test('an incomplete CSI is held as remainder until completed', function (): void
         ->and($second->remainder)->toBe('');
 });
 
-test('an unknown CSI sequence is consumed without throwing', function (): void {
-    $result = (new EscapeDecoder())->decode("\e[99Z");
+test('an unrecognised CSI final byte emits a synthetic keyCode=0 event instead of silent discard', function (): void {
+    // \e[13;2u = Kitty progressive-enhancement Shift+Enter — final byte 'u' is not in
+    // any dispatch table, so the decoder emits a keyCode=0 KeyDown sentinel rather
+    // than silently consuming the sequence.
+    $result = (new EscapeDecoder())->decode("\e[13;2u");
 
-    expect($result->events)->toBe([])
-        ->and($result->remainder)->toBe('');
+    expect($result->events)->toHaveCount(1)
+        ->and($result->remainder)->toBe('')
+        ->and($result->events[0]->asKey()?->keyCode)->toBe(0);
 });
 
 test('flushPending turns a stranded ESC into Key::Esc', function (): void {

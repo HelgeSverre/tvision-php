@@ -41,6 +41,8 @@ enum Key: int
     case F8 = 0x4200;
     case F9 = 0x4300;
     case F10 = 0x4400;
+    case F11 = 0x8500;
+    case F12 = 0x8600;
 
     // Alt + letter (menu hotkeys)
     case AltA = 0x1E00;

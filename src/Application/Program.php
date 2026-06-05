@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Application;
 
+use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
@@ -70,6 +71,16 @@ class Program extends Group
     public function screen(): ?Screen
     {
         return $this->screenObj;
+    }
+
+    /**
+     * The application root palette (faithful to TProgram::getPalette / cpAppColor).
+     * Every view's remap palette resolves into this table, where logical indices
+     * finally become real attribute bytes. Without it the chain dead-ends at 0x07.
+     */
+    public function getPalette(): ?Palette
+    {
+        return Palette::fromBytes(Palettes::COLOR);
     }
 
     public function putEvent(Event $event): void

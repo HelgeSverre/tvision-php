@@ -1,0 +1,76 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use HelgeSverre\TurboVision\Drawing\Cell;
+use HelgeSverre\TurboVision\Drivers\AnsiDriver;
+use HelgeSverre\TurboVision\Events\Key;
+use HelgeSverre\TurboVision\Terminal\Screen;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/**
+ * Draw a centred bordered box with a label into the screen's back buffer.
+ */
+function drawBox(Screen $screen, string $label): void
+{
+    $screen->clear();
+    $back = $screen->back();
+    $w = $screen->cols();
+    $h = $screen->rows();
+
+    $boxW = min(40, max(10, $w - 4));
+    $boxH = 5;
+    $x0 = intdiv($w - $boxW, 2);
+    $y0 = intdiv($h - $boxH, 2);
+    $attr = 0x1F; // white on blue
+
+    for ($x = 0; $x < $boxW; $x++) {
+        $top = $x === 0 ? '┌' : ($x === $boxW - 1 ? '┐' : '─');
+        $bot = $x === 0 ? '└' : ($x === $boxW - 1 ? '┘' : '─');
+        $back->put($x0 + $x, $y0, new Cell($top, $attr));
+        $back->put($x0 + $x, $y0 + $boxH - 1, new Cell($bot, $attr));
+    }
+    for ($y = 1; $y < $boxH - 1; $y++) {
+        $back->put($x0, $y0 + $y, new Cell('│', $attr));
+        $back->put($x0 + $boxW - 1, $y0 + $y, new Cell('│', $attr));
+        for ($x = 1; $x < $boxW - 1; $x++) {
+            $back->put($x0 + $x, $y0 + $y, new Cell(' ', $attr));
+        }
+    }
+
+    $labelX = $x0 + intdiv($boxW - mb_strlen($label), 2);
+    foreach (mb_str_split($label) as $i => $ch) {
+        $back->put($labelX + $i, $y0 + intdiv($boxH, 2), new Cell($ch, $attr));
+    }
+}
+
+$screen = new Screen(new AnsiDriver());
+$screen->init();
+
+try {
+    drawBox($screen, 'TurboVision — press q or Esc');
+    $screen->flush();
+
+    while (true) {
+        if ($screen->wasResized()) {
+            drawBox($screen, 'TurboVision — press q or Esc');
+        }
+
+        $events = $screen->pollEvents(50);
+        foreach ($events as $event) {
+            $key = $event->asKey();
+            if ($key === null) {
+                continue;
+            }
+            if ($key->is(Key::Esc) || $key->char === 'q') {
+                break 2;
+            }
+        }
+
+        $screen->flush();
+    }
+} finally {
+    $screen->shutdown();
+}

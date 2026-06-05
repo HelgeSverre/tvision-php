@@ -39,13 +39,15 @@ programs running (on a real terminal + headless snapshot tests).
 
 | # | Milestone | Delivers | Acceptance examples | Status |
 |---|-----------|----------|---------------------|--------|
-| **M1** | **Walking skeleton** | Driver (ANSI + headless) · screen buffer + diff renderer · `View`/`Group` · event loop · `Application`/`Program`/`Desktop`/`Background`/`StaticText` · minimal `MenuBar`+`StatusLine` | `tvguid01–03` | **In progress** — Plan 1/3 (foundation primitives) built & green; Plans 2–3 next |
-| M2 | Windowing | `Window`, `Frame`, `ScrollBar`, `Scroller`, `ListViewer`; resize handling | `tvguid04–10` | Planned |
-| M3 | Menus-deep + Dialogs | Pull-down menu navigation; `Dialog`, `Button`, `InputLine`, `CheckBoxes`, `RadioButtons`, `Label`, `ListBox`, `MessageBox`; `setData`/`getData` | `tvguid11–16` | Planned |
-| M4 | Editor & files | `Validator` family; `Editor`/`FileEditor`/`EditWindow`/`Memo`; `FileDialog`/`ChDirDialog` | `validator.cc`, `tvedit.cc`, std dialogs | Planned |
-| M5 | Outline & color | `OutlineViewer`/`Outline`/`Node`; `ColorDialog` + selectors | outline + color demos | Planned |
-| M6 | Help & persistence | Help system (+ `tvhc` or a PHP-native help format); object streaming/resources — or an idiomatic PHP serialization replacement | demo app help; `load.cc` | Planned |
+| **M1** | **Walking skeleton** | Driver (ANSI + headless) · screen buffer + diff renderer · `View`/`Group` · event loop · `Application`/`Program`/`Desktop`/`Background`/`StaticText` · minimal `MenuBar`+`StatusLine` | `tvguid01–03` | **In progress** — Plan 1 built & green; Plans 2 (driver/renderer) & 3 (views/app) **written in full**, ready to build |
+| M2 | Windowing | `Window`, `Frame`, `ScrollBar`, `Scroller`, `ListViewer`; resize handling | `tvguid04–10` | **Spike plan written** |
+| M3 | Menus-deep + Dialogs | Pull-down menu navigation; `Dialog`, `Button`, `InputLine`, `CheckBoxes`, `RadioButtons`, `Label`, `ListBox`, `MessageBox`; `setData`/`getData` | `tvguid11–16` | **Spike plan written** |
+| M4 | Editor & files | `Validator` family; `Editor`/`FileEditor`/`EditWindow`/`Memo`; `FileDialog`/`ChDirDialog` | `validator.cc`, `tvedit.cc`, std dialogs | **Spike plan written** |
+| M5 | Outline & color | `OutlineViewer`/`Outline`/`Node`; `ColorDialog` + selectors | outline + color demos | **Spike plan written** |
+| M6 | Help & persistence | Help system (+ `tvhc` or a PHP-native help format); persistence via **PHP-native serialization** (binary streamer dropped — see spike) | demo app help; `load.cc` | **Spike plan written** |
 | M7 | The full demo | The complete TVDEMO app wired end-to-end (calculator, calendar, puzzle, ASCII table, gadgets, mouse dialog, help) | `examples/cpp/demo/*` | Stretch |
+
+All plans live in `docs/superpowers/plans/`. The two M1 build-plans (driver/renderer, views/application) are full TDD plans with complete code; M2–M6 are spike outlines to be promoted to full plans just before each is built.
 
 ## Cross-cutting tracks (advance alongside milestones)
 
@@ -54,6 +56,26 @@ programs running (on a real terminal + headless snapshot tests).
 - **DX:** `bin/demo` runner from M1; published examples mirror in `examples/php/`.
 - **Packaging/licensing:** MIT for our code + `NOTICE` crediting Borland (public
   domain) and Sergio Sigala (BSD port).
+
+## Cross-milestone coordination notes (surfaced while spiking the plans)
+
+These are the load-bearing dependencies between milestones — get them right early or pay a retrofit tax:
+
+- **`Group::execView()` modal loop is the keystone for M3+.** Every dialog and message
+  box hangs on a correct re-entrant modal sub-loop. It is built and headless-tested in
+  **M1 Plan 3** (ahead of strict need) precisely to de-risk M3.
+- **Broadcast fan-out + `Button` default protocol.** `Group` must fan `evBroadcast` to all
+  subviews; M3's default-button behaviour fails silently without it. Built in M1 Plan 3.
+- **`ScrollBar`/`ListViewer` must ship with stable interfaces in M2** — M3 (`ListBox`,
+  dialog scroll bars) and M5 (`OutlineViewer`, color list views) all extend them.
+- **Shared `wcwidth` utility lands in M4 (editor) but should be reusable** by `DrawBuffer`
+  and any width-sensitive view, not re-solved per class. PHP has no built-in.
+- **Persistence fork resolved → PHP-native serialization** (M6 spike): drop Borland's
+  binary `*pstream` hierarchy; use `__serialize`/`__unserialize` on a `Streamable`
+  interface + a `StreamableRegistry`. Watch-item: if we want round-trippable view trees,
+  add a tiny `Streamable` marker to `View` in M1/M2 rather than retrofitting M2–M5 later.
+- **`InputLine` validator hooks (M4)** — ensure M3's `InputLine` exposes a validator seam
+  (`setValidator`/`valid()`), or M4 back-fills it first.
 
 ## Known deferred decisions (revisit at the relevant milestone)
 
@@ -83,6 +105,7 @@ Most build tasks are sequential TDD and don't warrant multi-agent orchestration.
 
 - ✅ Reference-gathering complete (`docs/references/`, `examples/cpp/`).
 - ✅ Foundation design approved (`docs/superpowers/specs/2026-06-05-turbovision-foundation-design.md`).
-- ✅ M1 implementation plan written (`docs/superpowers/plans/2026-06-05-m1-foundation-primitives.md`).
-- ✅ **M1 Plan 1 built & green:** Geometry, Drawing, Events (47 tests, PHPStan max clean) on branch `feat/foundation-primitives`.
-- ▶️ **Next:** M1 Plan 2 (driver & renderer) — `Driver`/`AnsiDriver`/`HeadlessDriver`, escape decoder, ANSI encoder, diff presenter.
+- ✅ **M1 Plan 1 built & green** and merged to `main`: Geometry, Drawing, Events (47 tests, PHPStan max clean), tag `m1-foundation-primitives`.
+- ✅ **All remaining plans written:** M1 Plan 2 (driver/renderer) & Plan 3 (views/app) in full TDD detail; M2–M6 as spike outlines.
+- ▶️ **Next:** build M1 Plan 2 (driver & renderer) — `AnsiEncoder` → `EscapeDecoder` → `Driver`/`HeadlessDriver`/`AnsiDriver` → `DiffPresenter` → `Screen`, then Plan 3 (views & application) to reach `tvguid01–03` running.
+- 🛠️ Working directly on `main` (no feature branches by default).

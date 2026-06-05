@@ -153,6 +153,24 @@ class View
         $event->clear();
     }
 
+    /**
+     * End the current modal execute() loop with $command. Overridden by Group;
+     * the stub here makes it safe to call on any View owner reference.
+     */
+    public function endModal(int $command): void
+    {
+        // no-op on a plain View; Group overrides
+    }
+
+    /**
+     * Fetch the next event for a modal loop. Overridden by Group (which walks up
+     * to the root Screen); the stub here makes it safe to call on any View owner.
+     */
+    public function pumpEvent(): ?Event
+    {
+        return null;
+    }
+
     // --- palette / color ---
 
     /** This view's own palette, or null (then color resolves through the owner). */

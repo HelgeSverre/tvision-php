@@ -97,6 +97,39 @@ class Program extends Group
 
     // --- lifecycle ---
 
+    /** Test accessor: the live desktop (post-layout). */
+    public function desktopForTest(): ?Desktop
+    {
+        return $this->desktop;
+    }
+
+    /**
+     * Reflow on terminal resize: resize buffers (already done by Screen during poll),
+     * recompute root bounds, and changeBounds the desktop so its windows reflow by
+     * growMode (rather than discarding them as the bare layout() rebuild does).
+     */
+    public function reflowDesktop(): void
+    {
+        $cols = $this->screenObj->cols();
+        $rows = $this->screenObj->rows();
+        $this->setBounds(Rect::of(0, 0, $cols, $rows));
+
+        $this->desktop?->changeBounds(Rect::of(0, 1, $cols, $rows - 1));
+        $this->menuBar?->changeBounds(Rect::of(0, 0, $cols, 1));
+        $this->statusLine?->changeBounds(Rect::of(0, $rows - 1, $cols, $rows));
+    }
+
+    /** Test helper: trigger one resize cycle as the run() loop would. */
+    public function pumpResizeForTest(): void
+    {
+        // Force the Screen to observe the driver's new size.
+        $this->screenObj->pollEvents(0);
+        if ($this->screenObj->wasResized()) {
+            $this->reflowDesktop();
+            $this->dirty = true;
+        }
+    }
+
     /** Boot the screen and build the child views without entering the loop (for tests). */
     public function bootForTest(): void
     {
@@ -129,7 +162,7 @@ class Program extends Group
 
             while ($this->endState === 0) {
                 if ($this->screenObj->wasResized()) {
-                    $this->layout();
+                    $this->reflowDesktop();
                     $this->dirty = true;
                 }
 

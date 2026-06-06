@@ -41,6 +41,7 @@
     "test": "pest",
     "stan": "phpstan analyse",
     "demo": "php examples/php/tutorial/Guide03.php",
+    "demo:bios": "php examples/php/bios.php",
     "demo:html": "php examples/php/html-render.php"
   },
   "config": {

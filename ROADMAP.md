@@ -89,6 +89,20 @@ These are the load-bearing dependencies between milestones — get them right ea
   window to the front of the child list (faithful TV `makeFirst`). Add raise-on-select so
   clicking a back window brings it forward (needed once windows overlap meaningfully).
 
+### Deferred follow-ups from the faithfulness audit (4-family parallel review)
+
+All constant families audited byte-for-byte faithful vs the C++ source (Cmd/EventType/
+EventMask/Key/sf-of-gf-dm/all palettes/CGA→ANSI/palette chain). Remaining non-urgent items:
+
+- **Scroll-bar track glyph.** `Glyphs::SCROLL_TRACK = '░'` speckles on crisp fonts just like
+  the old desktop did. Consider `▒`/`▓` (or a configurable track glyph) for consistency with
+  the new `▓` desktop.
+- **Key-enum coverage gaps** (no *wrong* mappings, just missing entries): Ctrl/Shift/Alt-
+  modified keys (kbCtrlLeft, kbShiftF1, kbAltF1…), Alt-digit keys (kbAlt0–9), and the
+  modifier-variant nav keys aren't enumerated; the decoder strips modifier params. Also LF
+  (0x0A) is aliased to `Key::Enter`, so Ctrl+Enter can't be distinguished. Add when hotkey
+  fidelity matters (M3 menus/dialogs use Alt-letter, which IS covered).
+
 ## Known deferred decisions (revisit at the relevant milestone)
 
 - **PHP version floor** — currently `>=8.5` per the explicit target; revisit toward

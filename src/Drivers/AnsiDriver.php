@@ -109,10 +109,11 @@ final class AnsiDriver implements Driver
         // Signals: handle them asynchronously so the terminal is restored even if the
         // app is blocked, killed, or hung up. Without this a kill/SIGTERM would leave
         // the terminal in raw mode + alt-screen (a "wedged" terminal).
+        // NOTE: signals are dispatched synchronously (via pcntl_signal_dispatch() in
+        // resized(), called each event-loop poll). We deliberately do NOT enable
+        // async signals: that would let SIGWINCH interrupt a frame write mid-stream
+        // (EINTR), truncating output. The write() loop also tolerates partial writes.
         if (\function_exists('pcntl_signal')) {
-            if (\function_exists('pcntl_async_signals')) {
-                pcntl_async_signals(true);
-            }
             pcntl_signal(SIGWINCH, function (): void {
                 $this->resizeFlag = true;
             });
@@ -161,7 +162,26 @@ final class AnsiDriver implements Driver
 
     public function write(string $bytes): void
     {
-        fwrite($this->stdout, $bytes);
+        // fwrite() can write fewer bytes than requested (a partial write) when the OS
+        // buffer is full or the syscall is interrupted by a signal (EINTR). A single
+        // fwrite() therefore silently truncates large frames — the desktop vanishes
+        // and a synchronized-update never closes. Loop until everything is flushed.
+        $length = strlen($bytes);
+        $offset = 0;
+        $stalls = 0;
+
+        while ($offset < $length) {
+            $written = @fwrite($this->stdout, substr($bytes, $offset));
+            if ($written === false || $written === 0) {
+                if (++$stalls > 100000) {
+                    return; // stream is wedged; give up rather than spin forever
+                }
+
+                continue; // interrupted / transiently unwritable: retry the remainder
+            }
+            $stalls = 0;
+            $offset += $written;
+        }
     }
 
     public function pollInput(int $timeoutMs): string

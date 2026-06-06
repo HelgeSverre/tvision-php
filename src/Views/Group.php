@@ -6,6 +6,8 @@ namespace HelgeSverre\TurboVision\Views;
 
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventMask;
+use HelgeSverre\TurboVision\Geometry\Point;
+use HelgeSverre\TurboVision\Geometry\Rect;
 
 /**
  * A View owning an ordered Z-ordered subview list (faithful to TGroup). Routes events
@@ -97,6 +99,28 @@ class Group extends View
         foreach ($this->children as $child) {
             $child->drawView();
         }
+    }
+
+    /**
+     * Resize the group and reflow every subview by its growMode (faithful to
+     * TGroup::changeBounds, which calls each child's calcBounds with the size delta).
+     */
+    public function changeBounds(Rect $bounds): void
+    {
+        $delta = new Point(
+            $bounds->width() - $this->bounds->width(),
+            $bounds->height() - $this->bounds->height(),
+        );
+
+        $this->setBounds($bounds);
+
+        if ($delta->x !== 0 || $delta->y !== 0) {
+            foreach ($this->children as $child) {
+                $child->changeBounds($child->calcBounds($delta));
+            }
+        }
+
+        $this->drawView();
     }
 
     public function handleEvent(Event $event): void

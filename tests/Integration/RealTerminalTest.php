@@ -75,7 +75,7 @@ test('Guide03 emits a complete colour frame and restores the terminal on quit', 
 
     // The whole frame reaches the terminal (not just the menu bar) — the partial-write bug.
     expect($result['bytes'])->toBeGreaterThan(4000)
-        ->and(substr_count($out, "\e[0;34;47m"))->toBeGreaterThan(10)        // many blue desktop rows
+        ->and(substr_count($out, "\e[0;37;44m"))->toBeGreaterThan(10)        // many blue-background desktop rows
         ->and(substr_count($out, "\e[?2026h"))->toBe(substr_count($out, "\e[?2026l")) // sync balanced
         ->and($result['exited'])->toBeTrue()                                   // Alt-X actually quits
         ->and($out)->toContain("\e[?1049l")                                    // terminal restored (alt-screen left)

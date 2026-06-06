@@ -42,8 +42,8 @@ test('drawing the desktop fills its region with the desk pattern', function (): 
 
     expect($screen->back()->rows())->toBe([
         '      ', // row 0 (menu bar — untouched here)
-        '▓▓▓▓▓▓', // row 1
-        '▓▓▓▓▓▓', // row 2
+        '░░░░░░', // row 1
+        '░░░░░░', // row 2
         '      ', // row 3 (status line — untouched here)
     ]);
 });

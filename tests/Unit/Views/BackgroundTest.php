@@ -32,7 +32,7 @@ test('default background fills its extent with the shade glyph', function (): vo
 
     $bg->draw();
 
-    expect($screen->back()->rows())->toBe(['▓▓▓▓', '▓▓▓▓']);
+    expect($screen->back()->rows())->toBe(['░░░░', '░░░░']);
 });
 
 test('a custom pattern char is used', function (): void {

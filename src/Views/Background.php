@@ -9,19 +9,16 @@ use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Geometry\Rect;
 
 /**
- * Fills its whole extent with one pattern character (faithful to TBackground).
- *
- * Glyph choice — "faithful core, modern skin": the palette attribute (0x71, blue ink
- * on a light-gray field) is byte-faithful and unchanged. The original CP437 light-shade
- * 0xB0 ('░', 25% dots) blended into a smooth blue desktop on a blurry CRT, but renders
- * as sharp blue-on-gray speckle on a crisp modern font. We default to the dark-shade
- * 0xB2 ('▓', 75% ink) so the blue dominates — reproducing the *appearance* a TV user saw
- * on hardware. Pass a different pattern (e.g. '░' or '▒') to the constructor for the
- * literal retro dither.
+ * Fills its whole extent with one pattern character (faithful to TBackground). The
+ * default is the CP437 light-shade '░' (sparse light specks). The desktop reads as
+ * blue because the desktop attribute (cpAppColor index 1) is a BLUE background — see
+ * the modern-rendering note in Palettes::COLOR — so the sparse '░' leaves the blue
+ * dominant with subtle light texture, like the original TV desktop. Pass a different
+ * pattern (e.g. a space for a flat desktop, or '▒'/'▓' for denser texture).
  */
 class Background extends View
 {
-    public const string DEFAULT_PATTERN = '▓';
+    public const string DEFAULT_PATTERN = '░';
 
     public function __construct(Rect $bounds, protected string $pattern = self::DEFAULT_PATTERN)
     {

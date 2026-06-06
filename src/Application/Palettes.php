@@ -14,9 +14,18 @@ namespace HelgeSverre\TurboVision\Application;
  */
 final class Palettes
 {
-    /** Colour screen palette (cpAppColor). Index 1 = 0x71 (the desktop). */
+    /**
+     * Colour screen palette (cpAppColor). Index 1 is the desktop background.
+     *
+     * MODERN-RENDERING DEVIATION (the only byte that differs from Borland/Sigala):
+     * the original index 1 is 0x71 (blue ink on a light-gray field). On a CGA/console
+     * the '░' dither blended that into a blue desktop, but on a crisp modern terminal
+     * ANSI light-gray (bg 47) renders as near-white, so 0x71 reads as a white field.
+     * We use 0x17 (light-gray ink on a BLUE field, bg 44) so the desktop is reliably
+     * blue on any terminal — reproducing the *appearance* TV users saw, not the byte.
+     */
     public const string COLOR =
-        "\x71\x70\x78\x74\x20\x28\x24\x17\x1F\x1A\x31\x31\x1E\x71\x1F" .
+        "\x17\x70\x78\x74\x20\x28\x24\x17\x1F\x1A\x31\x31\x1E\x71\x1F" .
         "\x37\x3F\x3A\x13\x13\x3E\x21\x3F\x70\x7F\x7A\x13\x13\x70\x7F\x7E" .
         "\x70\x7F\x7A\x13\x13\x70\x70\x7F\x7E\x20\x2B\x2F\x78\x2E\x70\x30" .
         "\x3F\x3E\x1F\x2F\x1A\x20\x72\x31\x31\x30\x2F\x3E\x31\x13\x38\x00" .

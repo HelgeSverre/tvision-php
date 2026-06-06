@@ -40,7 +40,7 @@ programs running (on a real terminal + headless snapshot tests).
 | # | Milestone | Delivers | Acceptance examples | Status |
 |---|-----------|----------|---------------------|--------|
 | **M1** | **Walking skeleton** | Driver (ANSI + headless) · screen buffer + diff renderer · `View`/`Group` · event loop · `Application`/`Program`/`Desktop`/`Background`/`StaticText` · minimal `MenuBar`+`StatusLine` | `tvguid01–03` | **Complete** — all three plans built & green; 173 tests passed, PHPStan max clean |
-| M2 | Windowing | `Window`, `Frame`, `ScrollBar`, `Scroller`, `ListViewer`; resize handling | `tvguid04–10` | **Spike plan written** |
+| M2 | Windowing | `Window`, `Frame`, `ScrollBar`, `Scroller`, `ListViewer`; resize handling | `tvguid04–10` | **Complete** — all tasks built & green; PHPStan max clean; tvguid04–10 ported with headless snapshot tests |
 | M3 | Menus-deep + Dialogs | Pull-down menu navigation; `Dialog`, `Button`, `InputLine`, `CheckBoxes`, `RadioButtons`, `Label`, `ListBox`, `MessageBox`; `setData`/`getData` | `tvguid11–16` | **Spike plan written** |
 | M4 | Editor & files | `Validator` family; `Editor`/`FileEditor`/`EditWindow`/`Memo`; `FileDialog`/`ChDirDialog` | `validator.cc`, `tvedit.cc`, std dialogs | **Spike plan written** |
 | M5 | Outline & color | `OutlineViewer`/`Outline`/`Node`; `ColorDialog` + selectors | outline + color demos | **Spike plan written** |
@@ -103,10 +103,12 @@ Most build tasks are sequential TDD and don't warrant multi-agent orchestration.
 
 ## Where we are
 
-- ✅ **M1 complete:** views & application built and green; tvguid01–03 run on a real terminal and pass headless snapshot tests. Next milestone: M2 (windowing — Window, Frame, ScrollBar, Scroller, ListViewer).
+- ✅ **M1 complete:** views & application built and green; tvguid01–03 run on a real terminal and pass headless snapshot tests.
+- ✅ **M2 complete:** windowing built and green; tvguid04–10 ported with headless snapshot tests + real-PTY case. Full suite: 278 passed, PHPStan max clean.
 - ✅ Reference-gathering complete (`docs/references/`, `examples/cpp/`).
 - ✅ Foundation design approved (`docs/superpowers/specs/2026-06-05-turbovision-foundation-design.md`).
 - ✅ **M1 Plan 1 built & green** and merged to `main`: Geometry, Drawing, Events (47 tests, PHPStan max clean).
 - ✅ **M1 Plan 2 built & green:** Drivers (ANSI + headless), EscapeDecoder, Rendering, Terminal\Screen.
 - ✅ **M1 Plan 3 built & green:** Views (State/View/Group/StaticText/Background/Desktop), Menus (MenuBar/StatusLine + definitions), Application (Program/Application), examples Guide01–03 with headless Feature tests. Full suite: 173 passed, PHPStan max clean.
+- ▶️ **Now:** M2 (windowing) built and green; next is M3 (dialogs & controls — `Dialog`, `Button`, `InputLine`, `ListBox` on the M2 `ListViewer`).
 - 🛠️ Working directly on `main` (no feature branches by default).

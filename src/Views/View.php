@@ -102,6 +102,87 @@ class View
         $this->cursor = new Point($x, $y);
     }
 
+    /** Translate a global (root-relative) point into this view's local coordinates. */
+    public function makeLocal(Point $global): Point
+    {
+        $origin = $this->absoluteOrigin();
+
+        return new Point($global->x - $origin->x, $global->y - $origin->y);
+    }
+
+    /** True if a global point falls within this view's bounds. */
+    public function mouseInView(Point $global): bool
+    {
+        return $this->bounds->contains($global);
+    }
+
+    /**
+     * The exposed drawing rectangle in local coordinates. M2 returns the full extent
+     * (ancestor-overlap clipping arrives with the buffered-group work in a later
+     * milestone); subviews use grow(-1,-1) on this to fit inside a frame.
+     */
+    public function getClipRect(): Rect
+    {
+        return $this->getExtent();
+    }
+
+    /**
+     * Compute new bounds when the owner grows by $delta, honoring this view's growMode.
+     * Faithful to TView::calcBounds: gfGrowLoX/HiX move the left/right edge, gfGrowLoY/
+     * HiY the top/bottom edge. gfGrowAll = all four. (gfGrowRel is handled by Window.)
+     */
+    public function calcBounds(Point $delta): Rect
+    {
+        $ax = $this->bounds->a->x;
+        $ay = $this->bounds->a->y;
+        $bx = $this->bounds->b->x;
+        $by = $this->bounds->b->y;
+
+        if (($this->growMode & State::GrowLoX) !== 0) {
+            $ax += $delta->x;
+        }
+        if (($this->growMode & State::GrowHiX) !== 0) {
+            $bx += $delta->x;
+        }
+        if (($this->growMode & State::GrowLoY) !== 0) {
+            $ay += $delta->y;
+        }
+        if (($this->growMode & State::GrowHiY) !== 0) {
+            $by += $delta->y;
+        }
+
+        return Rect::of($ax, $ay, $bx, $by);
+    }
+
+    /**
+     * Apply new bounds. Group overrides this to additionally reflow its subviews.
+     * The single funnel every move/resize routes through.
+     */
+    public function changeBounds(Rect $bounds): void
+    {
+        $this->setBounds($bounds);
+        $this->drawView();
+    }
+
+    /**
+     * Move/resize this view in response to a drag. M2 implements the geometric result
+     * directly (no inner pump loop): $mode selects move vs grow, $limits clamps the
+     * origin, $min/$max clamp the size. Frame/Window drive this from mouse handlers.
+     */
+    public function dragView(Rect $newBounds, Rect $limits, Point $min, Point $max): void
+    {
+        $w = max($min->x, min($max->x, $newBounds->width()));
+        $h = max($min->y, min($max->y, $newBounds->height()));
+
+        $ax = $newBounds->a->x;
+        $ay = $newBounds->a->y;
+        // Keep the view fully inside $limits.
+        $ax = max($limits->a->x, min($limits->b->x - $w, $ax));
+        $ay = max($limits->a->y, min($limits->b->y - $h, $ay));
+
+        $this->changeBounds(Rect::of($ax, $ay, $ax + $w, $ay + $h));
+    }
+
     // --- state flags ---
 
     public function getState(int $flag): bool

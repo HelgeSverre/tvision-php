@@ -239,6 +239,16 @@ class Program extends Group
             return;
         }
 
+        // Ctrl-C is a universal quit escape hatch. In raw mode the terminal does not
+        // raise SIGINT, so Ctrl-C arrives as the keystroke 0x03; treat it as quit so
+        // the app is always escapable (the terminal is restored on shutdown).
+        if ($event->what === EventType::KeyDown && $event->asKey()?->keyCode === 0x03) {
+            $this->endModal(Cmd::Quit);
+            $this->clearEvent($event);
+
+            return;
+        }
+
         // Command dispatch handled at the program level.
         if ($event->what === EventType::Command) {
             $message = $event->asMessage();

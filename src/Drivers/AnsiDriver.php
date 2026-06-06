@@ -106,12 +106,26 @@ final class AnsiDriver implements Driver
             . $this->encoder->enableMouse()
         );
 
-        // Trap SIGWINCH and guarantee teardown on any exit path.
-        if (\function_exists('pcntl_signal') && \defined('SIGWINCH')) {
+        // Signals: handle them asynchronously so the terminal is restored even if the
+        // app is blocked, killed, or hung up. Without this a kill/SIGTERM would leave
+        // the terminal in raw mode + alt-screen (a "wedged" terminal).
+        if (\function_exists('pcntl_signal')) {
+            if (\function_exists('pcntl_async_signals')) {
+                pcntl_async_signals(true);
+            }
             pcntl_signal(SIGWINCH, function (): void {
                 $this->resizeFlag = true;
             });
+            $restore = function (int $signo): never {
+                $this->shutdown();
+                exit(128 + $signo);
+            };
+            pcntl_signal(SIGINT, $restore);   // also covers Ctrl-C when ISIG is on
+            pcntl_signal(SIGTERM, $restore);
+            pcntl_signal(SIGHUP, $restore);
         }
+
+        // Last-resort teardown for fatal errors / normal exit.
         register_shutdown_function([$this, 'shutdown']);
 
         $this->initialised = true;

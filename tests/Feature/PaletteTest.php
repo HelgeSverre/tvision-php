@@ -21,7 +21,7 @@ test('the desktop renders in the faithful palette colour, not monochrome 0x07', 
     // A cell well inside the desktop backdrop.
     $cell = $app->screen()?->back()->at(10, 10);
 
-    expect($cell?->char)->toBe('░')      // it is the desktop pattern
+    expect($cell?->char)->toBe('▓')      // it is the desktop pattern
         ->and($cell?->attr)->toBe(0x71); // cpAppColor[1] = blue-on-gray, NOT the 0x07 fallback
 });
 

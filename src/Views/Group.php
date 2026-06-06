@@ -28,7 +28,8 @@ class Group extends View
     {
         $view->setOwner($this);
         $this->children[] = $view;
-        if ($this->currentView === null && $view->getState(State::Selectable)) {
+        // ofSelectable is an OPTION flag (lives in $options), not a state flag.
+        if ($this->currentView === null && ($view->options & State::Selectable) !== 0) {
             $this->currentView = $view;
         }
     }
@@ -72,7 +73,7 @@ class Group extends View
     {
         $selectable = array_values(array_filter(
             $this->children,
-            static fn (View $v): bool => $v->getState(State::Selectable),
+            static fn (View $v): bool => ($v->options & State::Selectable) !== 0,
         ));
         if ($selectable === []) {
             return;

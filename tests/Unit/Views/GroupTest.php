@@ -75,8 +75,8 @@ test('a focused event routes to current first', function (): void {
     $g = new Group(Rect::of(0, 0, 10, 10));
     $a = new RecordingView(Rect::of(0, 0, 10, 5));
     $b = new RecordingView(Rect::of(0, 5, 10, 10));
-    $a->setState(State::Selectable, true);
-    $b->setState(State::Selectable, true);
+    $a->options |= State::Selectable; // ofSelectable is an option flag
+    $b->options |= State::Selectable;
     $g->insert($a);
     $g->insert($b);
     $g->setCurrent($b);
@@ -118,8 +118,8 @@ test('selectNext moves focus across selectable subviews', function (): void {
     $g = new Group(Rect::of(0, 0, 10, 10));
     $a = new RecordingView(Rect::of(0, 0, 10, 3));
     $b = new RecordingView(Rect::of(0, 3, 10, 6));
-    $a->setState(State::Selectable, true);
-    $b->setState(State::Selectable, true);
+    $a->options |= State::Selectable; // ofSelectable is an option flag
+    $b->options |= State::Selectable;
     $g->insert($a);
     $g->insert($b);
 

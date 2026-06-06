@@ -22,7 +22,7 @@ test('a bare Application boots with an injected headless screen and renders thre
     expect($rows)->toHaveCount(6)
         ->and(trim($rows[0]))->not->toBe('')      // menu bar present
         ->and(trim($rows[5]))->not->toBe('')      // status line present
-        ->and($rows[2])->toContain('░');          // desktop backdrop
+        ->and($rows[2])->toContain('▓');          // desktop backdrop
 });
 
 test('a bare Application quits on the default Alt-X status command', function (): void {

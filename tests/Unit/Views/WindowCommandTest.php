@@ -83,9 +83,9 @@ test('Tab cycles focus among selectable subviews', function (): void {
     $w = new Window(Rect::of(0, 0, 26, 7), 'Demo', 1);
     // Two selectable children besides the frame.
     $a = new View(Rect::of(1, 1, 5, 5));
-    $a->setState(State::Selectable, true);
+    $a->options |= State::Selectable; // ofSelectable is an option flag
     $b = new View(Rect::of(6, 1, 10, 5));
-    $b->setState(State::Selectable, true);
+    $b->options |= State::Selectable;
     $w->insert($a);
     $w->insert($b);
     $w->setCurrent($a);

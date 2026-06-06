@@ -18,7 +18,7 @@ test('Guide01 renders the default menu bar and status line headless', function (
     expect($rows)->toHaveCount(25)
         ->and($rows[0])->toContain('File')   // default menu bar
         ->and($rows[24])->toContain('Exit')  // default status line
-        ->and($rows[12])->toContain('░');     // desktop backdrop
+        ->and($rows[12])->toContain('▓');     // desktop backdrop
 });
 
 test('Guide01 quits cleanly on Alt-X', function (): void {

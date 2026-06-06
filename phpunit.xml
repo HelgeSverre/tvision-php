@@ -14,12 +14,16 @@
         <testsuite name="Visual">
             <directory>tests/Visual</directory>
         </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
     </testsuites>
 
-    <!-- Visual (Chrome + ImageMagick) tests are opt-in via the "visual" group. -->
+    <!-- Visual (Chrome + ImageMagick) and Integration (real PTY) tests are opt-in. -->
     <groups>
         <exclude>
             <group>visual</group>
+            <group>integration</group>
         </exclude>
     </groups>
 

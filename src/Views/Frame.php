@@ -125,7 +125,7 @@ class Frame extends View
         $bot->moveChar($w - 1, $br, $frameAttr, 1);
 
         if ($active && $owner !== null && ($owner->frameFlags() & WindowFlags::Grow) !== 0) {
-            $bot->moveCStr($w - 2, Glyphs::DRAG_ICON, $frameAttr, $frameAttr);
+            $bot->moveCStr($w - 3, Glyphs::DRAG_ICON, $frameAttr, $frameAttr);
         }
         $this->writeLine(0, $h - 1, $w, 1, $bot);
     }

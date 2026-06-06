@@ -77,6 +77,18 @@ These are the load-bearing dependencies between milestones — get them right ea
 - **`InputLine` validator hooks (M4)** — ensure M3's `InputLine` exposes a validator seam
   (`setValidator`/`valid()`), or M4 back-fills it first.
 
+### Deferred follow-ups from the M2 review (non-blocking nits)
+
+- **Reverse focus.** `Group` only exposes forward `focusNext()`/`selectNext()`, so
+  `Window` Shift-Tab currently focuses forward like Tab. Add a `focusPrev()` primitive to
+  `Group` (touches M3 dialogs too) and wire Shift-Tab to it.
+- **`gfGrowRel` proportional resize** is unimplemented (`View::calcBounds` only does the
+  edge-grow flags). Default windows translate+grow by the full delta on terminal resize
+  instead of scaling. Implement a `Window::calcBounds` override when it matters.
+- **Z-order raise on select.** `Desktop::selectWindow` changes focus but does not move the
+  window to the front of the child list (faithful TV `makeFirst`). Add raise-on-select so
+  clicking a back window brings it forward (needed once windows overlap meaningfully).
+
 ## Known deferred decisions (revisit at the relevant milestone)
 
 - **PHP version floor** — currently `>=8.5` per the explicit target; revisit toward

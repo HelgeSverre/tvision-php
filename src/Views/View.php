@@ -129,7 +129,8 @@ class View
     /**
      * Compute new bounds when the owner grows by $delta, honoring this view's growMode.
      * Faithful to TView::calcBounds: gfGrowLoX/HiX move the left/right edge, gfGrowLoY/
-     * HiY the top/bottom edge. gfGrowAll = all four. (gfGrowRel is handled by Window.)
+     * HiY the top/bottom edge. gfGrowAll = all four. (gfGrowRel — proportional resize —
+     * is not yet implemented; tracked for a future Window::calcBounds override.)
      */
     public function calcBounds(Point $delta): Rect
     {

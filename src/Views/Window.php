@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace HelgeSverre\TurboVision\Views;
 
 use HelgeSverre\TurboVision\Drawing\Palette;
+use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventType;
+use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarPart;
@@ -129,7 +132,85 @@ class Window extends Group implements FrameOwner
 
     public function handleEvent(Event $event): void
     {
-        // Command + Tab handling added in Task 14.
         parent::handleEvent($event);
+
+        if ($event->what === EventType::Command) {
+            $msg = $event->asMessage();
+            if ($msg !== null) {
+                $info = $msg->info;
+                $forUs = $info === null || $info === $this;
+
+                switch ($msg->command) {
+                    case Cmd::Resize:
+                        if (($this->flags & (WindowFlags::Move | WindowFlags::Grow)) !== 0) {
+                            // In headless tests resizeTo() is driven directly; here we just
+                            // consume so the command does not bubble to siblings.
+                            $this->clearEvent($event);
+                        }
+                        break;
+                    case Cmd::Close:
+                        if (($this->flags & WindowFlags::Close) !== 0 && $forUs) {
+                            $this->clearEvent($event);
+                            $this->close();
+                        }
+                        break;
+                    case Cmd::Zoom:
+                        if (($this->flags & WindowFlags::Zoom) !== 0 && $forUs) {
+                            $this->zoom();
+                            $this->clearEvent($event);
+                        }
+                        break;
+                }
+            }
+        } elseif ($event->what === EventType::KeyDown) {
+            $key = $event->asKey();
+            if ($key !== null && $key->keyCode === Key::Tab->value) {
+                $this->focusNext();
+                $this->clearEvent($event);
+            } elseif ($key !== null && $key->keyCode === Key::ShiftTab->value) {
+                $this->focusNext();
+                $this->clearEvent($event);
+            }
+        }
+    }
+
+    /** Remove this window from its owner (faithful close, sans valid()/destroy). */
+    public function close(): void
+    {
+        if ($this->owner instanceof Group) {
+            $this->owner->remove($this);
+        }
+    }
+
+    /** Toggle between the saved zoomRect and the maximum (desktop) extent. */
+    public function zoom(): void
+    {
+        [$minW, $minH, $maxW, $maxH] = $this->sizeLimits();
+
+        if ($this->bounds->width() !== $maxW || $this->bounds->height() !== $maxH) {
+            $this->zoomRect = $this->bounds;
+            $originX = $this->owner?->getExtent()->a->x ?? 0;
+            $originY = $this->owner?->getExtent()->a->y ?? 0;
+            $this->changeBounds(Rect::of($originX, $originY, $originX + $maxW, $originY + $maxH));
+        } else {
+            $this->changeBounds($this->zoomRect);
+        }
+    }
+
+    /** Move/resize against the owner extent, clamped to size limits (used by drag). */
+    public function resizeTo(Rect $newBounds): void
+    {
+        $limits = $this->owner?->getExtent() ?? $this->getBounds();
+        [$minW, $minH, $maxW, $maxH] = $this->sizeLimits();
+        $this->dragView($newBounds, $limits, new Point($minW, $minH), new Point($maxW, $maxH));
+    }
+
+    public function setState(int $flag, bool $enable): void
+    {
+        parent::setState($flag, $enable);
+        if (($flag & State::Selected) !== 0) {
+            parent::setState(State::Active, $enable);
+            $this->frame?->setState(State::Active, $enable);
+        }
     }
 }

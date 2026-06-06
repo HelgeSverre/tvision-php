@@ -38,7 +38,9 @@
   },
   "scripts": {
     "test": "pest",
-    "stan": "phpstan analyse"
+    "stan": "phpstan analyse",
+    "demo": "php examples/php/tutorial/Guide03.php",
+    "demo:html": "php examples/php/html-render.php"
   },
   "config": {
     "sort-packages": true,

@@ -33,7 +33,8 @@
   },
   "autoload-dev": {
     "psr-4": {
-      "HelgeSverre\\TurboVision\\Tests\\": "tests/"
+      "HelgeSverre\\TurboVision\\Tests\\": "tests/",
+      "HelgeSverre\\TurboVision\\Examples\\": "examples/php/"
     }
   },
   "scripts": {

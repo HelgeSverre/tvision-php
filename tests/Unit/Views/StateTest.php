@@ -33,3 +33,13 @@ test('grow-mode flags carry their faithful gf* values', function (): void {
         ->and(State::GrowHiY)->toBe(0x08)
         ->and(State::GrowAll)->toBe(0x0f);
 });
+
+test('drag-mode flags match Turbo Vision dm* values', function (): void {
+    expect(State::DragMove)->toBe(0x01)
+        ->and(State::DragGrow)->toBe(0x02)
+        ->and(State::LimitLoX)->toBe(0x10)
+        ->and(State::LimitLoY)->toBe(0x20)
+        ->and(State::LimitHiX)->toBe(0x40)
+        ->and(State::LimitHiY)->toBe(0x80)
+        ->and(State::LimitAll)->toBe(0xF0);
+});

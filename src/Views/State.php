@@ -47,4 +47,13 @@ final class State
     public const int GrowAll = 0x0f;
     public const int GrowRel = 0x10;
     public const int GrowFixed = 0x20;
+
+    // --- dm* : drag-mode flags (used by View::dragView), verbatim from views.h ---
+    public const int DragMove = 0x01;
+    public const int DragGrow = 0x02;
+    public const int LimitLoX = 0x10;
+    public const int LimitLoY = 0x20;
+    public const int LimitHiX = 0x40;
+    public const int LimitHiY = 0x80;
+    public const int LimitAll = 0xF0;
 }

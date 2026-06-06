@@ -25,3 +25,14 @@ test('standard command codes match Turbo Vision', function (): void {
 test('user commands begin at 100', function (): void {
     expect(Cmd::FirstUser)->toBe(100);
 });
+
+test('M2 broadcast and window command codes match Turbo Vision', function (): void {
+    expect(Cmd::CloseAll)->toBe(37)
+        ->and(Cmd::ReceivedFocus)->toBe(50)
+        ->and(Cmd::ReleasedFocus)->toBe(51)
+        ->and(Cmd::CommandSetChanged)->toBe(52)
+        ->and(Cmd::ScrollBarChanged)->toBe(53)
+        ->and(Cmd::ScrollBarClicked)->toBe(54)
+        ->and(Cmd::SelectWindowNum)->toBe(55)
+        ->and(Cmd::ListItemSelected)->toBe(56);
+});

@@ -28,7 +28,7 @@ require_once __DIR__ . '/../../../vendor/autoload.php';
 const CM_G4_FILE_OPEN = Cmd::FirstUser + 100; // 200
 const CM_G4_NEW_WIN = Cmd::FirstUser + 101;   // 201
 
-final class Guide04App extends Application
+class Guide04App extends Application
 {
     private int $winNumber = 0;
 

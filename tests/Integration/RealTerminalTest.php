@@ -84,3 +84,22 @@ test('Guide03 emits a complete colour frame and restores the terminal on quit', 
     fn (): bool => ! function_exists('proc_open'),
     'Real-terminal tests require proc_open + PTY support.',
 );
+
+test('Guide04 emits a window demo to a real terminal and quits cleanly on Alt-X', function (): void {
+    $result = tvRunInPty(__DIR__ . '/../../examples/php/tutorial/Guide04.php', "\ex"); // Alt-X
+
+    if (! $result['supported']) {
+        $this->markTestSkipped('No usable PTY on this platform.');
+    }
+
+    $out = $result['out'];
+
+    expect($result['bytes'])->toBeGreaterThan(2000)                        // a full frame, not a stub
+        ->and(substr_count($out, "\e[?2026h"))->toBe(substr_count($out, "\e[?2026l")) // sync balanced
+        ->and($result['exited'])->toBeTrue()                                // Alt-X actually quits
+        ->and($out)->toContain("\e[?1049l")                                 // alt-screen left
+        ->and($out)->toContain("\e[?25h");                                  // cursor restored
+})->group('integration')->skip(
+    fn (): bool => ! function_exists('proc_open'),
+    'Real-terminal tests require proc_open + PTY support.',
+);

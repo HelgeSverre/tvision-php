@@ -310,7 +310,9 @@ final class MenuBar extends MenuView
         }
         $items = $this->menu->items();
         $subMenu = $items[$index]->subMenu ?? null;
-        if ($subMenu === null) {
+        if ($subMenu === null || $subMenu->items() === []) {
+            $this->closeMenu();
+
             return;
         }
 
@@ -355,7 +357,7 @@ final class MenuBar extends MenuView
         }
         for ($offset = 1; $offset <= $count; $offset++) {
             $index = (($this->activeIndex + $direction * $offset) % $count + $count) % $count;
-            if ($items[$index]->subMenu !== null) {
+            if (($items[$index]->subMenu?->items() ?? []) !== []) {
                 $this->openMenu($index);
 
                 return;
@@ -384,7 +386,7 @@ final class MenuBar extends MenuView
     private function firstSubMenuIndex(): ?int
     {
         foreach ($this->menu->items() as $index => $item) {
-            if ($item->subMenu !== null) {
+            if (($item->subMenu?->items() ?? []) !== []) {
                 return $index;
             }
         }

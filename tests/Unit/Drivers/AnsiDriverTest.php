@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use HelgeSverre\TurboVision\Drivers\AnsiDriver;
 use HelgeSverre\TurboVision\Exceptions\DriverException;
+use HelgeSverre\TurboVision\Exceptions\InputClosedException;
 
 /**
  * A non-TTY stream pair: in-memory handles so posix_isatty() returns false.
@@ -157,7 +158,7 @@ test('pollInput reports end-of-file instead of turning a disconnected terminal i
         $driver = new AnsiDriver($input, $output, fn (string $cmd): string => '24 80');
 
         expect(fn () => $driver->pollInput(100))
-            ->toThrow(DriverException::class, 'terminal input');
+            ->toThrow(InputClosedException::class, 'closed');
     } finally {
         fclose($input);
         fclose($output);

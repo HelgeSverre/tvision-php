@@ -5,6 +5,7 @@ declare(strict_types=1);
 use HelgeSverre\TurboVision\Application\Program;
 use HelgeSverre\TurboVision\Drivers\Driver;
 use HelgeSverre\TurboVision\Drivers\HeadlessDriver;
+use HelgeSverre\TurboVision\Exceptions\DriverException;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
@@ -112,6 +113,41 @@ final class ResizeDispatchProgram extends Program
     }
 }
 
+/** Initialisation works, then the first terminal read throws the supplied failure. */
+final class ThrowingInputDriver implements Driver
+{
+    public bool $initialised = false;
+
+    public function __construct(private readonly DriverException $failure) {}
+
+    public function init(): void
+    {
+        $this->initialised = true;
+    }
+
+    public function shutdown(): void
+    {
+        $this->initialised = false;
+    }
+
+    public function size(): array
+    {
+        return [20, 5];
+    }
+
+    public function write(string $bytes): void {}
+
+    public function pollInput(int $timeoutMs): string
+    {
+        throw $this->failure;
+    }
+
+    public function resized(): bool
+    {
+        return false;
+    }
+}
+
 final class FailingLayoutProgram extends Program
 {
     public function __construct(private readonly Screen $injected)
@@ -140,6 +176,46 @@ test('run builds children, draws, and exits cleanly on a fed quit key', function
 
     expect($code)->toBe(0)
         ->and($driver->isInitialised())->toBeFalse(); // shutdown ran
+});
+
+test('Kitty CSI-u Ctrl-C and Alt-X retain the programs legacy quit paths', function (): void {
+    $ctrlDriver = new HeadlessDriver(20, 5);
+    $ctrlProgram = new QuitProgram(new Screen($ctrlDriver));
+    $ctrlProgram->bootForTest();
+    $ctrlDriver->feedInput("\e[99;5u");
+
+    $ctrlEvent = $ctrlProgram->getEvent();
+    $ctrlProgram->handleEvent($ctrlEvent);
+
+    $altDriver = new HeadlessDriver(20, 5);
+    $altProgram = new QuitProgram(new Screen($altDriver));
+    $altProgram->bootForTest();
+    $altDriver->feedInput("\e[120;3u");
+
+    $altEvent = $altProgram->getEvent();
+    $altProgram->handleEvent($altEvent);
+
+    expect($ctrlProgram->ended())->toBeTrue()
+        ->and($altEvent->isNothing())->toBeTrue()
+        ->and($altProgram->ended())->toBeTrue();
+});
+
+test('run treats a closed terminal input stream as a graceful shutdown', function (): void {
+    $driver = new ThrowingInputDriver(DriverException::inputClosed());
+    $program = new QuitProgram(new Screen($driver));
+
+    expect($program->run())->toBe(0)
+        ->and($program->ended())->toBeTrue()
+        ->and($driver->initialised)->toBeFalse();
+});
+
+test('run propagates genuine read failures after restoring the terminal', function (): void {
+    $driver = new ThrowingInputDriver(DriverException::readFailed());
+    $program = new QuitProgram(new Screen($driver));
+
+    expect(fn () => $program->run())
+        ->toThrow(DriverException::class, 'Failed to read')
+        ->and($driver->initialised)->toBeFalse();
 });
 
 test('putEvent enqueues an event that getEvent returns first', function (): void {

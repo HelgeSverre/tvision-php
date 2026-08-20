@@ -463,6 +463,11 @@ final class EscapeDecoder
         }
         $modifiers = $encodedModifiers - 1;
 
+        $selectedCodepoint = $codepoint;
+        if (($modifiers & KeyModifier::Shift) !== 0 && isset($keyParts[1]) && $keyParts[1] !== '') {
+            $selectedCodepoint = (int) $keyParts[1];
+        }
+
         $text = '';
         if (isset($fields[2]) && $fields[2] !== '') {
             $textParts = explode(':', $fields[2]);
@@ -497,11 +502,35 @@ final class EscapeDecoder
             return;
         }
 
-        if ($text === '') {
-            $selectedCodepoint = $codepoint;
-            if (($modifiers & KeyModifier::Shift) !== 0 && isset($keyParts[1]) && $keyParts[1] !== '') {
-                $selectedCodepoint = (int) $keyParts[1];
+        // CSI-u disambiguation replaces the legacy byte sequences used by the
+        // framework's public shortcut API. Preserve that API at the decoder
+        // boundary while retaining modifier metadata for modern consumers.
+        $shortcutCodepoint = isset($keyParts[2]) && $keyParts[2] !== ''
+            ? (int) $keyParts[2]
+            : $codepoint;
+        if (($modifiers & KeyModifier::Ctrl) !== 0
+            && (($shortcutCodepoint >= ord('A') && $shortcutCodepoint <= ord('Z'))
+                || ($shortcutCodepoint >= ord('a') && $shortcutCodepoint <= ord('z')))
+        ) {
+            $controlCode = ord(strtoupper(chr($shortcutCodepoint))) - ord('@');
+            $events[] = Event::keyDown(new KeyDownEvent($controlCode, '', $modifiers));
+
+            return;
+        }
+
+        if (($modifiers & KeyModifier::Alt) !== 0
+            && (($shortcutCodepoint >= ord('A') && $shortcutCodepoint <= ord('Z'))
+                || ($shortcutCodepoint >= ord('a') && $shortcutCodepoint <= ord('z')))
+        ) {
+            $altKey = self::altKey('Alt' . strtoupper(chr($shortcutCodepoint)));
+            if ($altKey !== null) {
+                $events[] = Event::keyDown(new KeyDownEvent($altKey->value, '', $modifiers));
+
+                return;
             }
+        }
+
+        if ($text === '') {
             $text = $this->unicodeCharacter($selectedCodepoint) ?? '';
             if ($text !== '' && preg_match('/[\p{Cc}\p{Cs}]/u', $text) === 1) {
                 $text = '';
@@ -513,7 +542,7 @@ final class EscapeDecoder
         }
 
         $events[] = Event::keyDown(new KeyDownEvent(
-            $codepoint >= 0x20 && $codepoint <= 0x7E ? $codepoint : 0,
+            $selectedCodepoint >= 0x20 && $selectedCodepoint <= 0x7E ? $selectedCodepoint : 0,
             $text,
             $modifiers,
         ));

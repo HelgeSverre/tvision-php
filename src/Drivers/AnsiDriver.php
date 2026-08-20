@@ -395,8 +395,11 @@ final class AnsiDriver implements Driver, ProvidesTerminalCapabilities
             throw DriverException::readFailed($exception);
         }
 
-        if ($bytes === false || ($bytes === '' && feof($this->stdin))) {
+        if ($bytes === false) {
             throw DriverException::readFailed();
+        }
+        if ($bytes === '' && feof($this->stdin)) {
+            throw DriverException::inputClosed();
         }
 
         return $bytes;

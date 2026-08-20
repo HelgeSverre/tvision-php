@@ -8,6 +8,7 @@ use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
+use HelgeSverre\TurboVision\Exceptions\InputClosedException;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Menus\MenuBar;
 use HelgeSverre\TurboVision\Menus\StatusLine;
@@ -119,7 +120,7 @@ class Program extends Group
 
         $this->desktop?->changeBounds(Rect::of(0, $menuBottom, $cols, $statusTop));
         $this->menuBar?->changeBounds(Rect::of(0, 0, $cols, $menuBottom));
-        $this->statusLine?->changeBounds(Rect::of(0, max(0, $rows - 1), $cols, $rows));
+        $this->statusLine?->changeBounds(Rect::of(0, $statusTop, $cols, $rows));
     }
 
     /** Test helper: trigger one resize cycle as the run() loop would. */
@@ -170,25 +171,31 @@ class Program extends Group
             $this->layout();
             $this->redraw();
 
-            while ($this->endState === 0) {
-                $event = $this->getEvent();
+            try {
+                while ($this->endState === 0) {
+                    $event = $this->getEvent();
 
-                // pollEvents() is where Screen observes SIGWINCH. Reflow before
-                // dispatching the event returned by that same poll so mouse hit
-                // testing and view geometry never use the previous terminal size.
-                if ($this->screenObj->wasResized()) {
-                    $this->reflowDesktop();
-                    $this->dirty = true;
-                }
+                    // pollEvents() is where Screen observes SIGWINCH. Reflow before
+                    // dispatching the event returned by that same poll so mouse hit
+                    // testing and view geometry never use the previous terminal size.
+                    if ($this->screenObj->wasResized()) {
+                        $this->reflowDesktop();
+                        $this->dirty = true;
+                    }
 
-                if (! $event->isNothing()) {
-                    $this->handleEvent($event);
-                    $this->dirty = true;
-                }
+                    if (! $event->isNothing()) {
+                        $this->handleEvent($event);
+                        $this->dirty = true;
+                    }
 
-                if ($this->dirty) {
-                    $this->redraw();
+                    if ($this->dirty) {
+                        $this->redraw();
+                    }
                 }
+            } catch (InputClosedException) {
+                // A closed PTY/stdin is a normal lifecycle end, not a framework
+                // failure. Other driver errors remain visible to the caller.
+                $this->endState = Cmd::Quit;
             }
         } finally {
             $this->screenObj->shutdown();
@@ -227,7 +234,7 @@ class Program extends Group
             $this->insert($this->menuBar);
         }
 
-        $statusRect = Rect::of(0, max(0, $rows - 1), $cols, $rows);
+        $statusRect = Rect::of(0, $statusTop, $cols, $rows);
         $this->statusLine = $this->initStatusLine($statusRect);
         if ($this->statusLine !== null) {
             $this->insert($this->statusLine);

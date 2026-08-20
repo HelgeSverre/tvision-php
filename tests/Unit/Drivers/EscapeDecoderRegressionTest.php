@@ -327,6 +327,30 @@ test('Kitty printable, alternate, associated-text, repeat, and release fields de
         ->and($release->events)->toBe([]);
 });
 
+test('Kitty disambiguated Ctrl and Alt keys retain legacy shortcut key codes', function (): void {
+    $ctrlC = regressionDecode('1b5b39393b3575'); // CSI 99;5u
+    $altX = regressionDecode('1b5b3132303b3375'); // CSI 120;3u
+    $altF = regressionDecode('1b5b3130323b3375'); // CSI 102;3u
+
+    expect($ctrlC->events)->toHaveCount(1)
+        ->and($ctrlC->events[0]->asKey()?->keyCode)->toBe(0x03)
+        ->and($ctrlC->events[0]->asKey()?->char)->toBe('')
+        ->and($ctrlC->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Ctrl)
+        ->and($altX->events[0]->asKey()?->is(Key::AltX))->toBeTrue()
+        ->and($altX->events[0]->asKey()?->char)->toBe('')
+        ->and($altX->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Alt)
+        ->and($altF->events[0]->asKey()?->is(Key::AltF))->toBeTrue();
+});
+
+test('Kitty shifted alternate code is used consistently as the ASCII key code', function (): void {
+    $shifted = regressionDecode('1b5b39373a36353b3275'); // CSI 97:65;2u
+
+    expect($shifted->events)->toHaveCount(1)
+        ->and($shifted->events[0]->asKey()?->keyCode)->toBe(ord('A'))
+        ->and($shifted->events[0]->asKey()?->char)->toBe('A')
+        ->and($shifted->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Shift);
+});
+
 test('legacy modifier parameters are retained for arrows and tilde keys', function (): void {
     $shiftUp = regressionDecode('1b5b313b3241');
     $ctrlF5 = regressionDecode('1b5b31353b357e');

@@ -166,6 +166,27 @@ test('F10 opens the first pull-down and Esc dismisses it', function (): void {
     expect($bar->activeIndex())->toBe(-1);
 });
 
+test('empty submenus never install an invisible full-screen popup', function (): void {
+    [$root] = menuRoot(36, 10);
+    $bar = new MenuBar(
+        Rect::of(0, 0, 36, 1),
+        new SubMenu('~E~mpty', Key::AltE),
+        new SubMenu('~F~ile', Key::AltF)->items(new MenuItem('E~x~it', Cmd::Quit)),
+    );
+    $root->insert($bar);
+
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::AltE->value)));
+
+    expect($bar->activeIndex())->toBe(-1)
+        ->and($root->subviews())->toHaveCount(1);
+
+    $menu = Event::command(Cmd::Menu);
+    $bar->handleEvent($menu);
+
+    expect($bar->activeIndex())->toBe(1)
+        ->and($root->subviews())->toHaveCount(2);
+});
+
 test('mouse clicks open a pull-down and activate its selected row', function (): void {
     [$root] = menuRoot(36, 10);
     $bar = new MenuBar(

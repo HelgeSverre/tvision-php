@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use HelgeSverre\TurboVision\Application\Application;
 use HelgeSverre\TurboVision\Drivers\HeadlessDriver;
+use HelgeSverre\TurboVision\Menus\MenuBar;
+use HelgeSverre\TurboVision\Menus\StatusLine;
 use HelgeSverre\TurboVision\Terminal\Screen;
 
 /** The smallest possible app — tvguid01 shape. */
@@ -44,4 +46,19 @@ test('the default initScreen would build a real AnsiDriver-backed Screen', funct
     $app->bootForTest();
 
     expect($app->screen())->toBe($injected);
+});
+
+test('a one-row application gives the row to the menu without overlapping the status line', function (): void {
+    $app = new HelloApp(new Screen(new HeadlessDriver(20, 1)));
+    $app->bootForTest();
+
+    $menuBar = null;
+    $statusLine = null;
+    foreach ($app->subviews() as $view) {
+        $menuBar ??= $view instanceof MenuBar ? $view : null;
+        $statusLine ??= $view instanceof StatusLine ? $view : null;
+    }
+
+    expect($menuBar?->getBounds()->height())->toBe(1)
+        ->and($statusLine?->getBounds()->height())->toBe(0);
 });

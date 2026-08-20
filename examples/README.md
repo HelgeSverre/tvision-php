@@ -1,4 +1,20 @@
-# Example Programs (to translate to PHP)
+# Example Programs
+
+## Runnable PHP examples
+
+- `php/tutorial/Guide01.php` through `Guide10.php` progressively exercise the port.
+- `php/bios.php` is a full-screen BIOS setup interface.
+- `php/calendar.php` is a macOS-inspired month calendar with an agenda sidebar,
+  complete event editing, recurrence, and RFC 5545 `.ics` persistence.
+- `php/studio.php` is a visual TUI builder with direct manipulation, an inspector,
+  layers, undo/redo, JSON projects, live preview, and runnable PHP export.
+- `php/html-render.php` demonstrates the headless HTML renderer.
+
+Run `composer demo:calendar` or `composer demo:studio`; their detailed controls live
+in [`php/Calendar/README.md`](php/Calendar/README.md) and
+[`php/Studio/README.md`](php/Studio/README.md).
+
+## Original source material
 
 Original C++ example programs from Sergio Sigala's TVision 0.8, preserved verbatim so
 we can translate them to `HelgeSverre\TurboVision` and use them as **acceptance
@@ -118,9 +134,8 @@ acceptance target once the individual pieces work.
 
 ---
 
-## Suggested PHP layout (mirrors this, decided later)
+## PHP layout
 
-When translation starts, the natural target is `examples/php/` mirroring this tree:
-`examples/php/tutorial/Guide01.php` … and `examples/php/demo/`. Each translated
-example doubles as a high-level feature test. The exact mapping is part of the
-library-shape design phase.
+Translated programs live under `examples/php/`; the Guide series mirrors the original
+tutorial progression, while larger standalone examples use their own namespace folder
+and a small runnable entrypoint. Each translated example also has feature-test coverage.

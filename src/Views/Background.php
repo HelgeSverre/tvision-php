@@ -10,11 +10,11 @@ use HelgeSverre\TurboVision\Geometry\Rect;
 
 /**
  * Fills its whole extent with one pattern character (faithful to TBackground). The
- * default is the CP437 light-shade '░' (sparse light specks). The desktop reads as
- * blue because the desktop attribute (cpAppColor index 1) is a BLUE background — see
- * the modern-rendering note in Palettes::COLOR — so the sparse '░' leaves the blue
- * dominant with subtle light texture, like the original TV desktop. Pass a different
- * pattern (e.g. a space for a flat desktop, or '▒'/'▓' for denser texture).
+ * default is the CP437 light-shade '░' (sparse light specks). With the modern dark
+ * application palette this becomes a subtle graphite texture on black. Pass a
+ * different pattern (e.g. a space for a flat desktop, or '▒'/'▓' for denser
+ * texture). The classic blue appearance remains available through
+ * Palettes::CLASSIC_COLOR.
  */
 class Background extends View
 {

@@ -28,13 +28,13 @@
   },
   "autoload": {
     "psr-4": {
-      "HelgeSverre\\TurboVision\\": "src/"
+      "HelgeSverre\\TurboVision\\": "src/",
+      "HelgeSverre\\TurboVision\\Examples\\": "examples/php/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "HelgeSverre\\TurboVision\\Tests\\": "tests/",
-      "HelgeSverre\\TurboVision\\Examples\\": "examples/php/"
+      "HelgeSverre\\TurboVision\\Tests\\": "tests/"
     }
   },
   "scripts": {
@@ -42,6 +42,8 @@
     "stan": "phpstan analyse",
     "demo": "php examples/php/tutorial/Guide03.php",
     "demo:bios": "php examples/php/bios.php",
+    "demo:calendar": "php examples/php/calendar.php",
+    "demo:studio": "php examples/php/studio.php",
     "demo:html": "php examples/php/html-render.php"
   },
   "config": {

@@ -6,6 +6,7 @@ namespace HelgeSverre\TurboVision\Views;
 
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventMask;
+use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 
@@ -30,7 +31,7 @@ class Group extends View
         $this->children[] = $view;
         // ofSelectable is an OPTION flag (lives in $options), not a state flag.
         if ($this->currentView === null && ($view->options & State::Selectable) !== 0) {
-            $this->currentView = $view;
+            $this->setCurrent($view);
         }
     }
 
@@ -41,6 +42,7 @@ class Group extends View
             static fn (View $v): bool => $v !== $view,
         ));
         if ($this->currentView === $view) {
+            $view->setState(State::Focused | State::Selected, false);
             $this->currentView = null;
         }
         $view->setOwner(null);
@@ -59,40 +61,97 @@ class Group extends View
 
     public function setCurrent(?View $view): void
     {
+        if ($view === $this->currentView) {
+            return;
+        }
+
         if ($this->currentView !== null) {
-            $this->currentView->setState(State::Focused, false);
+            $this->currentView->setState(State::Focused | State::Selected, false);
         }
         $this->currentView = $view;
         if ($view !== null) {
-            $view->setState(State::Focused, true);
+            $view->setState(State::Focused | State::Selected, true);
         }
     }
 
     /** Advance focus to the next selectable subview, wrapping. */
     public function selectNext(): void
     {
+        $this->selectRelative(1);
+    }
+
+    /** Move focus to the previous selectable subview, wrapping. */
+    public function selectPrevious(): void
+    {
+        $this->selectRelative(-1);
+    }
+
+    private function selectRelative(int $direction): void
+    {
         $selectable = array_values(array_filter(
             $this->children,
-            static fn (View $v): bool => ($v->options & State::Selectable) !== 0,
+            static fn (View $v): bool => ($v->options & State::Selectable) !== 0
+                && ! $v->getState(State::Disabled),
         ));
         if ($selectable === []) {
             return;
         }
 
-        $idx = 0;
+        $idx = null;
         foreach ($selectable as $i => $v) {
             if ($v === $this->currentView) {
                 $idx = $i;
                 break;
             }
         }
-        $next = $selectable[($idx + 1) % count($selectable)];
+
+        if ($idx === null) {
+            $next = $direction > 0 ? $selectable[0] : $selectable[array_key_last($selectable)];
+        } else {
+            $count = count($selectable);
+            $next = $selectable[(($idx + $direction) % $count + $count) % $count];
+        }
         $this->setCurrent($next);
     }
 
     public function focusNext(): void
     {
         $this->selectNext();
+    }
+
+    public function focusPrevious(): void
+    {
+        $this->selectPrevious();
+    }
+
+    /** Move an owned view to the top of this group's Z-order. */
+    protected function bringToFront(View $view): void
+    {
+        foreach ($this->children as $i => $child) {
+            if ($child !== $view) {
+                continue;
+            }
+
+            array_splice($this->children, $i, 1);
+            $this->children[] = $view;
+
+            return;
+        }
+    }
+
+    public function hasMouseCapture(): bool
+    {
+        if (parent::hasMouseCapture()) {
+            return true;
+        }
+
+        foreach ($this->children as $child) {
+            if ($child->hasMouseCapture()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function draw(): void
@@ -173,14 +232,47 @@ class Group extends View
             return;
         }
 
-        // Topmost (last inserted) subview whose bounds contains the point.
+        // An in-progress drag owns all subsequent move/up events, even when the
+        // pointer leaves the view's bounds.
         for ($i = count($this->children) - 1; $i >= 0; $i--) {
             $child = $this->children[$i];
-            if ($child->getBounds()->contains($mouse->where)) {
+            if ($child->hasMouseCapture()) {
                 $child->handleEvent($event);
 
                 return;
             }
+        }
+
+        $local = $this->makeLocal($mouse->where);
+
+        // Topmost visible, enabled subview whose owner-local bounds contain the point.
+        for ($i = count($this->children) - 1; $i >= 0; $i--) {
+            $child = $this->children[$i];
+            if (! $child->getState(State::Visible) || $child->getState(State::Disabled)) {
+                continue;
+            }
+            if (! $child->getBounds()->contains($local)) {
+                continue;
+            }
+
+            if ($event->what === EventType::MouseDown
+                && ($child->options & State::Selectable) !== 0
+                && $child !== $this->currentView
+            ) {
+                $this->setCurrent($child);
+                if (($child->options & State::TopSelect) !== 0) {
+                    $this->bringToFront($child);
+                }
+                if (($child->options & State::FirstClick) === 0) {
+                    $this->clearEvent($event);
+
+                    return;
+                }
+            }
+
+            $child->handleEvent($event);
+
+            return;
         }
     }
 

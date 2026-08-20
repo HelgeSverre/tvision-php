@@ -236,7 +236,7 @@ test('SGR motion report b=32 ESC[<32;15;8M decodes as MouseMove not MouseDown', 
     expect($mouse)->not->toBeNull();
     expect($mouse?->where->x)->toBe(14); // col 15 -> 0-based 14
     expect($mouse?->where->y)->toBe(7);  // row  8 -> 0-based 7
-    expect($mouse?->buttons)->toBe(0);
+    expect($mouse?->buttons)->toBe(1); // left button remains held during b=32 motion
     expect($mouse?->wheel)->toBe(0);
 });
 

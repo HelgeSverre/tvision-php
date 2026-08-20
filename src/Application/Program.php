@@ -74,9 +74,10 @@ class Program extends Group
     }
 
     /**
-     * The application root palette (faithful to TProgram::getPalette / cpAppColor).
-     * Every view's remap palette resolves into this table, where logical indices
-     * finally become real attribute bytes. Without it the chain dead-ends at 0x07.
+     * The application root palette. Every view's remap palette resolves into this
+     * table, where logical indices finally become real attribute bytes. The default
+     * is modern dark; Palettes::CLASSIC_COLOR retains cpAppColor for applications
+     * that explicitly want the original appearance.
      */
     public function getPalette(): ?Palette
     {
@@ -303,12 +304,22 @@ class Program extends Group
 
     public function enableCommand(int $command): void
     {
+        if (! isset($this->disabledCommands[$command])) {
+            return;
+        }
+
         unset($this->disabledCommands[$command]);
+        $this->dirty = true;
     }
 
     public function disableCommand(int $command): void
     {
+        if (isset($this->disabledCommands[$command])) {
+            return;
+        }
+
         $this->disabledCommands[$command] = true;
+        $this->dirty = true;
     }
 
     public function commandEnabled(int $command): bool

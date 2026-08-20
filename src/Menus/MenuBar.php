@@ -93,6 +93,9 @@ final class MenuBar extends MenuView
             }
             foreach ($this->menu->items() as $item) {
                 if ($item->key !== null && $key->is($item->key)) {
+                    if ($item->command !== 0 && ! $this->commandEnabled($item->command)) {
+                        continue;
+                    }
                     // M1: top-level hotkey recognized. A direct command dispatches;
                     // a submenu host is consumed (pull-down navigation is M3).
                     if ($item->command !== 0) {
@@ -131,7 +134,7 @@ final class MenuBar extends MenuView
             $len = $this->visibleLength($item->name);
             $end = $x + $len + 2;
             if ($localX >= $x && $localX < $end) {
-                return $item->command;
+                return $this->commandEnabled($item->command) ? $item->command : 0;
             }
             $x = $end;
         }

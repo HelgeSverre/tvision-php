@@ -47,7 +47,7 @@ test('a fresh scroller has zero delta/limit and is selectable', function (): voi
 
     expect($s->delta)->toEqual(new Point(0, 0))
         ->and($s->limit)->toEqual(new Point(0, 0))
-        ->and($s->getState(State::Selectable))->toBeTrue();
+        ->and(($s->options & State::Selectable) !== 0)->toBeTrue();
 });
 
 test('setLimit stores the limit and parameterises the vertical bar', function (): void {

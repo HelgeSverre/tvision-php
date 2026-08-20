@@ -90,6 +90,18 @@ final class BiosApp extends Application
         $this->setCurrent($screen);
     }
 
+    /** Keep both full-screen layers aligned with the terminal after SIGWINCH. */
+    public function reflowDesktop(): void
+    {
+        $cols = $this->screenObj->cols();
+        $rows = $this->screenObj->rows();
+        $bounds = Rect::of(0, 0, $cols, $rows);
+
+        $this->setBounds($bounds);
+        $this->desktop?->changeBounds($bounds);
+        $this->biosScreenView?->changeBounds($bounds);
+    }
+
     // ── Tab / field definitions ───────────────────────────────────────────────
 
     /** @return list<BiosTab> */

@@ -113,7 +113,7 @@ class View
     /** True if a global point falls within this view's bounds. */
     public function mouseInView(Point $global): bool
     {
-        return $this->bounds->contains($global);
+        return $this->getExtent()->contains($this->makeLocal($global));
     }
 
     /**
@@ -235,6 +235,18 @@ class View
         $event->clear();
     }
 
+    /** Whether this view currently owns an in-progress mouse gesture. */
+    public function hasMouseCapture(): bool
+    {
+        return $this->getState(State::Dragging);
+    }
+
+    /** Resolve command state through the owner chain; Program owns the real set. */
+    public function commandEnabled(int $command): bool
+    {
+        return $this->owner?->commandEnabled($command) ?? true;
+    }
+
     /**
      * End the current modal execute() loop with $command. Overridden by Group;
      * the stub here makes it safe to call on any View owner reference.
@@ -324,22 +336,22 @@ class View
 
     public function writeChar(int $x, int $y, string $char, int $attr, int $count): void
     {
-        $b = new DrawBuffer(max(1, $x + $count));
-        $b->moveChar($x, $char, $attr, $count);
+        $b = new DrawBuffer(max(1, $count));
+        $b->moveChar(0, $char, $attr, $count);
         $this->writeRowCells($x, $y, $count, $b->cells());
     }
 
     public function writeStr(int $x, int $y, string $str, int $attr): void
     {
         $len = mb_strlen($str);
-        $b = new DrawBuffer(max(1, $x + $len));
-        $b->moveStr($x, $str, $attr);
+        $b = new DrawBuffer(max(1, $len));
+        $b->moveStr(0, $str, $attr);
         $this->writeRowCells($x, $y, $len, $b->cells());
     }
 
     /**
-     * Composite $count cells (taken from $cells starting at local column $localX) into
-     * the root back buffer at the view's absolute origin, clipped to the view extent.
+     * Composite the first $count source cells at local ($localX,$localY), clipped to
+     * the view extent.
      *
      * @param Cell[] $cells
      */
@@ -361,7 +373,7 @@ class View
             if ($cx < 0 || $cx >= $this->bounds->width()) {
                 continue; // outside the view extent
             }
-            $cell = $cells[$cx] ?? new Cell();
+            $cell = $cells[$i] ?? new Cell();
             $back->put($origin->x + $cx, $origin->y + $localY, $cell);
         }
     }

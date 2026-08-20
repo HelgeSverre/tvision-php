@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HelgeSverre\TurboVision\Terminal;
 
 use HelgeSverre\TurboVision\Drawing\Buffer;
+use HelgeSverre\TurboVision\Drawing\Cell;
 use HelgeSverre\TurboVision\Drivers\AnsiEncoder;
 use HelgeSverre\TurboVision\Drivers\Driver;
 use HelgeSverre\TurboVision\Drivers\EscapeDecoder;
@@ -33,9 +34,9 @@ final class Screen
 
     private bool $wasResized = false;
 
-    public function __construct(private readonly Driver $driver)
+    public function __construct(private readonly Driver $driver, ?AnsiEncoder $encoder = null)
     {
-        $this->encoder = new AnsiEncoder();
+        $this->encoder = $encoder ?? new AnsiEncoder();
         $this->decoder = new EscapeDecoder();
         $this->presenter = new DiffPresenter();
         // Provisional buffers until init() reads the real size.
@@ -104,7 +105,7 @@ final class Screen
     {
         if ($this->driver->resized()) {
             [$cols, $rows] = $this->driver->size();
-            $this->resizeBuffers($cols, $rows);
+            $this->resizeBuffers($cols, $rows, invalidateFront: true);
             $this->wasResized = true;
         }
 
@@ -137,10 +138,11 @@ final class Screen
         return $was;
     }
 
-    private function resizeBuffers(int $cols, int $rows): void
+    private function resizeBuffers(int $cols, int $rows, bool $invalidateFront = false): void
     {
         $this->back = new Buffer($cols, $rows);
-        $this->front = new Buffer($cols, $rows);
+        $frontFill = $invalidateFront ? new Cell("\0", -1) : null;
+        $this->front = new Buffer($cols, $rows, $frontFill);
     }
 
     private function copyOf(Buffer $source): Buffer

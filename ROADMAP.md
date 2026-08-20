@@ -79,15 +79,9 @@ These are the load-bearing dependencies between milestones — get them right ea
 
 ### Deferred follow-ups from the M2 review (non-blocking nits)
 
-- **Reverse focus.** `Group` only exposes forward `focusNext()`/`selectNext()`, so
-  `Window` Shift-Tab currently focuses forward like Tab. Add a `focusPrev()` primitive to
-  `Group` (touches M3 dialogs too) and wire Shift-Tab to it.
 - **`gfGrowRel` proportional resize** is unimplemented (`View::calcBounds` only does the
   edge-grow flags). Default windows translate+grow by the full delta on terminal resize
   instead of scaling. Implement a `Window::calcBounds` override when it matters.
-- **Z-order raise on select.** `Desktop::selectWindow` changes focus but does not move the
-  window to the front of the child list (faithful TV `makeFirst`). Add raise-on-select so
-  clicking a back window brings it forward (needed once windows overlap meaningfully).
 
 ### Deferred follow-ups from the faithfulness audit (4-family parallel review)
 

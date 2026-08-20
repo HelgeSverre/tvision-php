@@ -75,7 +75,7 @@ test('Guide03 emits a complete colour frame and restores the terminal on quit', 
 
     // The whole frame reaches the terminal (not just the menu bar) — the partial-write bug.
     expect($result['bytes'])->toBeGreaterThan(4000)
-        ->and(substr_count($out, "\e[0;37;44m"))->toBeGreaterThan(10)        // many blue-background desktop rows
+        ->and(substr_count($out, "\e[0;90m"))->toBeGreaterThan(10)           // graphite on terminal-default background
         ->and(substr_count($out, "\e[?2026h"))->toBe(substr_count($out, "\e[?2026l")) // sync balanced
         ->and($result['exited'])->toBeTrue()                                   // Alt-X actually quits
         ->and($out)->toContain("\e[?1049l")                                    // terminal restored (alt-screen left)
@@ -119,6 +119,44 @@ test('Guide04 emits a window demo to a real terminal and quits cleanly on Alt-X'
         ->and($result['exited'])->toBeTrue()                                // Alt-X actually quits
         ->and($out)->toContain("\e[?1049l")                                 // alt-screen left
         ->and($out)->toContain("\e[?25h");                                  // cursor restored
+})->group('integration')->skip(
+    fn (): bool => ! function_exists('proc_open'),
+    'Real-terminal tests require proc_open + PTY support.',
+);
+
+test('Calendar enables hover tracking without forcing cell backgrounds', function (): void {
+    $result = tvRunInPty(__DIR__ . '/../../examples/php/calendar.php', 'q');
+
+    if (! $result['supported']) {
+        $this->markTestSkipped('No usable PTY on this platform.');
+    }
+
+    $out = $result['out'];
+
+    expect($result['bytes'])->toBeGreaterThan(4000)
+        ->and($out)->toContain("\e[?1003h")
+        ->and($out)->toContain("\e[?1003l")
+        ->and($out)->not->toMatch('/\e\[[0-9;]*(?:4[0-7]|10[0-7])m/')
+        ->and($result['exited'])->toBeTrue();
+})->group('integration')->skip(
+    fn (): bool => ! function_exists('proc_open'),
+    'Real-terminal tests require proc_open + PTY support.',
+);
+
+test('Turbo Studio starts with drag tracking and foreground-only output', function (): void {
+    $result = tvRunInPty(__DIR__ . '/../../examples/php/studio.php', 'q');
+
+    if (! $result['supported']) {
+        $this->markTestSkipped('No usable PTY on this platform.');
+    }
+
+    $out = $result['out'];
+
+    expect($result['bytes'])->toBeGreaterThan(100)
+        ->and($out)->toContain("\e[?1003h")
+        ->and($out)->toContain("\e[?1003l")
+        ->and($out)->not->toMatch('/\e\[[0-9;]*(?:4[0-7]|10[0-7])m/')
+        ->and($result['exited'])->toBeTrue();
 })->group('integration')->skip(
     fn (): bool => ! function_exists('proc_open'),
     'Real-terminal tests require proc_open + PTY support.',

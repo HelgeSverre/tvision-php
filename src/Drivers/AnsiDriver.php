@@ -48,6 +48,7 @@ final class AnsiDriver implements Driver
         $stdin = null,
         $stdout = null,
         ?Closure $sttyRunner = null,
+        private readonly bool $trackMouseMotion = false,
     ) {
         $this->stdin = $stdin ?? STDIN;
         $this->stdout = $stdout ?? STDOUT;
@@ -103,7 +104,7 @@ final class AnsiDriver implements Driver
             $this->encoder->enterAltScreen()
             . $this->encoder->clearScreen()
             . $this->encoder->hideCursor()
-            . $this->encoder->enableMouse()
+            . $this->encoder->enableMouse($this->trackMouseMotion)
         );
 
         // Signals: handle them asynchronously so the terminal is restored even if the
@@ -139,7 +140,7 @@ final class AnsiDriver implements Driver
         }
 
         $this->write(
-            $this->encoder->disableMouse()
+            $this->encoder->disableMouse($this->trackMouseMotion)
             . $this->encoder->showCursor()
             . $this->encoder->leaveAltScreen()
             . $this->encoder->reset()

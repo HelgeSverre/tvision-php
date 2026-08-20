@@ -9,6 +9,7 @@ use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
+use HelgeSverre\TurboVision\Events\MouseEvent;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarPart;
@@ -18,8 +19,8 @@ use HelgeSverre\TurboVision\Views\Window\WindowPalette;
 /**
  * A framed, movable, resizable, zoomable, closable group (faithful to TWindow). Owns a
  * Frame as its first subview, carries a title + number + wf* flags, resolves color
- * through one of the three window palettes, and (Task 14) handles cmClose/cmZoom/cmResize
- * plus Tab focus cycling. Implements FrameOwner so its Frame can draw itself.
+ * through one of the three window palettes, handles close/zoom and captured mouse drags,
+ * and cycles focus with Tab/Shift-Tab. Implements FrameOwner for frame rendering.
  */
 class Window extends Group implements FrameOwner
 {
@@ -30,6 +31,12 @@ class Window extends Group implements FrameOwner
     protected Rect $zoomRect;
 
     protected ?Frame $frame = null;
+
+    private ?Point $dragAnchor = null;
+
+    private ?Rect $dragStartBounds = null;
+
+    private int $dragKind = 0;
 
     public function __construct(
         Rect $bounds,
@@ -132,6 +139,28 @@ class Window extends Group implements FrameOwner
 
     public function handleEvent(Event $event): void
     {
+        if ($this->getState(State::Dragging)) {
+            if ($event->what === EventType::MouseMove || $event->what === EventType::MouseUp) {
+                $mouse = $event->asMouse();
+                if ($mouse !== null) {
+                    $this->updateMouseDrag($mouse);
+                    if ($event->what === EventType::MouseUp) {
+                        $this->finishMouseDrag();
+                    }
+                    $this->clearEvent($event);
+                }
+
+                return;
+            }
+
+            if ($event->isKey(Key::Esc)) {
+                $this->finishMouseDrag(cancel: true);
+                $this->clearEvent($event);
+
+                return;
+            }
+        }
+
         parent::handleEvent($event);
 
         if ($event->what === EventType::Command) {
@@ -141,13 +170,6 @@ class Window extends Group implements FrameOwner
                 $forUs = $info === null || $info === $this;
 
                 switch ($msg->command) {
-                    case Cmd::Resize:
-                        if (($this->flags & (WindowFlags::Move | WindowFlags::Grow)) !== 0) {
-                            // In headless tests resizeTo() is driven directly; here we just
-                            // consume so the command does not bubble to siblings.
-                            $this->clearEvent($event);
-                        }
-                        break;
                     case Cmd::Close:
                         if (($this->flags & WindowFlags::Close) !== 0 && $forUs) {
                             $this->clearEvent($event);
@@ -168,10 +190,54 @@ class Window extends Group implements FrameOwner
                 $this->focusNext();
                 $this->clearEvent($event);
             } elseif ($key !== null && $key->keyCode === Key::ShiftTab->value) {
-                $this->focusNext();
+                $this->focusPrevious();
                 $this->clearEvent($event);
             }
         }
+    }
+
+    /** Begin a captured title-bar move or bottom-right resize gesture. */
+    public function beginMouseDrag(MouseEvent $mouse, int $kind): void
+    {
+        $allowed = ($kind === State::DragMove && ($this->flags & WindowFlags::Move) !== 0)
+            || ($kind === State::DragGrow && ($this->flags & WindowFlags::Grow) !== 0);
+        if (! $allowed) {
+            return;
+        }
+
+        $this->dragAnchor = $mouse->where;
+        $this->dragStartBounds = $this->bounds;
+        $this->dragKind = $kind;
+        $this->setState(State::Dragging, true);
+    }
+
+    private function updateMouseDrag(MouseEvent $mouse): void
+    {
+        if ($this->dragAnchor === null || $this->dragStartBounds === null) {
+            return;
+        }
+
+        $dx = $mouse->where->x - $this->dragAnchor->x;
+        $dy = $mouse->where->y - $this->dragAnchor->y;
+        $start = $this->dragStartBounds;
+
+        $next = $this->dragKind === State::DragGrow
+            ? Rect::of($start->a->x, $start->a->y, $start->b->x + $dx, $start->b->y + $dy)
+            : $start->move($dx, $dy);
+
+        $this->resizeTo($next);
+    }
+
+    private function finishMouseDrag(bool $cancel = false): void
+    {
+        if ($cancel && $this->dragStartBounds !== null) {
+            $this->changeBounds($this->dragStartBounds);
+        }
+
+        $this->dragAnchor = null;
+        $this->dragStartBounds = null;
+        $this->dragKind = 0;
+        $this->setState(State::Dragging, false);
     }
 
     /** Remove this window from its owner (faithful close, sans valid()/destroy). */
@@ -211,6 +277,9 @@ class Window extends Group implements FrameOwner
         if (($flag & State::Selected) !== 0) {
             parent::setState(State::Active, $enable);
             $this->frame?->setState(State::Active, $enable);
+        }
+        if (($flag & State::Dragging) !== 0) {
+            $this->frame?->setState(State::Dragging, $enable);
         }
     }
 }

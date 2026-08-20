@@ -19,6 +19,14 @@ use HelgeSverre\TurboVision\Geometry\Point;
  */
 final class EscapeDecoder
 {
+    private const float DOUBLE_CLICK_SECONDS = 0.5;
+
+    private float $lastClickAt = 0.0;
+
+    private ?Point $lastClickPoint = null;
+
+    private int $lastClickButton = 0;
+
     /**
      * CSI final-byte (single char) -> navigation Key.
      * Includes lowercase rxvt variants (a=Up, b=Down, c=Right, d=Left).
@@ -409,7 +417,9 @@ final class EscapeDecoder
         // The terminal sends these when the mouse moves while a button is held
         // (button-motion mode) or in any-motion mode.
         if (($rawB & 0x20) !== 0) {
-            $events[] = Event::mouse(EventType::MouseMove, new MouseEvent(new Point($x, $y), 0));
+            $buttonIndex = $rawB & 0x03;
+            $buttons = $buttonIndex === 3 ? 0 : 1 << $buttonIndex;
+            $events[] = Event::mouse(EventType::MouseMove, new MouseEvent(new Point($x, $y), $buttons));
 
             return;
         }
@@ -420,8 +430,28 @@ final class EscapeDecoder
         $buttonIndex = $rawB & 0x03;
         $buttonBit   = 1 << $buttonIndex;
         $what        = $press ? EventType::MouseDown : EventType::MouseUp;
+        $doubleClick = false;
+        if ($press) {
+            $now = microtime(true);
+            $point = new Point($x, $y);
+            $doubleClick = $buttonBit === $this->lastClickButton
+                && $this->lastClickPoint?->equals($point) === true
+                && $now - $this->lastClickAt <= self::DOUBLE_CLICK_SECONDS;
+            if ($doubleClick) {
+                $this->lastClickAt = 0.0;
+                $this->lastClickPoint = null;
+                $this->lastClickButton = 0;
+            } else {
+                $this->lastClickAt = $now;
+                $this->lastClickPoint = $point;
+                $this->lastClickButton = $buttonBit;
+            }
+        }
 
-        $events[] = Event::mouse($what, new MouseEvent(new Point($x, $y), $buttonBit));
+        $events[] = Event::mouse(
+            $what,
+            new MouseEvent(new Point($x, $y), $buttonBit, $doubleClick),
+        );
     }
 
     /** Resolve an "Alt<LETTER>" case name to the Key enum, or null. */

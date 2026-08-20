@@ -52,6 +52,15 @@ final class StatusLine extends MenuView
         return [];
     }
 
+    /** @return list<StatusItem> */
+    private function enabledItems(): array
+    {
+        return array_values(array_filter(
+            $this->items(),
+            fn (StatusItem $item): bool => $this->commandEnabled($item->command),
+        ));
+    }
+
     public function draw(): void
     {
         $width = $this->bounds->width();
@@ -62,7 +71,7 @@ final class StatusLine extends MenuView
         $b->moveChar(0, ' ', $cNormal, $width);
 
         $x = 0;
-        foreach ($this->items() as $item) {
+        foreach ($this->enabledItems() as $item) {
             if ($item->text === '') {
                 continue;
             }
@@ -85,7 +94,7 @@ final class StatusLine extends MenuView
             if ($key === null) {
                 return;
             }
-            foreach ($this->items() as $item) {
+            foreach ($this->enabledItems() as $item) {
                 if ($item->key !== null && $key->is($item->key)) {
                     // Faithful: rewrite this event into a Command in place.
                     $event->what = EventType::Command;
@@ -119,7 +128,7 @@ final class StatusLine extends MenuView
     public function commandAtColumn(int $localX): int
     {
         $x = 0;
-        foreach ($this->items() as $item) {
+        foreach ($this->enabledItems() as $item) {
             if ($item->text === '') {
                 continue;
             }

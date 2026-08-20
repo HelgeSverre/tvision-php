@@ -123,6 +123,17 @@ test('SGR mouse release preserves the releasing button bit so callers can match 
         ->and($result->events[0]->asMouse()?->buttons)->toBe(1); // bit 0 = left button
 });
 
+test('two quick presses at the same position are marked as a double click', function (): void {
+    $decoder = new EscapeDecoder();
+
+    $first = $decoder->decode("\e[<0;10;5M")->events[0]->asMouse();
+    $decoder->decode("\e[<0;10;5m");
+    $second = $decoder->decode("\e[<0;10;5M")->events[0]->asMouse();
+
+    expect($first?->doubleClick)->toBeFalse()
+        ->and($second?->doubleClick)->toBeTrue();
+});
+
 test('a lone trailing ESC is returned as remainder, not an event', function (): void {
     $result = (new EscapeDecoder())->decode("\e");
 

@@ -12,6 +12,8 @@ use HelgeSverre\TurboVision\Drawing\Attribute;
  */
 final class AnsiEncoder
 {
+    public function __construct(private readonly bool $useDefaultBackgroundForBlack = true) {}
+
     /** Cursor Position (CUP): move to 0-based ($x, $y). */
     public function moveCursor(int $x, int $y): string
     {
@@ -21,7 +23,7 @@ final class AnsiEncoder
     /** SGR sequence for a packed Turbo Vision attribute byte. */
     public function style(int $attrByte): string
     {
-        return Attribute::fromByte($attrByte)->toSgr();
+        return Attribute::fromByte($attrByte)->toSgr($this->useDefaultBackgroundForBlack);
     }
 
     /** Move + style + literal text — the renderer's per-run workhorse. */
@@ -60,15 +62,19 @@ final class AnsiEncoder
         return "\e[?1049l";
     }
 
-    /** Enable xterm normal-tracking (1000) + SGR extended (1006) mouse reporting. */
-    public function enableMouse(): string
+    /** Enable button tracking and, when requested, hover/any-motion reporting. */
+    public function enableMouse(bool $trackMouseMotion = false): string
     {
-        return "\e[?1000h\e[?1006h";
+        return "\e[?1000h\e[?1002h"
+            . ($trackMouseMotion ? "\e[?1003h" : '')
+            . "\e[?1006h";
     }
 
-    public function disableMouse(): string
+    public function disableMouse(bool $trackMouseMotion = false): string
     {
-        return "\e[?1006l\e[?1000l";
+        return "\e[?1006l"
+            . ($trackMouseMotion ? "\e[?1003l" : '')
+            . "\e[?1002l\e[?1000l";
     }
 
     /**

@@ -6,26 +6,19 @@ namespace HelgeSverre\TurboVision\Application;
 
 /**
  * The application root colour palettes — the tables every view's palette resolves
- * into. Each byte is a packed attribute (fg | bg<<4). Verbatim from Turbo Vision's
- * cpAppColor / cpAppBlackWhite in docs/references/source/tvision-0.8/lib/app.h.
+ * into. Each byte is a packed attribute (fg | bg<<4). CLASSIC_COLOR and BLACK_WHITE
+ * are verbatim Turbo Vision palettes from
+ * docs/references/source/tvision-0.8/lib/app.h; MODERN_DARK preserves the same logical
+ * indexes with terminal-friendly dark attributes.
  *
  * A view's getPalette() returns a *remap* table of indices into this one; the chain
  * terminates here (Program::getPalette()), where indices become real attribute bytes.
  */
 final class Palettes
 {
-    /**
-     * Colour screen palette (cpAppColor). Index 1 is the desktop background.
-     *
-     * MODERN-RENDERING DEVIATION (the only byte that differs from Borland/Sigala):
-     * the original index 1 is 0x71 (blue ink on a light-gray field). On a CGA/console
-     * the '░' dither blended that into a blue desktop, but on a crisp modern terminal
-     * ANSI light-gray (bg 47) renders as near-white, so 0x71 reads as a white field.
-     * We use 0x17 (light-gray ink on a BLUE field, bg 44) so the desktop is reliably
-     * blue on any terminal — reproducing the *appearance* TV users saw, not the byte.
-     */
-    public const string COLOR =
-        "\x17\x70\x78\x74\x20\x28\x24\x17\x1F\x1A\x31\x31\x1E\x71\x1F" .
+    /** Original Turbo Vision colour-screen palette (cpAppColor). */
+    public const string CLASSIC_COLOR =
+        "\x71\x70\x78\x74\x20\x28\x24\x17\x1F\x1A\x31\x31\x1E\x71\x1F" .
         "\x37\x3F\x3A\x13\x13\x3E\x21\x3F\x70\x7F\x7A\x13\x13\x70\x7F\x7E" .
         "\x70\x7F\x7A\x13\x13\x70\x70\x7F\x7E\x20\x2B\x2F\x78\x2E\x70\x30" .
         "\x3F\x3E\x1F\x2F\x1A\x20\x72\x31\x31\x30\x2F\x3E\x31\x13\x38\x00" .
@@ -34,6 +27,26 @@ final class Palettes
         "\x37\x3F\x3A\x13\x13\x3E\x30\x3F\x3E\x20\x2B\x2F\x78\x2E\x30\x70" .
         "\x7F\x7E\x1F\x2F\x1A\x20\x32\x31\x71\x70\x2F\x7E\x71\x13\x78\x00" .
         "\x37\x3F\x3A\x13\x13\x30\x3E\x1E";
+
+    /**
+     * Modern dark palette. It uses the terminal/browser canvas as its background,
+     * with dark-gray structure, cool-gray text, and foreground-only cyan/white
+     * emphasis. Its indexes intentionally match CLASSIC_COLOR so existing view
+     * remaps work.
+     */
+    public const string MODERN_DARK =
+        "\x08\x07\x08\x0C\x0F\x08\x0C\x07\x0F\x0A\x0B\x0B\x0E\x0B\x0F" .
+        "\x07\x0F\x0A\x0B\x0B\x0E\x0B\x0F\x07\x0F\x0A\x0B\x0B\x07\x0F" .
+        "\x0E\x07\x0F\x0A\x0B\x0B\x07\x07\x0F\x0E\x0F\x0B\x0F\x08\x0E" .
+        "\x07\x0F\x0F\x0E\x0F\x0F\x0A\x0F\x0A\x0B\x0B\x0F\x0F\x0E\x0B" .
+        "\x0B\x08\x00\x07\x0F\x0A\x0B\x0B\x0E\x07\x0F\x0E\x0F\x0B\x0F" .
+        "\x08\x0E\x07\x0F\x0F\x0E\x07\x0F\x0A\x0F\x0A\x0B\x0B\x0F\x0F" .
+        "\x0E\x0B\x0B\x08\x00\x07\x0F\x0A\x0B\x0B\x0E\x0F\x0F\x0E\x0F" .
+        "\x0B\x0F\x08\x0E\x0F\x07\x0F\x0E\x0F\x0F\x0A\x0F\x0A\x0B\x0B" .
+        "\x07\x0F\x0E\x0B\x0B\x08\x00\x07\x0F\x0A\x0B\x0B\x0F\x0E\x0E";
+
+    /** Default colour palette. Kept under the established public constant name. */
+    public const string COLOR = self::MODERN_DARK;
 
     /** Black-and-white / LCD screen palette (cpAppBlackWhite). */
     public const string BLACK_WHITE =

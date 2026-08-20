@@ -121,6 +121,22 @@ test('a driver resize reflows the buffers and sets wasResized', function (): voi
         ->and($screen->back()->height)->toBe(3);
 });
 
+test('a driver resize invalidates the front buffer and forces a full repaint', function (): void {
+    $driver = new HeadlessDriver(2, 1);
+    $screen = new Screen($driver);
+    $screen->init();
+
+    $screen->back()->put(0, 0, new Cell('X', 0x07));
+    $screen->flush();
+    $driver->takeOutput();
+
+    $driver->resizeTo(3, 1);
+    $screen->pollEvents(0);
+    $screen->flush();
+
+    expect($driver->takeOutput())->toContain('   ');
+});
+
 test('end-to-end: draw a bordered box, flush, assert the rendered glyphs', function (): void {
     $driver = new HeadlessDriver(6, 3);
     $screen = new Screen($driver);

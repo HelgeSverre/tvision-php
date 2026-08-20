@@ -22,7 +22,7 @@ test('a single changed cell emits move + style + char', function (): void {
     $ansi = (new DiffPresenter())->present($front, $back, new AnsiEncoder());
 
     // move to (2,0) -> "\e[1;3H", style 0x07, "X"
-    expect($ansi)->toBe("\e[1;3H" . "\e[0;37;40m" . 'X');
+    expect($ansi)->toBe("\e[1;3H" . "\e[0;37m" . 'X');
 });
 
 test('consecutive changed cells of one attr coalesce into a single run', function (): void {
@@ -35,7 +35,7 @@ test('consecutive changed cells of one attr coalesce into a single run', functio
     $ansi = (new DiffPresenter())->present($front, $back, new AnsiEncoder());
 
     // one move to col 1, one style, then "abc"
-    expect($ansi)->toBe("\e[1;2H" . "\e[0;37;40m" . 'abc');
+    expect($ansi)->toBe("\e[1;2H" . "\e[0;37m" . 'abc');
 });
 
 test('an attr change mid-run re-emits style but not a move', function (): void {
@@ -48,7 +48,7 @@ test('an attr change mid-run re-emits style but not a move', function (): void {
     $ansi = (new DiffPresenter())->present($front, $back, new AnsiEncoder());
 
     expect($ansi)->toBe(
-        "\e[1;1H" . "\e[0;37;40m" . 'a'  // run start: move + style + 'a'
+        "\e[1;1H" . "\e[0;37m" . 'a'  // run start: move + style + 'a'
         . "\e[0;97;44m" . 'bc'           // attr changes: re-style, no move, 'bc'
     );
 });
@@ -63,8 +63,8 @@ test('an unchanged gap splits cells into separate runs', function (): void {
     $ansi = (new DiffPresenter())->present($front, $back, new AnsiEncoder());
 
     expect($ansi)->toBe(
-        "\e[1;1H" . "\e[0;37;40m" . 'a'   // run 1 at col 0
-        . "\e[1;3H" . "\e[0;37;40m" . 'b' // run 2 at col 2 (new move)
+        "\e[1;1H" . "\e[0;37m" . 'a'   // run 1 at col 0
+        . "\e[1;3H" . "\e[0;37m" . 'b' // run 2 at col 2 (new move)
     );
 });
 
@@ -77,7 +77,7 @@ test('rows are emitted top-to-bottom with independent moves', function (): void 
     $ansi = (new DiffPresenter())->present($front, $back, new AnsiEncoder());
 
     expect($ansi)->toBe(
-        "\e[1;1H" . "\e[0;37;40m" . 'a'   // row 0
-        . "\e[2;1H" . "\e[0;37;40m" . 'b' // row 1
+        "\e[1;1H" . "\e[0;37m" . 'a'   // row 0
+        . "\e[2;1H" . "\e[0;37m" . 'b' // row 1
     );
 });

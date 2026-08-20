@@ -10,7 +10,8 @@ use HelgeSverre\TurboVision\Drawing\Buffer;
  * Renders a screen Buffer to a self-contained HTML document — a monospace grid of
  * coloured cells using the canonical CGA/VGA RGB palette. Companion to DiffPresenter
  * (which renders to ANSI): this one is for human eyeballing and pixel-diff visual
- * snapshot tests, so it uses fixed RGB values independent of any terminal theme.
+ * snapshot tests. Foregrounds and explicit backgrounds use fixed RGB values; default
+ * black backgrounds inherit the browser canvas unless classic rendering is requested.
  */
 final class HtmlRenderer
 {
@@ -21,6 +22,8 @@ final class HtmlRenderer
         8 => '#555555', 9 => '#5555ff', 10 => '#55ff55', 11 => '#55ffff',
         12 => '#ff5555', 13 => '#ff55ff', 14 => '#ffff55', 15 => '#ffffff',
     ];
+
+    public function __construct(private readonly bool $useDefaultBackgroundForBlack = true) {}
 
     public function render(Buffer $buffer): string
     {
@@ -40,7 +43,9 @@ final class HtmlRenderer
                 $line .= sprintf(
                     '<span style="color:%s;background:%s">%s</span>',
                     self::CGA[$attr & 0x0F],
-                    self::CGA[($attr >> 4) & 0x07],
+                    $this->useDefaultBackgroundForBlack && (($attr >> 4) & 0x07) === 0
+                        ? 'transparent'
+                        : self::CGA[($attr >> 4) & 0x07],
                     $run,
                 );
             }
@@ -48,7 +53,8 @@ final class HtmlRenderer
         }
 
         return '<!doctype html><html><head><meta charset="utf-8"><style>'
-            . 'html,body{margin:0;padding:0;background:#000}'
+            . 'html{color-scheme:dark}'
+            . 'html,body{margin:0;padding:0;background:#000;background:Canvas}'
             . 'pre{margin:0;font:16px/1.0 "Menlo","DejaVu Sans Mono",monospace;'
             . 'letter-spacing:0;white-space:pre;display:inline-block}'
             . 'span{display:inline}</style></head><body><pre>'

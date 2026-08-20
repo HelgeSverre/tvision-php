@@ -8,10 +8,10 @@ use HelgeSverre\TurboVision\Terminal\Screen;
 
 /**
  * Regression test for the monochrome bug: the per-view palettes are remap tables
- * that must resolve into the application root palette (cpAppColor). Without it,
- * View::mapColor() dead-ends at the 0x07 fallback and the whole UI is monochrome.
+ * that must resolve into the application root palette. Without it, View::mapColor()
+ * dead-ends at the 0x07 fallback and the whole UI is monochrome.
  */
-test('the desktop renders in the palette colour, not monochrome 0x07', function (): void {
+test('the desktop renders with the modern dark palette', function (): void {
     $driver = new HeadlessDriver(80, 25);
     $app = new class(new Screen($driver)) extends Application {};
 
@@ -22,12 +22,12 @@ test('the desktop renders in the palette colour, not monochrome 0x07', function 
     $cell = $app->screen()?->back()->at(10, 10);
 
     expect($cell?->char)->toBe('░')      // sparse light pattern
-        ->and($cell?->attr)->toBe(0x17); // 0x17 = light-gray on BLUE (the desktop), NOT the 0x07 fallback
+        ->and($cell?->attr)->toBe(0x08); // dark-gray texture on black
 });
 
-test('the application root palette resolves index 1 to the blue desktop colour 0x17', function (): void {
+test('the application root palette resolves index 1 to the dark desktop colour', function (): void {
     $app = new class(new Screen(new HeadlessDriver(80, 25))) extends Application {};
 
     // mapColor(1) at the program root must hit the application palette.
-    expect($app->mapColor(1))->toBe(0x17);
+    expect($app->mapColor(1))->toBe(0x08);
 });

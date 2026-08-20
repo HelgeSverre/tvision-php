@@ -33,13 +33,20 @@ final readonly class Attribute
         );
     }
 
-    /** An ANSI SGR sequence that resets then applies this attribute. */
-    public function toSgr(): string
+    /**
+     * An ANSI SGR sequence that resets then applies this attribute. By default, CGA
+     * black inherits the terminal background: terminal themes commonly make ANSI
+     * black lighter than their canvas, which otherwise creates rectangles behind
+     * every glyph. Pass false for byte-faithful classic rendering.
+     */
+    public function toSgr(bool $useDefaultBackgroundForBlack = true): string
     {
         $codes = [
             $this->fg->value < 8 ? 30 + self::ansiCode($this->fg) : 90 + self::ansiCode($this->fg),
-            $this->bg->value < 8 ? 40 + self::ansiCode($this->bg) : 100 + self::ansiCode($this->bg),
         ];
+        if (! $useDefaultBackgroundForBlack || $this->bg !== Color::Black) {
+            $codes[] = $this->bg->value < 8 ? 40 + self::ansiCode($this->bg) : 100 + self::ansiCode($this->bg);
+        }
 
         if ($this->blink) {
             $codes[] = 5;

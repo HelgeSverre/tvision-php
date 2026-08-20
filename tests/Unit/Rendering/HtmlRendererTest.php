@@ -16,7 +16,7 @@ test('renders each cell with its CGA foreground and background colours', functio
     expect($html)->toContain('charset')
         ->and($html)->toContain('#0000aa')   // CGA blue fg
         ->and($html)->toContain('#aaaaaa')   // CGA light-gray (bg of A, fg of B)
-        ->and($html)->toContain('#000000')   // CGA black (bg of B)
+        ->and($html)->toContain('background:transparent') // default canvas behind B
         ->and($html)->toContain('>A<')
         ->and($html)->toContain('>B<');
 });
@@ -30,4 +30,11 @@ test('HTML-escapes special characters and keeps UTF-8 glyphs', function (): void
 
     expect($html)->toContain('&lt;')
         ->and($html)->toContain('░');
+});
+
+test('renderer can preserve literal CGA black for classic output', function (): void {
+    $buffer = new Buffer(1, 1);
+
+    expect((new HtmlRenderer(useDefaultBackgroundForBlack: false))->render($buffer))
+        ->toContain('background:#000000');
 });

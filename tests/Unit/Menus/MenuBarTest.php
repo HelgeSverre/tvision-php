@@ -5,9 +5,11 @@ declare(strict_types=1);
 use HelgeSverre\TurboVision\Drivers\HeadlessDriver;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Menus\Menu;
 use HelgeSverre\TurboVision\Menus\MenuBar;
 use HelgeSverre\TurboVision\Menus\MenuItem;
 use HelgeSverre\TurboVision\Menus\SubMenu;
@@ -17,6 +19,9 @@ use HelgeSverre\TurboVision\Views\Group;
 /** A root group that exposes a real Screen so MenuBar compositing is testable. */
 final class MenuBarRoot extends Group
 {
+    /** @var array<int, true> */
+    private array $disabledCommands = [];
+
     public function __construct(Rect $bounds, private readonly Screen $rootScreen)
     {
         parent::__construct($bounds);
@@ -25,6 +30,16 @@ final class MenuBarRoot extends Group
     public function screen(): Screen
     {
         return $this->rootScreen;
+    }
+
+    public function disableCommand(int $command): void
+    {
+        $this->disabledCommands[$command] = true;
+    }
+
+    public function commandEnabled(int $command): bool
+    {
+        return ! isset($this->disabledCommands[$command]);
     }
 }
 
@@ -88,4 +103,20 @@ test('clicking a leaf-command item dispatches its command via putEvent', functio
 
     // The bar exposes the command it would dispatch for a click at a column.
     expect($bar->commandAtColumn(2))->toBe(0); // submenu host has no direct command
+});
+
+test('a disabled direct menu command ignores keyboard and mouse activation', function (): void {
+    [$root] = menuRoot(20);
+    $menu = new Menu([
+        new MenuItem('E~x~it', Cmd::Quit, Key::AltX, 'Exit'),
+    ]);
+    $bar = new MenuBar(Rect::of(0, 0, 20, 1), $menu);
+    $root->insert($bar);
+    $root->disableCommand(Cmd::Quit);
+
+    $event = Event::keyDown(new KeyDownEvent(Key::AltX->value));
+    $bar->handleEvent($event);
+
+    expect($event->what)->toBe(EventType::KeyDown)
+        ->and($bar->commandAtColumn(2))->toBe(0);
 });

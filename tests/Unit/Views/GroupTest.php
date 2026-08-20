@@ -71,6 +71,21 @@ test('a positional event routes to the subview under the mouse', function (): vo
         ->and($left->seen)->toBe([]);
 });
 
+test('a positional event is translated through nested group origins', function (): void {
+    $root = new Group(Rect::of(0, 0, 80, 25));
+    $nested = new Group(Rect::of(30, 5, 50, 15));
+    $leaf = new RecordingView(Rect::of(0, 0, 10, 4));
+    $nested->insert($leaf);
+    $root->insert($nested);
+
+    $root->handleEvent(Event::mouse(
+        EventType::MouseDown,
+        new MouseEvent(new Point(31, 6)),
+    ));
+
+    expect($leaf->seen)->toBe([EventType::MouseDown]);
+});
+
 test('a focused event routes to current first', function (): void {
     $g = new Group(Rect::of(0, 0, 10, 10));
     $a = new RecordingView(Rect::of(0, 0, 10, 5));
@@ -129,6 +144,9 @@ test('selectNext moves focus across selectable subviews', function (): void {
 
     $g->selectNext();
     expect($g->current())->toBe($a); // wraps
+
+    $g->selectPrevious();
+    expect($g->current())->toBe($b); // reverse wraps
 });
 
 test('execView pumps a modal view until it ends modal, returning the command', function (): void {

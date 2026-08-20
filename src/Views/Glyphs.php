@@ -18,6 +18,11 @@ final class Glyphs
     public const string SINGLE_BOTTOM_RIGHT = '┘';
     public const string SINGLE_HORIZONTAL = '─';
     public const string SINGLE_VERTICAL = '│';
+    public const string SINGLE_TEE_DOWN = '┬';
+    public const string SINGLE_TEE_UP = '┴';
+    public const string SINGLE_TEE_RIGHT = '├';
+    public const string SINGLE_TEE_LEFT = '┤';
+    public const string SINGLE_CROSS = '┼';
 
     // Double-line box (active window frame).
     public const string DOUBLE_TOP_LEFT = '╔';

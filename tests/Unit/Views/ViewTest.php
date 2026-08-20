@@ -95,6 +95,20 @@ test('writeBuf blits a DrawBuffer row, clipped to the view extent', function ():
     expect($screen->back()->rows())->toBe([' ABC    ', '        ']);
 });
 
+test('writeLine copies from source column zero when the destination x is non-zero', function (): void {
+    $screen = new Screen(new HeadlessDriver(8, 2));
+    $screen->init();
+    $root = new RootStub($screen);
+    $view = new View(Rect::of(0, 0, 8, 2));
+    $root->insert($view);
+    $buffer = new DrawBuffer(3);
+    $buffer->moveStr(0, 'ABC', 0x07);
+
+    $view->writeLine(3, 0, 3, 1, $buffer);
+
+    expect($screen->back()->rows()[0])->toBe('   ABC  ');
+});
+
 test('mapColor resolves through the view own palette', function (): void {
     $v = new PalettedView(Rect::of(0, 0, 4, 4));
 

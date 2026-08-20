@@ -10,7 +10,12 @@ test('single-line box glyphs', function (): void {
         ->and(Glyphs::SINGLE_BOTTOM_LEFT)->toBe('└')
         ->and(Glyphs::SINGLE_BOTTOM_RIGHT)->toBe('┘')
         ->and(Glyphs::SINGLE_HORIZONTAL)->toBe('─')
-        ->and(Glyphs::SINGLE_VERTICAL)->toBe('│');
+        ->and(Glyphs::SINGLE_VERTICAL)->toBe('│')
+        ->and(Glyphs::SINGLE_TEE_DOWN)->toBe('┬')
+        ->and(Glyphs::SINGLE_TEE_UP)->toBe('┴')
+        ->and(Glyphs::SINGLE_TEE_RIGHT)->toBe('├')
+        ->and(Glyphs::SINGLE_TEE_LEFT)->toBe('┤')
+        ->and(Glyphs::SINGLE_CROSS)->toBe('┼');
 });
 
 test('double-line box glyphs', function (): void {

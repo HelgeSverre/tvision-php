@@ -16,8 +16,8 @@ use HelgeSverre\TurboVision\Views\Window\WindowFlags;
  * The border/title/icon view drawn as a window's last subview (faithful to TFrame).
  * Single-line box when inactive, double-line when active; centered title; close icon
  * (left), zoom/unzoom icon and window number (right), drag icon (bottom-right). Reads
- * everything it needs from the owning Window via the FrameOwner contract. Mouse
- * handling (move/resize/close/zoom) is added in Task 12.
+ * everything it needs from the owning Window via the FrameOwner contract and handles
+ * the frame's move, resize, close, and zoom mouse gestures.
  */
 class Frame extends View
 {
@@ -177,7 +177,11 @@ class Frame extends View
                 return;
             }
             if (($flags & WindowFlags::Move) !== 0) {
-                $this->putEvent(Event::command(Cmd::Resize, $owner));
+                if ($owner instanceof Window) {
+                    $owner->beginMouseDrag($mouse, State::DragMove);
+                } else {
+                    $this->putEvent(Event::command(Cmd::Resize, $owner));
+                }
                 $this->clearEvent($event);
 
                 return;
@@ -186,7 +190,11 @@ class Frame extends View
 
         // Bottom-right resize corner.
         if ($local->x >= $w - 2 && $local->y >= $h - 1 && $active && ($flags & WindowFlags::Grow) !== 0) {
-            $this->putEvent(Event::command(Cmd::Resize, $owner));
+            if ($owner instanceof Window) {
+                $owner->beginMouseDrag($mouse, State::DragGrow);
+            } else {
+                $this->putEvent(Event::command(Cmd::Resize, $owner));
+            }
             $this->clearEvent($event);
         }
     }

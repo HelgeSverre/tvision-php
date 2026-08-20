@@ -84,6 +84,21 @@ test('BIOS renders the key legend at the bottom', function (): void {
         ->and($text)->toContain('Esc');
 });
 
+test('BIOS reflows its full-screen view after a terminal resize', function (): void {
+    $driver = new HeadlessDriver(80, 25);
+    $app = new BiosApp(new Screen($driver));
+    $app->bootForTest();
+
+    $driver->resizeTo(100, 30);
+    $app->pumpResizeForTest();
+    $app->drawAndFlushForTest();
+
+    expect($app->biosScreen()->getBounds()->width())->toBe(100)
+        ->and($app->biosScreen()->getBounds()->height())->toBe(30)
+        ->and($app->backRowsForTest())->toHaveCount(30)
+        ->and(mb_strlen($app->backRowsForTest()[0]))->toBe(100);
+});
+
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
 test('Right arrow switches to Advanced tab', function (): void {

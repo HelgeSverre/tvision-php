@@ -39,12 +39,10 @@ class Desktop extends Group
     /** Make $window the current, selected view; deselect the previous current. */
     public function selectWindow(View $window): void
     {
-        $previous = $this->current();
-        if ($previous !== null && $previous !== $window) {
-            $previous->setState(State::Selected, false);
-        }
         $this->setCurrent($window);
-        $window->setState(State::Selected, true);
+        if (($window->options & State::TopSelect) !== 0) {
+            $this->bringToFront($window);
+        }
     }
 
     public function remove(View $view): void
@@ -65,7 +63,7 @@ class Desktop extends Group
         if ($event->what === EventType::Command) {
             $msg = $event->asMessage();
             if ($msg !== null && ($msg->command === Cmd::Next || $msg->command === Cmd::Prev)) {
-                $this->cycleWindow();
+                $this->cycleWindow($msg->command === Cmd::Next ? 1 : -1);
                 $this->clearEvent($event);
 
                 return;
@@ -76,7 +74,7 @@ class Desktop extends Group
     }
 
     /** Cycle the current window to the next selectable window (wrapping). */
-    private function cycleWindow(): void
+    private function cycleWindow(int $direction): void
     {
         $windows = array_values(array_filter(
             $this->subviews(),
@@ -93,7 +91,8 @@ class Desktop extends Group
                 break;
             }
         }
-        $next = $windows[($idx + 1) % count($windows)];
+        $count = count($windows);
+        $next = $windows[(($idx + $direction) % $count + $count) % $count];
         $this->selectWindow($next);
     }
 

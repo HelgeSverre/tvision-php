@@ -5,8 +5,11 @@ declare(strict_types=1);
 use HelgeSverre\TurboVision\Drivers\HeadlessDriver;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
+use HelgeSverre\TurboVision\Events\MouseEvent;
+use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Terminal\Screen;
 use HelgeSverre\TurboVision\Views\Frame;
@@ -66,7 +69,7 @@ test('cmZoom toggles the window to the desktop extent and back', function (): vo
     expect($w->getBounds())->toEqual(Rect::of(2, 2, 28, 9));
 });
 
-test('cmResize moves the window inside the desktop, clamped to size limits', function (): void {
+test('resizeTo keeps the window inside the desktop and clamps to size limits', function (): void {
     [$desk] = winRoot(80, 25);
     $w = new Window(Rect::of(2, 2, 28, 9), 'Demo', 1);
     $desk->insert($w);
@@ -96,6 +99,62 @@ test('Tab cycles focus among selectable subviews', function (): void {
 
     expect($w->current())->toBe($b)
         ->and($ev->isNothing())->toBeTrue();
+});
+
+test('Shift-Tab cycles focus backward', function (): void {
+    [$desk] = winRoot(80, 25);
+    $w = new Window(Rect::of(0, 0, 26, 7), 'Demo', 1);
+    $a = new View(Rect::of(1, 1, 5, 5));
+    $a->options |= State::Selectable;
+    $b = new View(Rect::of(6, 1, 10, 5));
+    $b->options |= State::Selectable;
+    $w->insert($a);
+    $w->insert($b);
+    $w->setCurrent($a);
+    $desk->insert($w);
+
+    $event = Event::keyDown(new KeyDownEvent(Key::ShiftTab->value));
+    $w->handleEvent($event);
+
+    expect($w->current())->toBe($b)
+        ->and($event->isNothing())->toBeTrue();
+});
+
+test('title-bar drag moves a window through captured mouse events', function (): void {
+    [$desk] = winRoot(80, 25);
+    $w = new Window(Rect::of(10, 4, 36, 11), 'Demo', 1);
+    $desk->insert($w);
+
+    $down = Event::mouse(EventType::MouseDown, new MouseEvent(new Point(20, 4), 1));
+    $desk->handleEvent($down);
+    expect($w->getState(State::Dragging))->toBeTrue();
+
+    $desk->handleEvent(Event::mouse(EventType::MouseMove, new MouseEvent(new Point(25, 7), 1)));
+    $desk->handleEvent(Event::mouse(EventType::MouseUp, new MouseEvent(new Point(25, 7), 1)));
+
+    expect($w->getBounds())->toEqual(Rect::of(15, 7, 41, 14))
+        ->and($w->getState(State::Dragging))->toBeFalse();
+});
+
+test('bottom-right drag resizes a window through captured mouse events', function (): void {
+    [$desk] = winRoot(80, 25);
+    $w = new Window(Rect::of(10, 4, 36, 11), 'Demo', 1);
+    $desk->insert($w);
+
+    $desk->handleEvent(Event::mouse(
+        EventType::MouseDown,
+        new MouseEvent(new Point(35, 10), 1),
+    ));
+    $desk->handleEvent(Event::mouse(
+        EventType::MouseMove,
+        new MouseEvent(new Point(40, 13), 1),
+    ));
+    $desk->handleEvent(Event::mouse(
+        EventType::MouseUp,
+        new MouseEvent(new Point(40, 13), 1),
+    ));
+
+    expect($w->getBounds())->toEqual(Rect::of(10, 4, 41, 14));
 });
 
 test('selecting the window marks its frame active', function (): void {

@@ -21,3 +21,10 @@ test('cell glyphs reject values that cannot occupy exactly one terminal column',
         ->and(TerminalText::cellGlyph("\n"))->toBe('?')
         ->and(TerminalText::cellGlyph('AB'))->toBe('?');
 });
+
+test('printable ASCII fast paths retain grapheme slice semantics', function (): void {
+    expect(TerminalText::graphemes('Turbo'))->toBe(['T', 'u', 'r', 'b', 'o'])
+        ->and(TerminalText::length('Turbo'))->toBe(5)
+        ->and(TerminalText::slice('Turbo', -3, 2))->toBe('rb')
+        ->and(TerminalText::slice('Turbo', 2))->toBe('rbo');
+});

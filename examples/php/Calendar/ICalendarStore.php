@@ -13,12 +13,24 @@ use UnexpectedValueException;
 /**
  * Focused RFC 5545 reader/writer for the event data used by the demo.
  *
- * Unknown calendar and VEVENT properties are intentionally ignored, allowing files
- * exported by Apple Calendar and other providers to retain their useful core data.
+ * Unknown calendar and VEVENT properties are preserved verbatim when a loaded file
+ * is written again. The demo still models only its focused event subset, but opening
+ * a provider export must not silently delete alarms, attendees, or provider metadata.
  */
 final class ICalendarStore
 {
     private const int MAX_FILE_BYTES = 2_000_000;
+
+    /** @var list<string> Unfolded non-VEVENT lines inside the loaded VCALENDAR. */
+    private array $preservedCalendarLines = [];
+
+    /** @var array<string, list<string>> Unfolded unmodeled lines keyed by event UID. */
+    private array $preservedEventLines = [];
+
+    /** @var array<string, string> Escaped CATEGORIES suffixes, including the leading comma. */
+    private array $preservedCategorySuffixes = [];
+
+    private bool $hasPreservedSource = false;
 
     public function __construct(
         private readonly DateTimeZone $timezone,
@@ -28,6 +40,8 @@ final class ICalendarStore
     public function load(string $path): array
     {
         if (! is_file($path)) {
+            $this->resetPreservedSource();
+
             return [];
         }
 
@@ -86,6 +100,9 @@ final class ICalendarStore
         }
 
         $events = [];
+        $calendarLines = [];
+        $eventExtras = [];
+        $categorySuffixes = [];
         $insideEvent = false;
         $eventLines = [];
         $eventNumber = 0;
@@ -111,6 +128,11 @@ final class ICalendarStore
                 }
                 $uids[$event->uid] = true;
                 $events[] = $event;
+                $eventExtras[$event->uid] = $this->unmodeledEventLines($eventLines);
+                $categorySuffix = $this->categorySuffix($eventLines);
+                if ($categorySuffix !== '') {
+                    $categorySuffixes[$event->uid] = $categorySuffix;
+                }
                 $insideEvent = false;
                 $eventLines = [];
 
@@ -134,6 +156,7 @@ final class ICalendarStore
                     $eventLines = [];
                 } else {
                     $componentStack[] = $component;
+                    $calendarLines[] = $line;
                 }
 
                 continue;
@@ -149,7 +172,13 @@ final class ICalendarStore
                 if ($expected === null || $expected !== $component) {
                     throw new UnexpectedValueException("Mismatched iCalendar component end: {$content['value']}");
                 }
+
+                $calendarLines[] = $line;
+
+                continue;
             }
+
+            $calendarLines[] = $line;
         }
         if ($insideEvent) {
             throw new UnexpectedValueException('Unterminated VEVENT component.');
@@ -157,6 +186,12 @@ final class ICalendarStore
         if ($componentStack !== []) {
             throw new UnexpectedValueException('Unterminated iCalendar component.');
         }
+
+        // Commit preservation state only after the complete document has validated.
+        $this->preservedCalendarLines = $calendarLines;
+        $this->preservedEventLines = $eventExtras;
+        $this->preservedCategorySuffixes = $categorySuffixes;
+        $this->hasPreservedSource = true;
 
         return $events;
     }
@@ -178,13 +213,18 @@ final class ICalendarStore
     /** @param list<CalendarEvent> $events */
     public function serialize(array $events): string
     {
-        $lines = [
-            'BEGIN:VCALENDAR',
-            'VERSION:2.0',
-            'PRODID:-//HelgeSverre//TurboVision PHP Calendar//EN',
-            'CALSCALE:GREGORIAN',
-            'X-WR-CALNAME:TurboVision Calendar',
-        ];
+        $lines = ['BEGIN:VCALENDAR'];
+        if ($this->hasPreservedSource) {
+            array_push($lines, ...$this->preservedCalendarLines);
+        } else {
+            array_push(
+                $lines,
+                'VERSION:2.0',
+                'PRODID:-//HelgeSverre//TurboVision PHP Calendar//EN',
+                'CALSCALE:GREGORIAN',
+                'X-WR-CALNAME:TurboVision Calendar',
+            );
+        }
 
         foreach ($events as $event) {
             $lines[] = 'BEGIN:VEVENT';
@@ -206,20 +246,25 @@ final class ICalendarStore
             if ($event->notes !== '') {
                 $lines[] = 'DESCRIPTION:' . $this->escapeText($event->notes);
             }
-            if ($event->calendar !== '') {
-                $lines[] = 'CATEGORIES:' . $this->escapeText($event->calendar);
+            $categorySuffix = $this->preservedCategorySuffixes[$event->uid] ?? '';
+            if ($event->calendar !== '' || $categorySuffix !== '') {
+                $lines[] = 'CATEGORIES:' . $this->escapeText($event->calendar) . $categorySuffix;
             }
             if ($event->repeat !== RepeatRule::Never) {
                 $rule = 'FREQ=' . $event->repeat->value;
                 if ($event->recurrenceCount !== null) {
                     $rule .= ';COUNT=' . $event->recurrenceCount;
                 } elseif ($event->recurrenceUntil !== null) {
-                    $rule .= ';UNTIL=' . $event->recurrenceUntil
-                        ->setTimezone(new DateTimeZone('UTC'))
-                        ->format('Ymd\THis\Z');
+                    $rule .= ';UNTIL=' . ($event->allDay
+                        ? $event->recurrenceUntil
+                            ->format('Ymd')
+                        : $event->recurrenceUntil
+                            ->setTimezone(new DateTimeZone('UTC'))
+                            ->format('Ymd\THis\Z'));
                 }
                 $lines[] = 'RRULE:' . $rule;
             }
+            array_push($lines, ...($this->preservedEventLines[$event->uid] ?? []));
             $lines[] = 'END:VEVENT';
         }
 
@@ -265,6 +310,7 @@ final class ICalendarStore
         $allDay = false;
         $repeat = RepeatRule::Never;
         $recurrenceUntil = null;
+        $recurrenceUntilIsDate = null;
         $recurrenceCount = null;
         $nestedComponents = [];
         $seen = [];
@@ -336,7 +382,7 @@ final class ICalendarStore
                     $duration = new DateInterval($content['value']);
                     break;
                 case 'RRULE':
-                    [$repeat, $recurrenceUntil, $recurrenceCount] = $this->parseRecurrence($content['value']);
+                    [$repeat, $recurrenceUntil, $recurrenceCount, $recurrenceUntilIsDate] = $this->parseRecurrence($content['value']);
                     break;
                 case 'EXDATE':
                 case 'RDATE':
@@ -360,6 +406,9 @@ final class ICalendarStore
         }
         if ($end !== null && $allDay !== $endAllDay) {
             throw new UnexpectedValueException('DTSTART and DTEND must use the same value type.');
+        }
+        if ($recurrenceUntil !== null && $recurrenceUntilIsDate !== $allDay) {
+            throw new UnexpectedValueException('RRULE UNTIL must use the same value type as DTSTART.');
         }
         if ($end === null && $duration !== null) {
             $end = $start->add($duration);
@@ -453,7 +502,7 @@ final class ICalendarStore
         }
     }
 
-    /** @return array{RepeatRule, ?DateTimeImmutable, ?int} */
+    /** @return array{RepeatRule, ?DateTimeImmutable, ?int, ?bool} */
     private function parseRecurrence(string $value): array
     {
         $parts = [];
@@ -480,8 +529,9 @@ final class ICalendarStore
             throw new UnexpectedValueException('A recurrence rule cannot contain both UNTIL and COUNT.');
         }
         $until = null;
+        $untilIsDate = null;
         if (($parts['UNTIL'] ?? '') !== '') {
-            [$until] = $this->parseDateValue($parts['UNTIL'], []);
+            [$until, $untilIsDate] = $this->parseDateValue($parts['UNTIL'], []);
         }
         $count = null;
         if (isset($parts['COUNT'])) {
@@ -491,7 +541,7 @@ final class ICalendarStore
             $count = (int) $parts['COUNT'];
         }
 
-        return [$repeat, $until, $count];
+        return [$repeat, $until, $count, $untilIsDate];
     }
 
     private function escapeText(string $value): string
@@ -532,6 +582,91 @@ final class ICalendarStore
         }
 
         return $value;
+    }
+
+    /** @param list<string> $lines */
+    private function categorySuffix(array $lines): string
+    {
+        $nestedDepth = 0;
+        foreach ($lines as $line) {
+            $content = $this->parseContentLine($line);
+            if ($content === null) {
+                continue;
+            }
+            if ($content['name'] === 'BEGIN') {
+                $nestedDepth++;
+
+                continue;
+            }
+            if ($content['name'] === 'END') {
+                $nestedDepth = max(0, $nestedDepth - 1);
+
+                continue;
+            }
+            if ($nestedDepth !== 0 || $content['name'] !== 'CATEGORIES') {
+                continue;
+            }
+
+            $first = $this->firstListValue($content['value']);
+
+            return substr($content['value'], strlen($first));
+        }
+
+        return '';
+    }
+
+    /**
+     * @param list<string> $lines
+     * @return list<string>
+     */
+    private function unmodeledEventLines(array $lines): array
+    {
+        $managed = [
+            'UID',
+            'DTSTAMP',
+            'SUMMARY',
+            'DTSTART',
+            'DTEND',
+            'DURATION',
+            'LOCATION',
+            'DESCRIPTION',
+            'CATEGORIES',
+            'RRULE',
+        ];
+        $extras = [];
+        $nestedDepth = 0;
+
+        foreach ($lines as $line) {
+            $content = $this->parseContentLine($line);
+            if ($content === null) {
+                continue;
+            }
+            if ($content['name'] === 'BEGIN') {
+                $nestedDepth++;
+                $extras[] = $line;
+
+                continue;
+            }
+            if ($content['name'] === 'END') {
+                $nestedDepth = max(0, $nestedDepth - 1);
+                $extras[] = $line;
+
+                continue;
+            }
+            if ($nestedDepth !== 0 || ! in_array($content['name'], $managed, true)) {
+                $extras[] = $line;
+            }
+        }
+
+        return $extras;
+    }
+
+    private function resetPreservedSource(): void
+    {
+        $this->preservedCalendarLines = [];
+        $this->preservedEventLines = [];
+        $this->preservedCategorySuffixes = [];
+        $this->hasPreservedSource = false;
     }
 
     private function foldLine(string $line): string

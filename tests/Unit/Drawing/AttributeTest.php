@@ -28,6 +28,15 @@ test('fromByte reverses toByte for the low-8 background range', function (): voi
     expect(Attribute::fromByte($a->toByte()))->toEqual($a);
 });
 
+test('cell values preserve bright backgrounds without changing classic byte packing', function (): void {
+    $attribute = new Attribute(Color::White, Color::DarkGray);
+    $cellValue = $attribute->toCellValue();
+
+    expect($cellValue)->toBeGreaterThan(0xFF)
+        ->and(Attribute::fromCellValue($cellValue))->toEqual($attribute)
+        ->and($attribute->toByte())->toBe(0x0F);
+});
+
 test('SGR uses bright codes for the high 8 colors', function (): void {
     // White fg (CGA 15 -> bright 97), Blue bg (CGA 1 -> ANSI 4 -> 44)
     expect((new Attribute(Color::White, Color::Blue))->toSgr())->toBe("\e[0;97;44m");

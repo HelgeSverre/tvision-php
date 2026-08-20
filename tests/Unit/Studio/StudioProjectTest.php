@@ -8,6 +8,7 @@ use HelgeSverre\TurboVision\Examples\Studio\StudioHistory;
 use HelgeSverre\TurboVision\Examples\Studio\StudioPhpExporter;
 use HelgeSverre\TurboVision\Examples\Studio\StudioProject;
 use HelgeSverre\TurboVision\Examples\Studio\StudioProjectStore;
+use HelgeSverre\TurboVision\Examples\Studio\StudioPathGuard;
 use HelgeSverre\TurboVision\Examples\Studio\StudioTheme;
 
 test('studio component sigils occupy a predictable number of terminal columns', function (): void {
@@ -62,6 +63,7 @@ test('studio themes have distinct complete foreground-only visual systems', func
 
 test('studio projects add, clamp, reorder, duplicate, and round-trip components', function (): void {
     $project = StudioProject::blank();
+    $project->setThemeName('Amber');
     $label = $project->add(StudioComponentType::Label);
     $button = $project->add(StudioComponentType::Button);
 
@@ -79,6 +81,7 @@ test('studio projects add, clamp, reorder, duplicate, and round-trip components'
         ->and($button->width)->toBe(6)
         ->and($button->height)->toBe(1)
         ->and($copy->text)->toBe('Continue copy')
+        ->and($roundTrip->themeName())->toBe('Amber')
         ->and($roundTrip->toArray())->toBe($project->toArray());
 });
 
@@ -142,11 +145,14 @@ test('studio project imports reject malformed structure and sanitize terminal co
     $duplicateIds['components'][] = $duplicateIds['components'][0];
     $missingField = $data;
     unset($missingField['components'][0]['type']);
+    $nullTheme = $data;
+    $nullTheme['theme'] = null;
 
     expect($project->name())->toBe('Safe [31m title')
         ->and($project->components()[0]->text)->toBe('Hello  [2Jworld')
         ->and(fn (): StudioProject => StudioProject::fromArray($duplicateIds))->toThrow(\InvalidArgumentException::class)
-        ->and(fn (): StudioProject => StudioProject::fromArray($missingField))->toThrow(\InvalidArgumentException::class);
+        ->and(fn (): StudioProject => StudioProject::fromArray($missingField))->toThrow(\InvalidArgumentException::class)
+        ->and(fn (): StudioProject => StudioProject::fromArray($nullTheme))->toThrow(\InvalidArgumentException::class);
 });
 
 test('studio code generation substitutes placeholders only once', function (): void {
@@ -155,6 +161,35 @@ test('studio code generation substitutes placeholders only once', function (): v
     $source = (new StudioPhpExporter())->generate(StudioProject::fromArray($data));
 
     expect($source)->toContain("private const string PROJECT_NAME = '{{PROJECT_WIDTH}}';");
+});
+
+test('studio code generation carries the project theme into the exported app', function (): void {
+    $project = StudioProject::blank();
+    $project->setThemeName('Amber');
+
+    $source = (new StudioPhpExporter())->generate($project);
+
+    expect($source)->toContain('private const int COLOR_CANVAS = 6;')
+        ->and($source)->toContain('private const int COLOR_ACCENT = 14;')
+        ->and($source)->toContain('self::COLOR_ACCENT');
+});
+
+test('studio path guard resolves aliases to an existing target', function (): void {
+    $directory = sys_get_temp_dir() . '/tvision-studio-path-' . bin2hex(random_bytes(6));
+    mkdir($directory);
+    $projectPath = $directory . '/Project.json';
+    file_put_contents($projectPath, '{}');
+    $caseAlias = $directory . '/project.JSON';
+
+    try {
+        expect(StudioPathGuard::sameTarget($projectPath, $projectPath))->toBeTrue();
+        if (is_file($caseAlias)) {
+            expect(StudioPathGuard::sameTarget($projectPath, $caseAlias))->toBeTrue();
+        }
+    } finally {
+        unlink($projectPath);
+        rmdir($directory);
+    }
 });
 
 test('studio projects save atomically and export syntactically valid runnable PHP', function (): void {

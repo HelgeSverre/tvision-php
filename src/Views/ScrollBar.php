@@ -10,6 +10,7 @@ use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Support\IntMath;
 use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarPart;
 
 /**
@@ -65,12 +66,23 @@ class ScrollBar extends View
     /** Thumb position (1-based offset along the track), faithful to TScrollBar::getPos. */
     public function getPos(): int
     {
-        $r = $this->maxVal - $this->minVal;
-        if ($r === 0) {
+        if ($this->maxVal === $this->minVal) {
             return 1;
         }
 
-        return intdiv(($this->value - $this->minVal) * ($this->getSize() - 3) + intdiv($r, 2), $r) + 1;
+        // Integer intermediates overflow for a legitimate full-width model such as
+        // [PHP_INT_MIN, PHP_INT_MAX]. A bounded ratio keeps the same nearest-position
+        // behavior while ensuring no caller-controlled range is promoted into intdiv().
+        $range = (float) $this->maxVal - (float) $this->minVal;
+        $relative = ((float) $this->value - (float) $this->minVal) / $range;
+        $relative = max(0.0, min(1.0, $relative));
+        $track = max(0, $this->getSize() - 3);
+        $scaled = floor($relative * $track + 0.5);
+        // Large in-range integers round to 2^63 as doubles on 64-bit PHP. Compare in
+        // the float domain first and reuse the exact integer track before casting.
+        $offset = $scaled >= (float) $track ? $track : (int) $scaled;
+
+        return IntMath::add(1, $offset);
     }
 
     /**
@@ -95,8 +107,8 @@ class ScrollBar extends View
             }
         }
 
-        $this->pageStep = $pageStep;
-        $this->arrowStep = $arrowStep;
+        $this->pageStep = max(0, $pageStep);
+        $this->arrowStep = max(0, $arrowStep);
     }
 
     public function setRange(int $min, int $max): void
@@ -169,7 +181,9 @@ class ScrollBar extends View
     /** Signed step for a part code, faithful to TScrollBar::scrollStep. */
     public function scrollStep(int $part): int
     {
-        $step = ($part & 2) !== 0 ? $this->pageStep : $this->arrowStep;
+        // These fields are public for Turbo Vision compatibility, so normalize again
+        // here in case application code mutated them after setParams().
+        $step = max(0, ($part & 2) !== 0 ? $this->pageStep : $this->arrowStep);
 
         return ($part & 1) !== 0 ? $step : -$step;
     }
@@ -218,7 +232,7 @@ class ScrollBar extends View
             return; // not a key this bar handles
         }
 
-        $newValue = $absolute ?? ($this->value + $this->scrollStep($part));
+        $newValue = $absolute ?? IntMath::add($this->value, $this->scrollStep($part));
         $this->setValue($newValue);
         $this->clearEvent($event);
     }

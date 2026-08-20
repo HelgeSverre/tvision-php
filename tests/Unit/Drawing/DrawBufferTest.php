@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use HelgeSverre\TurboVision\Drawing\Buffer;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 
 /** Helper: render the buffer's characters as a string for readable assertions. */
@@ -74,4 +75,29 @@ test('putAttribute recolors a column without changing its char', function (): vo
 
     expect($b->cells()[2]->char)->toBe('c')
         ->and($b->cells()[2]->attr)->toBe(0x40);
+});
+
+test('draw buffer width cannot be negative', function (): void {
+    expect(fn () => new DrawBuffer(-1))
+        ->toThrow(InvalidArgumentException::class, 'non-negative')
+        ->and(fn () => new DrawBuffer(Buffer::MAX_CELLS + 1))
+        ->toThrow(InvalidArgumentException::class, 'safe cell limit');
+});
+
+test('moveChar clips pathological counts to visible work', function (): void {
+    $buffer = new DrawBuffer(4);
+
+    $buffer->moveChar(-2, 'X', 0x07, PHP_INT_MAX);
+    $buffer->moveChar(PHP_INT_MAX, 'Y', 0x07, PHP_INT_MAX);
+
+    expect(dbChars($buffer))->toBe('XXXX');
+});
+
+test('string cursor advancement saturates at the integer boundary', function (): void {
+    $buffer = new DrawBuffer(1);
+
+    expect($buffer->moveCStr(PHP_INT_MAX, 'AB', 0x07, 0x08))->toBe(PHP_INT_MAX);
+    $buffer->moveStr(PHP_INT_MAX, 'AB', 0x07);
+
+    expect($buffer->cells()[0]->char)->toBe(' ');
 });

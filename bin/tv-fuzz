@@ -1,0 +1,1152 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use HelgeSverre\TurboVision\Drawing\Buffer;
+use HelgeSverre\TurboVision\Drawing\Cell;
+use HelgeSverre\TurboVision\Drawing\DrawBuffer;
+use HelgeSverre\TurboVision\Drawing\TerminalText;
+use HelgeSverre\TurboVision\Drivers\AnsiDriver;
+use HelgeSverre\TurboVision\Drivers\AnsiEncoder;
+use HelgeSverre\TurboVision\Drivers\Driver;
+use HelgeSverre\TurboVision\Drivers\EscapeDecoder;
+use HelgeSverre\TurboVision\Drivers\HeadlessDriver;
+use HelgeSverre\TurboVision\Exceptions\DriverException;
+use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\Key;
+use HelgeSverre\TurboVision\Events\KeyDownEvent;
+use HelgeSverre\TurboVision\Geometry\Point;
+use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Rendering\DiffPresenter;
+use HelgeSverre\TurboVision\Support\IntMath;
+use HelgeSverre\TurboVision\Terminal\Screen;
+use HelgeSverre\TurboVision\Views\Group;
+use HelgeSverre\TurboVision\Views\ListViewer;
+use HelgeSverre\TurboVision\Views\ScrollBar;
+use HelgeSverre\TurboVision\Views\State;
+use HelgeSverre\TurboVision\Views\View;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+final class FuzzFailure extends RuntimeException {}
+
+/** @return never */
+function failFuzz(string $suite, int $iteration, int $seed, string $message): never
+{
+    throw new FuzzFailure("FAIL suite={$suite} iteration={$iteration} seed={$seed}: {$message}");
+}
+
+function fuzzAssert(bool $condition, string $suite, int $iteration, int $seed, string $message): void
+{
+    if (! $condition) {
+        failFuzz($suite, $iteration, $seed, $message);
+    }
+}
+
+/** @param callable():mixed $operation */
+function fuzzException(callable $operation): ?Throwable
+{
+    try {
+        $operation();
+    } catch (Throwable $exception) {
+        return $exception;
+    }
+
+    return null;
+}
+
+function fuzzThrowable(Throwable $exception): string
+{
+    $caller = $exception->getTrace()[1] ?? $exception->getTrace()[0] ?? null;
+    $callerLocation = is_array($caller)
+        ? sprintf(
+            ' via %s:%d',
+            (string) ($caller['file'] ?? $caller['function'] ?? 'unknown'),
+            (int) ($caller['line'] ?? 0),
+        )
+        : '';
+
+    return sprintf(
+        '%s: %s at %s:%d%s',
+        $exception::class,
+        $exception->getMessage(),
+        $exception->getFile(),
+        $exception->getLine(),
+        $callerLocation,
+    );
+}
+
+function randomBytes(int $maxLength): string
+{
+    $length = mt_rand(0, $maxLength);
+    $bytes = '';
+    for ($i = 0; $i < $length; $i++) {
+        $bytes .= chr(mt_rand(0, 255));
+    }
+
+    return $bytes;
+}
+
+function randomEdgeInteger(int $min, int $max): int
+{
+    if (mt_rand(0, 2) !== 0) {
+        return mt_rand($min, $max);
+    }
+
+    $edges = [PHP_INT_MIN, -1_000_000, -1, 0, 1, 1_000_000, PHP_INT_MAX];
+
+    return $edges[array_rand($edges)];
+}
+
+/** @return list<string> */
+function fuzzGlyphs(): array
+{
+    return [
+        ' ', 'A', '~', '─', '┼', 'é', "e\u{0301}", '中', '😀', "\u{200D}",
+        "\x80", "\xC2", "\0", "ab",
+    ];
+}
+
+/** @return array<string, int|string|bool|null> */
+function eventFingerprint(Event $event): array
+{
+    $key = $event->asKey();
+    if ($key !== null) {
+        return [
+            'what' => $event->what->value,
+            'key' => $key->keyCode,
+            'char' => bin2hex($key->char),
+            'modifiers' => $key->modifiers,
+        ];
+    }
+    $mouse = $event->asMouse();
+    if ($mouse !== null) {
+        return [
+            'what' => $event->what->value,
+            'x' => $mouse->where->x,
+            'y' => $mouse->where->y,
+            'buttons' => $mouse->buttons,
+            'wheel' => $mouse->wheel,
+            // Double-click timing is deliberately excluded from chunk equivalence.
+        ];
+    }
+
+    return ['what' => $event->what->value];
+}
+
+/** A controllable Driver used to inject failures at Screen's I/O boundary. */
+final class FaultInjectingDriver implements Driver
+{
+    public bool $initialised = false;
+
+    public int $shutdownCalls = 0;
+
+    public int $writeCalls = 0;
+
+    private ?string $nextFault = null;
+
+    private bool $resizePending = false;
+
+    private string $output = '';
+
+    public function __construct(private int $cols, private int $rows) {}
+
+    public function failNext(string $operation): void
+    {
+        $this->nextFault = $operation;
+    }
+
+    public function init(): void
+    {
+        $this->initialised = true;
+        $this->triggerFault('init');
+    }
+
+    public function shutdown(): void
+    {
+        $this->initialised = false;
+        $this->shutdownCalls++;
+    }
+
+    public function size(): array
+    {
+        $this->triggerFault('size');
+
+        return [$this->cols, $this->rows];
+    }
+
+    public function write(string $bytes): void
+    {
+        $this->writeCalls++;
+        $this->triggerFault('write');
+        $this->output .= $bytes;
+    }
+
+    public function pollInput(int $timeoutMs): string
+    {
+        $this->triggerFault('pollInput');
+
+        return '';
+    }
+
+    public function resized(): bool
+    {
+        $this->triggerFault('resized');
+        $resized = $this->resizePending;
+        $this->resizePending = false;
+
+        return $resized;
+    }
+
+    public function queueResize(int $cols, int $rows): void
+    {
+        $this->cols = $cols;
+        $this->rows = $rows;
+        $this->resizePending = true;
+    }
+
+    public function output(): string
+    {
+        return $this->output;
+    }
+
+    private function triggerFault(string $operation): void
+    {
+        if ($this->nextFault !== $operation) {
+            return;
+        }
+
+        $this->nextFault = null;
+
+        throw new RuntimeException("injected {$operation} failure");
+    }
+}
+
+final class FuzzScreenRoot extends View
+{
+    public function __construct(private readonly Screen $fuzzScreen)
+    {
+        parent::__construct(Rect::of(0, 0, $fuzzScreen->cols(), $fuzzScreen->rows()));
+    }
+
+    public function screen(): Screen
+    {
+        return $this->fuzzScreen;
+    }
+}
+
+final class FuzzListViewer extends ListViewer
+{
+    public function getText(int $item, int $maxLen): string
+    {
+        return TerminalText::slice('Item ' . $item, 0, max(0, $maxLen));
+    }
+}
+
+function fuzzDecoder(int $iterations, int $seed): void
+{
+    for ($iteration = 0; $iteration < $iterations; $iteration++) {
+        $input = randomBytes(512);
+        try {
+            $result = (new EscapeDecoder())->decode($input);
+        } catch (Throwable $exception) {
+            failFuzz('decoder', $iteration, $seed, fuzzThrowable($exception));
+        }
+
+        fuzzAssert(
+            strlen($result->remainder) <= strlen($input),
+            'decoder',
+            $iteration,
+            $seed,
+            'remainder is longer than the input',
+        );
+        fuzzAssert(
+            $result->remainder === '' || str_ends_with($input, $result->remainder),
+            'decoder',
+            $iteration,
+            $seed,
+            'remainder is not an input suffix',
+        );
+        foreach ($result->events as $event) {
+            fuzzAssert($event instanceof Event, 'decoder', $iteration, $seed, 'non-Event result');
+        }
+
+        $incrementalDecoder = new EscapeDecoder();
+        $incrementalEvents = [];
+        $incrementalRemainder = '';
+        $chunkLengths = [];
+        for ($offset = 0, $length = strlen($input); $offset < $length;) {
+            $chunkLength = mt_rand(1, 16);
+            $chunk = substr($input, $offset, $chunkLength);
+            $chunkLengths[] = strlen($chunk);
+            $offset += strlen($chunk);
+            $chunkResult = $incrementalDecoder->decode($incrementalRemainder . $chunk);
+            array_push($incrementalEvents, ...$chunkResult->events);
+            $incrementalRemainder = $chunkResult->remainder;
+        }
+        fuzzAssert(
+            array_map('eventFingerprint', $incrementalEvents) === array_map('eventFingerprint', $result->events),
+            'decoder',
+            $iteration,
+            $seed,
+            'chunked decoding changed the event stream for input=' . bin2hex($input)
+                . ' chunks=' . implode(',', $chunkLengths)
+                . ' whole=' . json_encode(array_map('eventFingerprint', $result->events), JSON_THROW_ON_ERROR)
+                . ' chunked=' . json_encode(array_map('eventFingerprint', $incrementalEvents), JSON_THROW_ON_ERROR),
+        );
+        fuzzAssert(
+            $incrementalRemainder === $result->remainder,
+            'decoder',
+            $iteration,
+            $seed,
+            'chunked decoding changed the remainder for input=' . bin2hex($input),
+        );
+    }
+}
+
+function fuzzScreen(int $iterations, int $seed): void
+{
+    $driver = new HeadlessDriver(80, 24);
+    $now = 1.0;
+    $screen = new Screen($driver, clock: static function () use (&$now): float {
+        return $now;
+    });
+    $screen->init();
+
+    for ($iteration = 0; $iteration < $iterations; $iteration++) {
+        $expectedCols = $screen->cols();
+        $expectedRows = $screen->rows();
+        if (mt_rand(0, 9) === 0) {
+            $expectedCols = mt_rand(0, 240);
+            $expectedRows = mt_rand(0, 100);
+            $driver->resizeTo($expectedCols, $expectedRows);
+        }
+        $bytes = randomBytes(96);
+        $offset = 0;
+        try {
+            while ($offset < strlen($bytes)) {
+                $chunkLength = mt_rand(1, 12);
+                $driver->feedInput(substr($bytes, $offset, $chunkLength));
+                $offset += $chunkLength;
+                $events = $screen->pollEvents(0);
+                foreach ($events as $event) {
+                    fuzzAssert($event instanceof Event, 'screen', $iteration, $seed, 'non-Event result');
+                }
+                if (mt_rand(0, 3) === 0) {
+                    $now += mt_rand(0, 300) / 1000;
+                    $screen->pollEvents(0);
+                }
+            }
+            $now += 0.3;
+            $screen->pollEvents(0);
+            fuzzAssert(
+                $screen->cols() === $expectedCols && $screen->rows() === $expectedRows,
+                'screen',
+                $iteration,
+                $seed,
+                "resize lost: expected {$expectedCols}x{$expectedRows}, got {$screen->cols()}x{$screen->rows()}",
+            );
+        } catch (Throwable $exception) {
+            failFuzz('screen', $iteration, $seed, fuzzThrowable($exception));
+        }
+    }
+}
+
+function fuzzScreenLifecycle(int $iterations, int $seed): void
+{
+    for ($iteration = 0; $iteration < $iterations; $iteration++) {
+        $scenario = mt_rand(0, 7);
+        $cols = mt_rand(0, 120);
+        $rows = mt_rand(0, 50);
+        $driver = new FaultInjectingDriver($cols, $rows);
+        $screen = new Screen($driver);
+
+        if ($scenario === 0) {
+            $screen->init();
+            if ($cols > 0 && $rows > 0) {
+                $screen->back()->put(mt_rand(0, $cols - 1), mt_rand(0, $rows - 1), new Cell('X', mt_rand(0, 255)));
+            }
+            $screen->flush();
+            $newCols = mt_rand(0, 120);
+            $newRows = mt_rand(0, 50);
+            $driver->queueResize($newCols, $newRows);
+            $screen->pollEvents(0);
+            fuzzAssert(
+                $screen->cols() === $newCols && $screen->rows() === $newRows,
+                'lifecycle',
+                $iteration,
+                $seed,
+                'a successful resize did not replace both buffers',
+            );
+            fuzzAssert(
+                $screen->wasResized() && ! $screen->wasResized(),
+                'lifecycle',
+                $iteration,
+                $seed,
+                'resize notification was not edge-triggered',
+            );
+            $screen->shutdown();
+            $screen->shutdown();
+            fuzzAssert(! $driver->initialised, 'lifecycle', $iteration, $seed, 'shutdown left driver initialized');
+
+            continue;
+        }
+
+        if ($scenario === 1 || $scenario === 2) {
+            $fault = $scenario === 1 ? 'init' : 'size';
+            $driver->failNext($fault);
+            $exception = fuzzException($screen->init(...));
+            fuzzAssert(
+                $exception instanceof RuntimeException && $exception->getMessage() === "injected {$fault} failure",
+                'lifecycle',
+                $iteration,
+                $seed,
+                "{$fault} failure was swallowed or replaced",
+            );
+            fuzzAssert(
+                ! $driver->initialised && $driver->shutdownCalls === 1,
+                'lifecycle',
+                $iteration,
+                $seed,
+                "{$fault} failure did not unwind the driver",
+            );
+
+            continue;
+        }
+
+        if ($scenario === 3) {
+            [$badCols, $badRows] = match (mt_rand(0, 3)) {
+                0 => [-1, mt_rand(0, 50)],
+                1 => [mt_rand(0, 120), -1],
+                2 => [Buffer::MAX_CELLS + 1, 1],
+                default => [2, intdiv(Buffer::MAX_CELLS, 2) + 1],
+            };
+            $driver->queueResize($badCols, $badRows);
+            $exception = fuzzException($screen->init(...));
+            fuzzAssert(
+                $exception instanceof InvalidArgumentException,
+                'lifecycle',
+                $iteration,
+                $seed,
+                "unsafe {$badCols}x{$badRows} dimensions were accepted",
+            );
+            fuzzAssert(
+                ! $driver->initialised && $driver->shutdownCalls === 1,
+                'lifecycle',
+                $iteration,
+                $seed,
+                'unsafe dimensions did not unwind the driver',
+            );
+
+            continue;
+        }
+
+        $screen->init();
+        if ($scenario === 4) {
+            if ($cols === 0 || $rows === 0) {
+                $driver->queueResize(max(1, $cols), max(1, $rows));
+                $screen->pollEvents(0);
+            }
+            $screen->back()->put(0, 0, new Cell('R', 0x07));
+            $driver->failNext('write');
+            $exception = fuzzException($screen->flush(...));
+            fuzzAssert(
+                $exception instanceof RuntimeException && $exception->getMessage() === 'injected write failure',
+                'lifecycle',
+                $iteration,
+                $seed,
+                'write failure was swallowed or replaced',
+            );
+            $screen->flush();
+            $afterRetry = $driver->output();
+            $screen->flush();
+            fuzzAssert(
+                $afterRetry !== '' && $driver->output() === $afterRetry && $driver->writeCalls === 2,
+                'lifecycle',
+                $iteration,
+                $seed,
+                'a failed frame was lost or resent after a successful retry',
+            );
+        } elseif ($scenario === 5) {
+            $driver->failNext('pollInput');
+            $exception = fuzzException(static fn (): array => $screen->pollEvents(0));
+            fuzzAssert(
+                $exception instanceof RuntimeException && $exception->getMessage() === 'injected pollInput failure',
+                'lifecycle',
+                $iteration,
+                $seed,
+                'poll failure was swallowed or replaced',
+            );
+        } elseif ($scenario === 6) {
+            $driver->queueResize(mt_rand(0, 120), mt_rand(0, 50));
+            $driver->failNext('size');
+            $exception = fuzzException(static fn (): array => $screen->pollEvents(0));
+            fuzzAssert(
+                $exception instanceof RuntimeException && $exception->getMessage() === 'injected size failure',
+                'lifecycle',
+                $iteration,
+                $seed,
+                'resize sizing failure was swallowed or replaced',
+            );
+            fuzzAssert(
+                $screen->cols() === $cols && $screen->rows() === $rows,
+                'lifecycle',
+                $iteration,
+                $seed,
+                'failed resize partially replaced the buffers',
+            );
+        } else {
+            $driver->failNext('resized');
+            $exception = fuzzException(static fn (): array => $screen->pollEvents(0));
+            fuzzAssert(
+                $exception instanceof RuntimeException && $exception->getMessage() === 'injected resized failure',
+                'lifecycle',
+                $iteration,
+                $seed,
+                'resize probe failure was swallowed or replaced',
+            );
+        }
+        $screen->shutdown();
+        fuzzAssert(! $driver->initialised, 'lifecycle', $iteration, $seed, 'failure-path shutdown left driver initialized');
+    }
+}
+
+function fuzzAnsiInput(int $iterations, int $seed): void
+{
+    for ($iteration = 0; $iteration < $iterations; $iteration++) {
+        $streams = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        $output = fopen('php://memory', 'r+b');
+        fuzzAssert($streams !== false && $output !== false, 'ansi-input', $iteration, $seed, 'could not create streams');
+        [$input, $peer] = $streams;
+        $driver = new AnsiDriver($input, $output, static fn (string $cmd): string => '24 80');
+        $scenario = mt_rand(0, 3);
+
+        try {
+            if ($scenario === 0) {
+                fuzzAssert($driver->pollInput(0) === '', 'ansi-input', $iteration, $seed, 'empty stream was readable');
+            } elseif ($scenario === 1) {
+                $payload = randomBytes(mt_rand(1, 2048));
+                if ($payload === '') {
+                    $payload = "\0";
+                }
+                $written = fwrite($peer, $payload);
+                fuzzAssert($written === strlen($payload), 'ansi-input', $iteration, $seed, 'socket write was partial');
+                fuzzAssert(
+                    $driver->pollInput(100) === $payload,
+                    'ansi-input',
+                    $iteration,
+                    $seed,
+                    'terminal payload changed during polling',
+                );
+            } elseif ($scenario === 2) {
+                fclose($peer);
+                $peer = null;
+                $exception = fuzzException(static fn (): string => $driver->pollInput(100));
+                fuzzAssert(
+                    $exception instanceof DriverException,
+                    'ansi-input',
+                    $iteration,
+                    $seed,
+                    'end-of-file was mistaken for an idle terminal',
+                );
+            } else {
+                fclose($input);
+                $input = null;
+                $exception = fuzzException(static fn (): string => $driver->pollInput(0));
+                fuzzAssert(
+                    $exception instanceof DriverException,
+                    'ansi-input',
+                    $iteration,
+                    $seed,
+                    'closed input did not become a driver failure',
+                );
+            }
+        } finally {
+            if (is_resource($input)) {
+                fclose($input);
+            }
+            if (is_resource($peer)) {
+                fclose($peer);
+            }
+            fclose($output);
+        }
+    }
+}
+
+function fuzzWidgetArithmetic(int $iterations, int $seed): void
+{
+    $navigationKeys = [
+        Key::Up, Key::Down, Key::PageUp, Key::PageDown,
+        Key::Home, Key::End, Key::Left, Key::Right,
+    ];
+
+    for ($iteration = 0; $iteration < $iterations; $iteration++) {
+        $driver = new HeadlessDriver(40, 10);
+        $screen = new Screen($driver);
+        $screen->init();
+        $root = new FuzzScreenRoot($screen);
+
+        try {
+            $view = new View(Rect::of(0, 0, mt_rand(0, 40), mt_rand(0, 10)));
+            $view->setOwner($root);
+            $source = new DrawBuffer(mt_rand(0, 40));
+            $source->moveStr(0, randomBytes(40), mt_rand(-512, 512));
+            $x = randomEdgeInteger(-50, 50);
+            $y = randomEdgeInteger(-20, 20);
+            $width = randomEdgeInteger(-50, 80);
+            $height = randomEdgeInteger(-20, 40);
+            if (mt_rand(0, 1) === 0) {
+                $view->writeBuf($x, $y, $width, $height, $source);
+            } else {
+                $view->writeLine($x, $y, $width, $height, $source);
+            }
+
+            $list = new FuzzListViewer(Rect::of(0, 0, 8, 3), randomEdgeInteger(-20, 20));
+            $list->setOwner($root);
+            $list->setRange(mt_rand(0, 100));
+            $list->numCols = randomEdgeInteger(-20, 20);
+            $list->focused = randomEdgeInteger(-100, 200);
+            $list->topItem = randomEdgeInteger(-100, 200);
+            $list->draw();
+            $key = $navigationKeys[array_rand($navigationKeys)];
+            $listEvent = Event::keyDown(new KeyDownEvent($key->value));
+            $list->handleEvent($listEvent);
+            if ($list->range > 0 && $listEvent->isNothing()) {
+                fuzzAssert(
+                    $list->focused >= 0 && $list->focused < $list->range,
+                    'widgets',
+                    $iteration,
+                    $seed,
+                    'list navigation escaped its declared range',
+                );
+            }
+
+            $bar = new ScrollBar(Rect::of(12, 0, 13, 10));
+            $bar->setOwner($root);
+            $minimum = randomEdgeInteger(-100, 100);
+            $maximum = randomEdgeInteger(-100, 100);
+            $bar->setParams(
+                randomEdgeInteger(-100, 100),
+                $minimum,
+                $maximum,
+                randomEdgeInteger(-100, 100),
+                randomEdgeInteger(-100, 100),
+            );
+            $bar->pageStep = randomEdgeInteger(-100, 100);
+            $bar->arrowStep = randomEdgeInteger(-100, 100);
+            $position = $bar->getPos();
+            fuzzAssert(
+                $position >= 1 && $position <= max(1, $bar->getSize() - 2),
+                'widgets',
+                $iteration,
+                $seed,
+                'scroll thumb escaped its track',
+            );
+            $bar->handleEvent(Event::keyDown(new KeyDownEvent($key->value)));
+            fuzzAssert(
+                $bar->value >= $bar->minVal && $bar->value <= $bar->maxVal,
+                'widgets',
+                $iteration,
+                $seed,
+                'scroll navigation escaped its declared range',
+            );
+
+            $largeBar = new ScrollBar(Rect::of(0, 0, 1, Buffer::MAX_CELLS));
+            $largeBar->setParams(1, 0, 1, 1, 1);
+            fuzzAssert(
+                $largeBar->getPos() === Buffer::MAX_CELLS - 2,
+                'widgets',
+                $iteration,
+                $seed,
+                'large scroll track wrapped its thumb position',
+            );
+
+            $rows = $screen->back()->rows();
+            fuzzAssert(count($rows) === 10, 'widgets', $iteration, $seed, 'widget writes changed screen height');
+            foreach ($rows as $row) {
+                fuzzAssert(TerminalText::length($row) === 40, 'widgets', $iteration, $seed, 'widget writes changed row width');
+            }
+        } catch (Throwable $exception) {
+            failFuzz('widgets', $iteration, $seed, fuzzThrowable($exception));
+        } finally {
+            $screen->shutdown();
+        }
+    }
+}
+
+function fuzzGeometryArithmetic(int $iterations, int $seed): void
+{
+    for ($iteration = 0; $iteration < $iterations; $iteration++) {
+        $driver = new HeadlessDriver(8, 3);
+        $screen = new Screen($driver);
+        $screen->init();
+        $root = new FuzzScreenRoot($screen);
+
+        try {
+            $left = randomEdgeInteger(-1_000, 1_000);
+            $top = randomEdgeInteger(-1_000, 1_000);
+            $right = IntMath::add($left, mt_rand(0, 8));
+            $bottom = IntMath::add($top, mt_rand(0, 3));
+            $rect = Rect::of($left, $top, $right, $bottom);
+            $delta = new Point(
+                randomEdgeInteger(-1_000, 1_000),
+                randomEdgeInteger(-1_000, 1_000),
+            );
+
+            $point = new Point($left, $top);
+            $point->add($delta)->subtract($delta);
+            $rect->move($delta->x, $delta->y)->grow($delta->x, $delta->y);
+            fuzzAssert(
+                $rect->width() >= 0 && $rect->height() >= 0,
+                'geometry',
+                $iteration,
+                $seed,
+                'a non-negative extent changed sign',
+            );
+            fuzzAssert(
+                fuzzException(static fn (): View => new View(Rect::of(0, 0, 1, PHP_INT_MAX)))
+                    instanceof InvalidArgumentException,
+                'geometry',
+                $iteration,
+                $seed,
+                'process-exhausting view bounds were accepted',
+            );
+
+            $parent = new Group($rect);
+            $parent->setOwner($root);
+            $childLeft = randomEdgeInteger(-1_000, 1_000);
+            $childTop = randomEdgeInteger(-1_000, 1_000);
+            $child = new View(Rect::of(
+                $childLeft,
+                $childTop,
+                IntMath::add($childLeft, mt_rand(0, 4)),
+                IntMath::add($childTop, mt_rand(0, 2)),
+            ));
+            $parent->insert($child);
+            $child->absoluteOrigin();
+            $child->makeLocal(new Point(
+                randomEdgeInteger(-1_000, 1_000),
+                randomEdgeInteger(-1_000, 1_000),
+            ));
+            $child->writeStr(randomEdgeInteger(-20, 20), 0, 'X', 0x07);
+
+            $rows = $screen->back()->rows();
+            fuzzAssert(count($rows) === 3, 'geometry', $iteration, $seed, 'geometry changed screen height');
+            foreach ($rows as $row) {
+                fuzzAssert(TerminalText::length($row) === 8, 'geometry', $iteration, $seed, 'geometry changed row width');
+            }
+        } catch (Throwable $exception) {
+            failFuzz('geometry', $iteration, $seed, fuzzThrowable($exception));
+        } finally {
+            $screen->shutdown();
+        }
+    }
+}
+
+/** Fuzz repeated EINTR handling with a real subprocess signal source. */
+function fuzzInterruptedInput(int $iterations, int $seed): int
+{
+    if (! function_exists('pcntl_fork')
+        || ! function_exists('pcntl_signal')
+        || ! function_exists('pcntl_signal_get_handler')
+        || ! function_exists('pcntl_waitpid')
+        || ! function_exists('posix_getpid')
+        || ! function_exists('posix_kill')
+        || ! defined('SIGWINCH')
+    ) {
+        return 0;
+    }
+
+    $trials = min($iterations, 64);
+    $streams = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+    $controls = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+    $output = fopen('php://memory', 'r+b');
+    fuzzAssert($streams !== false && $controls !== false && $output !== false, 'signals', 0, $seed, 'could not create streams');
+    [$input, $peer] = $streams;
+    [$parentControl, $childControl] = $controls;
+    $previousHandler = pcntl_signal_get_handler(SIGWINCH);
+    pcntl_signal(SIGWINCH, static function (): void {}, false);
+    $parentPid = posix_getpid();
+    $childPid = pcntl_fork();
+    fuzzAssert($childPid !== -1, 'signals', 0, $seed, 'could not fork signal sender');
+
+    if ($childPid === 0) {
+        fclose($parentControl);
+        for ($trial = 0; $trial < $trials; $trial++) {
+            if (fread($childControl, 1) !== '1') {
+                exit(2);
+            }
+            usleep(10_000);
+            if (! posix_kill($parentPid, SIGWINCH) || fwrite($childControl, '1') !== 1) {
+                exit(3);
+            }
+        }
+        exit(0);
+    }
+
+    fclose($childControl);
+    try {
+        $driver = new AnsiDriver($input, $output, static fn (string $cmd): string => '24 80');
+        for ($iteration = 0; $iteration < $trials; $iteration++) {
+            fuzzAssert(fwrite($parentControl, '1') === 1, 'signals', $iteration, $seed, 'could not arm signal sender');
+            $started = hrtime(true);
+            $bytes = $driver->pollInput(1000);
+            $elapsed = (hrtime(true) - $started) / 1_000_000_000;
+            fuzzAssert($bytes === '', 'signals', $iteration, $seed, 'signal interruption fabricated input');
+            fuzzAssert(fread($parentControl, 1) === '1', 'signals', $iteration, $seed, 'signal sender did not acknowledge');
+            fuzzAssert($elapsed < 0.9, 'signals', $iteration, $seed, 'signal did not interrupt the input wait');
+        }
+    } finally {
+        // Closing the control stream also releases a child still blocked waiting for
+        // the next trial when a parent-side assertion aborts the campaign early.
+        fclose($parentControl);
+        pcntl_waitpid($childPid, $status);
+        pcntl_signal_dispatch();
+        pcntl_signal(SIGWINCH, $previousHandler);
+        fclose($input);
+        fclose($peer);
+        fclose($output);
+    }
+
+    fuzzAssert(pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0, 'signals', $trials - 1, $seed, 'signal sender failed');
+
+    return $trials;
+}
+
+/** Exercise the initialized AnsiDriver in a real PTY while resize signals race its loop. */
+function fuzzPtyResizeStorm(int $iterations, int $seed): int
+{
+    if (! function_exists('proc_open') || ! function_exists('posix_kill') || ! defined('SIGWINCH')) {
+        return 0;
+    }
+
+    $example = __DIR__ . '/../examples/php/tutorial/Guide03.php';
+    $descriptors = [
+        0 => ['pty'],
+        1 => ['pty'],
+        2 => ['pipe', 'w'],
+    ];
+    /** @var array<int, resource> $pipes */
+    $pipes = [];
+    $process = @proc_open(['php', $example], $descriptors, $pipes, dirname($example));
+    if (! is_resource($process)) {
+        return 0;
+    }
+
+    stream_set_blocking($pipes[1], false);
+    stream_set_blocking($pipes[2], false);
+    $trials = min($iterations, 64);
+    $signalsSent = 0;
+    $quitSent = false;
+    $output = '';
+    $errors = '';
+    $started = hrtime(true);
+    $exited = false;
+    $exitDetail = '';
+
+    try {
+        while ((hrtime(true) - $started) / 1_000_000_000 < 3.0) {
+            $chunk = fread($pipes[1], 65_536);
+            if ($chunk !== false && $chunk !== '') {
+                $output .= $chunk;
+            }
+            $errorChunk = fread($pipes[2], 65_536);
+            if ($errorChunk !== false && $errorChunk !== '') {
+                $errors .= $errorChunk;
+            }
+
+            $status = proc_get_status($process);
+            if (! $status['running']) {
+                $exited = true;
+                $exitDetail = json_encode([
+                    'exitcode' => $status['exitcode'],
+                    'signaled' => $status['signaled'],
+                    'termsig' => $status['termsig'],
+                ], JSON_THROW_ON_ERROR);
+                break;
+            }
+
+            $driverReady = str_contains($output, "\e[?1049h")
+                || (hrtime(true) - $started) / 1_000_000_000 > 0.5;
+            if ($driverReady && $signalsSent < $trials) {
+                fuzzAssert(
+                    posix_kill($status['pid'], SIGWINCH),
+                    'pty-resize',
+                    $signalsSent,
+                    $seed,
+                    'could not deliver SIGWINCH to PTY child',
+                );
+                $signalsSent++;
+            } elseif ($signalsSent === $trials && ! $quitSent) {
+                fuzzAssert(
+                    fwrite($pipes[0], "\ex") === 2,
+                    'pty-resize',
+                    $signalsSent,
+                    $seed,
+                    'could not send Alt-X to PTY child',
+                );
+                $quitSent = true;
+            }
+
+            usleep(1_000);
+        }
+
+        $tail = stream_get_contents($pipes[1]);
+        if ($tail !== false) {
+            $output .= $tail;
+        }
+        $errorTail = stream_get_contents($pipes[2]);
+        if ($errorTail !== false) {
+            $errors .= $errorTail;
+        }
+        $fatalAt = strrpos($output, 'Fatal error');
+        $fatal = $fatalAt === false ? '' : substr($output, $fatalAt, 2_000);
+
+        fuzzAssert(
+            $signalsSent === $trials,
+            'pty-resize',
+            $signalsSent,
+            $seed,
+            'PTY child exited during resize storm: ' . $exitDetail . ' ' . trim($errors . ' ' . $fatal),
+        );
+        fuzzAssert($exited, 'pty-resize', $signalsSent, $seed, 'PTY child did not exit after Alt-X');
+        fuzzAssert(
+            str_contains($output, "\e[?1049l") && str_contains($output, "\e[?25h"),
+            'pty-resize',
+            $signalsSent,
+            $seed,
+            'PTY resize storm skipped terminal teardown',
+        );
+        fuzzAssert(
+            substr_count($output, "\e[?2026h") === substr_count($output, "\e[?2026l"),
+            'pty-resize',
+            $signalsSent,
+            $seed,
+            'PTY resize storm left a synchronized update open',
+        );
+    } finally {
+        $status = proc_get_status($process);
+        if ($status['running']) {
+            proc_terminate($process);
+        }
+        foreach ($pipes as $pipe) {
+            fclose($pipe);
+        }
+        proc_close($process);
+    }
+
+    return $trials;
+}
+
+function fuzzDrawing(int $iterations, int $seed): void
+{
+    $glyphs = fuzzGlyphs();
+    $presenter = new DiffPresenter();
+    $encoder = new AnsiEncoder();
+
+    for ($iteration = 0; $iteration < $iterations; $iteration++) {
+        $width = mt_rand(0, 100);
+        $height = mt_rand(0, 40);
+        $front = new Buffer($width, $height);
+        $back = new Buffer($width, $height);
+        $draw = new DrawBuffer($width);
+
+        try {
+            for ($operation = 0, $count = mt_rand(1, 100); $operation < $count; $operation++) {
+                $glyph = $glyphs[array_rand($glyphs)];
+                $attr = mt_rand(-512, 512);
+                $x = randomEdgeInteger(-50, 150);
+                $y = randomEdgeInteger(-30, 70);
+                $back->put($x, $y, new Cell($glyph, $attr));
+                $draw->moveChar($x, $glyph, $attr, mt_rand(-5, 30));
+                $draw->moveStr($x, $glyph . $glyphs[array_rand($glyphs)], $attr);
+                $draw->moveCStr($x, '~' . $glyph . '~X', $attr, $attr + 1);
+                $back->fill(
+                    Rect::of(
+                        $x,
+                        $y,
+                        IntMath::add($x, mt_rand(-30, 60)),
+                        IntMath::add($y, mt_rand(-20, 40)),
+                    ),
+                    new Cell($glyph, $attr),
+                );
+            }
+
+            $rows = $back->rows();
+            fuzzAssert(count($rows) === $height, 'drawing', $iteration, $seed, 'wrong row count');
+            foreach ($rows as $row) {
+                fuzzAssert(
+                    TerminalText::length($row) === $width,
+                    'drawing',
+                    $iteration,
+                    $seed,
+                    'row does not contain exactly width cells',
+                );
+            }
+            fuzzAssert(count($draw->cells()) === $width, 'drawing', $iteration, $seed, 'wrong draw-buffer width');
+            $presenter->present($front, $back, $encoder);
+        } catch (Throwable $exception) {
+            failFuzz('drawing', $iteration, $seed, fuzzThrowable($exception));
+        }
+    }
+}
+
+function fuzzViews(int $iterations, int $seed): void
+{
+    for ($iteration = 0; $iteration < $iterations; $iteration++) {
+        $oldWidth = mt_rand(0, 240);
+        $oldHeight = mt_rand(0, 100);
+        $root = new Group(Rect::of(0, 0, $oldWidth, $oldHeight));
+        $children = [];
+
+        try {
+            for ($i = 0, $count = mt_rand(0, 40); $i < $count; $i++) {
+                $x = mt_rand(-40, $oldWidth + 40);
+                $y = mt_rand(-20, $oldHeight + 20);
+                $view = new View(Rect::of($x, $y, $x + mt_rand(0, 80), $y + mt_rand(0, 30)));
+                $view->growMode = mt_rand(0, State::GrowAll | State::GrowRel);
+                if (mt_rand(0, 1) === 1) {
+                    $view->options |= State::Selectable;
+                }
+                if (mt_rand(0, 9) === 0) {
+                    $view->setState(State::Disabled, true);
+                }
+                $root->insert($view);
+                $children[] = $view;
+            }
+
+            $newWidth = mt_rand(0, 300);
+            $newHeight = mt_rand(0, 140);
+            $root->changeBounds(Rect::of(0, 0, $newWidth, $newHeight));
+            foreach ($children as $child) {
+                fuzzAssert(
+                    $child->getBounds()->width() >= 0 && $child->getBounds()->height() >= 0,
+                    'views',
+                    $iteration,
+                    $seed,
+                    'resize produced a negative extent',
+                );
+            }
+            shuffle($children);
+            foreach ($children as $child) {
+                $root->remove($child);
+            }
+            fuzzAssert($root->subviews() === [], 'views', $iteration, $seed, 'remove left children behind');
+        } catch (Throwable $exception) {
+            $geometry = array_map(
+                static fn (View $child): array => [
+                    $child->getBounds()->a->x,
+                    $child->getBounds()->a->y,
+                    $child->getBounds()->b->x,
+                    $child->getBounds()->b->y,
+                    $child->growMode,
+                ],
+                $children,
+            );
+            failFuzz(
+                'views',
+                $iteration,
+                $seed,
+                fuzzThrowable($exception)
+                    . ' context=' . json_encode([
+                        'old' => [$oldWidth, $oldHeight],
+                        'new' => [$newWidth ?? null, $newHeight ?? null],
+                        'children' => $geometry,
+                    ], JSON_THROW_ON_ERROR),
+            );
+        }
+    }
+}
+
+/** @return array{iterations: int, seed: int} */
+function parseArguments(array $arguments): array
+{
+    $iterations = 2000;
+    $seed = null;
+    $positionals = [];
+
+    for ($index = 0, $count = count($arguments); $index < $count; $index++) {
+        $argument = $arguments[$index];
+        if ($argument === '--help' || $argument === '-h') {
+            fwrite(STDOUT, "Usage: bin/tv-fuzz [iterations] [seed]\n"
+                . "       bin/tv-fuzz [--iterations N] [--seed N]\n");
+            exit(0);
+        }
+
+        if (preg_match('/^--(iterations|seed)=(.+)$/D', $argument, $match) === 1) {
+            [$option, $value] = [$match[1], $match[2]];
+        } elseif ($argument === '--iterations' || $argument === '--seed') {
+            if (! isset($arguments[$index + 1])) {
+                fwrite(STDERR, "Missing value for {$argument}.\n");
+                exit(2);
+            }
+            $option = substr($argument, 2);
+            $value = $arguments[++$index];
+        } elseif (str_starts_with($argument, '-')) {
+            fwrite(STDERR, "Unknown option {$argument}.\n");
+            exit(2);
+        } else {
+            $positionals[] = $argument;
+            continue;
+        }
+
+        if (filter_var($value, FILTER_VALIDATE_INT) === false) {
+            fwrite(STDERR, "Invalid integer for --{$option}: {$value}.\n");
+            exit(2);
+        }
+        if ($option === 'iterations') {
+            $iterations = max(1, (int) $value);
+        } else {
+            $seed = (int) $value;
+        }
+    }
+
+    if (isset($positionals[0])) {
+        $iterations = max(1, (int) $positionals[0]);
+    }
+    if (isset($positionals[1])) {
+        $seed = (int) $positionals[1];
+    }
+    if (count($positionals) > 2) {
+        fwrite(STDERR, "Too many positional arguments.\n");
+        exit(2);
+    }
+
+    return ['iterations' => $iterations, 'seed' => $seed ?? random_int(1, PHP_INT_MAX)];
+}
+
+$options = parseArguments(array_slice($argv, 1));
+$iterations = $options['iterations'];
+$seed = $options['seed'];
+mt_srand($seed);
+
+$started = hrtime(true);
+try {
+    fuzzDecoder($iterations, $seed);
+    fuzzScreen($iterations, $seed);
+    fuzzDrawing($iterations, $seed);
+    fuzzViews($iterations, $seed);
+    fuzzScreenLifecycle($iterations, $seed);
+    fuzzAnsiInput($iterations, $seed);
+    fuzzWidgetArithmetic($iterations, $seed);
+    fuzzGeometryArithmetic($iterations, $seed);
+    $signalCases = fuzzInterruptedInput($iterations, $seed);
+    $ptyCases = fuzzPtyResizeStorm($iterations, $seed);
+    $seconds = (hrtime(true) - $started) / 1_000_000_000;
+    $suiteCount = 8 + (int) ($signalCases > 0) + (int) ($ptyCases > 0);
+    $caseCount = ($iterations * 8) + $signalCases + $ptyCases;
+
+    printf(
+        "OK seed=%d iterations=%d suites=%d cases=%d time=%.3fs peak=%.1fMiB\n",
+        $seed,
+        $iterations,
+        $suiteCount,
+        $caseCount,
+        $seconds,
+        memory_get_peak_usage(true) / 1_048_576,
+    );
+} catch (FuzzFailure $failure) {
+    fwrite(STDERR, $failure->getMessage() . "\n");
+    exit(1);
+}

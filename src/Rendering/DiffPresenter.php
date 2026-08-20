@@ -6,6 +6,7 @@ namespace HelgeSverre\TurboVision\Rendering;
 
 use HelgeSverre\TurboVision\Drawing\Buffer;
 use HelgeSverre\TurboVision\Drivers\AnsiEncoder;
+use InvalidArgumentException;
 
 /**
  * Pure double-buffer presenter: diff $front (on screen) vs $back (desired) and emit
@@ -17,15 +18,22 @@ final class DiffPresenter
 {
     public function present(Buffer $front, Buffer $back, AnsiEncoder $enc): string
     {
+        if ($front->width !== $back->width || $front->height !== $back->height) {
+            throw new InvalidArgumentException('Front and back buffers must have the same dimensions.');
+        }
+
         $out = '';
-        $rows = min($front->height, $back->height);
-        $cols = min($front->width, $back->width);
+        $rows = $back->height;
+        $cols = $back->width;
+        $frontCells = $front->cells();
+        $backCells = $back->cells();
 
         for ($y = 0; $y < $rows; $y++) {
+            $rowOffset = $y * $cols;
             $x = 0;
             while ($x < $cols) {
-                $cur = $back->at($x, $y);
-                $old = $front->at($x, $y);
+                $cur = $backCells[$rowOffset + $x];
+                $old = $frontCells[$rowOffset + $x];
 
                 if ($cur->equals($old)) {
                     $x++;
@@ -39,8 +47,8 @@ final class DiffPresenter
                 $out .= $enc->style($runAttr);
 
                 while ($x < $cols) {
-                    $cell = $back->at($x, $y);
-                    if ($cell->equals($front->at($x, $y))) {
+                    $cell = $backCells[$rowOffset + $x];
+                    if ($cell->equals($frontCells[$rowOffset + $x])) {
                         break; // unchanged cell ends the run
                     }
                     if ($cell->attr !== $runAttr) {

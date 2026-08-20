@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use HelgeSverre\TurboVision\Drawing\Attribute;
 use HelgeSverre\TurboVision\Drawing\Buffer;
 use HelgeSverre\TurboVision\Drawing\Cell;
+use HelgeSverre\TurboVision\Drawing\Color;
 use HelgeSverre\TurboVision\Rendering\HtmlRenderer;
 
 test('renders each cell with its CGA foreground and background colours', function (): void {
@@ -37,4 +39,12 @@ test('renderer can preserve literal CGA black for classic output', function (): 
 
     expect((new HtmlRenderer(useDefaultBackgroundForBlack: false))->render($buffer))
         ->toContain('background:#000000');
+});
+
+test('renderer preserves an extended bright background cell value', function (): void {
+    $buffer = new Buffer(1, 1);
+    $buffer->put(0, 0, Cell::of('A', new Attribute(Color::White, Color::DarkGray)));
+
+    expect((new HtmlRenderer())->render($buffer))
+        ->toContain('color:#ffffff;background:#555555');
 });

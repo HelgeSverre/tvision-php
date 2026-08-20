@@ -18,13 +18,17 @@
   ],
   "require": {
     "php": ">=8.5",
-    "ext-mbstring": "*",
-    "ext-posix": "*",
-    "ext-pcntl": "*"
+    "ext-mbstring": "*"
   },
   "require-dev": {
-    "pestphp/pest": "^3.0",
+    "pestphp/pest": "^5.0",
     "phpstan/phpstan": "^2.0"
+  },
+  "suggest": {
+    "ext-pcov": "Enables Pest test-impact analysis and fast code coverage.",
+    "ext-xdebug": "Alternative coverage driver for Pest test-impact analysis.",
+    "ext-pcntl": "Enables immediate SIGWINCH resize and signal-aware terminal restoration.",
+    "ext-posix": "Provides the TTY check fallback on PHP versions without stream_isatty()."
   },
   "autoload": {
     "psr-4": {
@@ -39,9 +43,14 @@
   },
   "scripts": {
     "test": "pest",
+    "test:tia": "php bin/tv-test-impact",
     "stan": "phpstan analyse",
-    "demo": "php examples/php/tutorial/Guide03.php",
+    "fuzz": "php bin/tv-fuzz",
+    "bench": "php benchmarks/core.php",
+    "demo": "php examples/php/workbench.php",
+    "demo:workbench": "php examples/php/workbench.php",
     "demo:bios": "php examples/php/bios.php",
+    "demo:opencode": "php examples/php/opencode.php",
     "demo:calendar": "php examples/php/calendar.php",
     "demo:studio": "php examples/php/studio.php",
     "demo:html": "php examples/php/html-render.php"

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use HelgeSverre\TurboVision\Drawing\Buffer;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Views\Group;
@@ -44,6 +45,44 @@ test('calcBounds with gfGrowAll moves both corners', function (): void {
     $v->growMode = State::GrowAll;
 
     expect($v->calcBounds(new Point(4, 2)))->toEqual(Rect::of(6, 4, 16, 10));
+});
+
+test('calcBounds with gfGrowRel scales selected edges with the owner', function (): void {
+    $owner = new Group(Rect::of(0, 0, 100, 50));
+    $view = new View(Rect::of(10, 5, 50, 25));
+    $view->growMode = State::GrowAll | State::GrowRel;
+    $owner->insert($view);
+
+    $owner->changeBounds(Rect::of(0, 0, 200, 100));
+
+    expect($view->getBounds())->toEqual(Rect::of(20, 10, 100, 50));
+});
+
+test('relative resize fits generated child bounds to the drawable-cell budget', function (): void {
+    $owner = new Group(Rect::of(0, 0, 1, 60));
+    $child = new View(Rect::of(0, 0, 80, 30));
+    $child->growMode = State::GrowAll | State::GrowRel;
+    $owner->insert($child);
+
+    $owner->changeBounds(Rect::of(0, 0, 251, 121));
+
+    $bounds = $child->getBounds();
+    expect($bounds->width())->toBeGreaterThan(0)
+        ->and($bounds->height())->toBeGreaterThanOrEqual(0)
+        ->and($bounds->width() * $bounds->height())->toBeLessThanOrEqual(Buffer::MAX_CELLS);
+});
+
+test('calcBounds applies the view size limits after growing', function (): void {
+    $view = new class(Rect::of(0, 0, 10, 5)) extends View {
+        public function sizeLimits(): array
+        {
+            return [4, 3, 12, 8];
+        }
+    };
+    $view->growMode = State::GrowHiX | State::GrowHiY;
+
+    expect($view->calcBounds(new Point(20, 20)))
+        ->toEqual(Rect::of(0, 0, 12, 8));
 });
 
 test('calcBounds with no grow mode keeps bounds unchanged', function (): void {

@@ -49,11 +49,11 @@ final class EventDraft
             uid: $event->uid,
             title: $event->title,
             startDate: $event->start->format('Y-m-d'),
-            startTime: $event->start->format('H:i'),
+            startTime: self::editableTime($event->start),
             endDate: $event->allDay
                 ? $event->end->modify('-1 day')->format('Y-m-d')
                 : $event->end->format('Y-m-d'),
-            endTime: $event->end->format('H:i'),
+            endTime: self::editableTime($event->end),
             allDay: $event->allDay,
             location: $event->location,
             calendar: $event->calendar,
@@ -141,9 +141,17 @@ final class EventDraft
 
     private function dateTimeValue(string $date, string $time, DateTimeZone $timezone): DateTimeImmutable
     {
-        $value = DateTimeImmutable::createFromFormat('!Y-m-d H:i', "{$date} {$time}", $timezone);
+        $format = preg_match('/^\d{2}:\d{2}:\d{2}$/D', $time) === 1
+            ? '!Y-m-d H:i:s'
+            : '!Y-m-d H:i';
+        $value = DateTimeImmutable::createFromFormat($format, "{$date} {$time}", $timezone);
 
-        return $this->validated($value, 'Use 24-hour times like 09:30.');
+        return $this->validated($value, 'Use 24-hour times like 09:30 or 09:30:45.');
+    }
+
+    private static function editableTime(DateTimeImmutable $value): string
+    {
+        return $value->format('s') === '00' ? $value->format('H:i') : $value->format('H:i:s');
     }
 
     private function validated(DateTimeImmutable|false $value, string $message): DateTimeImmutable

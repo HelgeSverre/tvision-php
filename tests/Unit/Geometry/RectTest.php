@@ -37,3 +37,12 @@ test('move, grow and intersect', function (): void {
         ->and($r->intersect(Rect::of(4, 4, 10, 10)))->toEqual(Rect::of(4, 4, 6, 6))
         ->and($r->intersect(Rect::of(20, 20, 30, 30))->isEmpty())->toBeTrue();
 });
+
+test('rectangle arithmetic stays integral across the full coordinate domain', function (): void {
+    $full = Rect::of(PHP_INT_MIN, PHP_INT_MIN, PHP_INT_MAX, PHP_INT_MAX);
+
+    expect($full->width())->toBe(PHP_INT_MAX)
+        ->and($full->height())->toBe(PHP_INT_MAX)
+        ->and(Rect::of(PHP_INT_MAX - 1, 0, PHP_INT_MAX, 1)->move(10, 0))
+        ->toEqual(Rect::of(PHP_INT_MAX, 0, PHP_INT_MAX, 1));
+});

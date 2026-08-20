@@ -206,6 +206,43 @@ test('themes restyle the full interface while retaining the terminal background'
         ->and(implode("\n", $app->backRowsForTest()))->toContain('▓');
 });
 
+test('open protects dirty work and discard explicitly restores the saved project', function (): void {
+    [$app, , $projectPath, $exportPath] = studioAppForTest();
+    $view = $app->studioView();
+
+    try {
+        $app->dispatchForTest(Event::keyDown(new KeyDownEvent(0x13)));
+        $button = $view->selectedComponent();
+        if ($button === null) {
+            throw new RuntimeException('Expected the starter project button to be selected.');
+        }
+        $buttonId = $button->id;
+        $savedX = $button->x;
+        $app->dispatchForTest(Event::keyDown(new KeyDownEvent(Key::Right->value)));
+        expect($button->x)->toBeGreaterThan($savedX)
+            ->and($view->isDirty())->toBeTrue();
+
+        $app->dispatchForTest(Event::keyDown(new KeyDownEvent(0x0F)));
+        expect($view->confirmationOpen())->toBeTrue();
+        $app->dispatchForTest(Event::keyDown(new KeyDownEvent(Key::Esc->value)));
+        expect($view->confirmationOpen())->toBeFalse()
+            ->and($button->x)->toBeGreaterThan($savedX);
+
+        $app->dispatchForTest(Event::keyDown(new KeyDownEvent(0x0F)));
+        $app->dispatchForTest(Event::keyDown(new KeyDownEvent(ord('d'), 'd')));
+        expect($view->confirmationOpen())->toBeFalse()
+            ->and($view->project()->component($buttonId)?->x)->toBe($savedX)
+            ->and($view->isDirty())->toBeFalse();
+    } finally {
+        if (is_file($projectPath)) {
+            unlink($projectPath);
+        }
+        if (is_file($exportPath)) {
+            unlink($exportPath);
+        }
+    }
+});
+
 test('grid snapping and alignment controls support precise canvas layout', function (): void {
     [$app] = studioAppForTest();
     $view = $app->studioView();

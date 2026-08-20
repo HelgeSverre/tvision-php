@@ -27,7 +27,7 @@ class StudioApp extends Application
         private readonly string $projectPath = 'studio-project.json',
         private readonly string $exportPath = 'studio-generated.php',
     ) {
-        if ($this->normalizedTarget($projectPath) === $this->normalizedTarget($exportPath)) {
+        if (StudioPathGuard::sameTarget($projectPath, $exportPath)) {
             throw new InvalidArgumentException('Studio project and PHP export paths must be different files.');
         }
         $this->store = new StudioProjectStore();
@@ -106,12 +106,5 @@ class StudioApp extends Application
     {
         $this->handleEvent($event);
         $this->drawAndFlushForTest();
-    }
-
-    private function normalizedTarget(string $path): string
-    {
-        $directory = realpath(dirname($path));
-
-        return ($directory !== false ? $directory : dirname($path)) . DIRECTORY_SEPARATOR . basename($path);
     }
 }

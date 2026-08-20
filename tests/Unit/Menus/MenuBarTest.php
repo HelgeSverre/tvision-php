@@ -8,6 +8,8 @@ use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
+use HelgeSverre\TurboVision\Events\MouseEvent;
+use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Menus\Menu;
 use HelgeSverre\TurboVision\Menus\MenuBar;
@@ -44,11 +46,11 @@ final class MenuBarRoot extends Group
 }
 
 /** @return array{MenuBarRoot, Screen} */
-function menuRoot(int $w): array
+function menuRoot(int $w, int $h = 1): array
 {
-    $screen = new Screen(new HeadlessDriver($w, 1));
+    $screen = new Screen(new HeadlessDriver($w, $h));
     $screen->init();
-    $g = new MenuBarRoot(Rect::of(0, 0, $w, 1), $screen);
+    $g = new MenuBarRoot(Rect::of(0, 0, $w, $h), $screen);
 
     return [$g, $screen];
 }
@@ -119,4 +121,63 @@ test('a disabled direct menu command ignores keyboard and mouse activation', fun
 
     expect($event->what)->toBe(EventType::KeyDown)
         ->and($bar->commandAtColumn(2))->toBe(0);
+});
+
+test('Alt hotkeys open a rendered pull-down and arrows activate its commands', function (): void {
+    [$root, $screen] = menuRoot(36, 10);
+    $bar = new MenuBar(
+        Rect::of(0, 0, 36, 1),
+        new SubMenu('~F~ile', Key::AltF)->items(
+            new MenuItem('~O~pen', 200, Key::F3, 'F3'),
+            new MenuItem('E~x~it', Cmd::Quit, Key::AltX, 'Alt-X'),
+        ),
+    );
+    $root->insert($bar);
+
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::AltF->value)));
+    $root->draw();
+
+    expect(implode("\n", $screen->back()->rows()))->toContain('Open')
+        ->and($bar->activeIndex())->toBe(0)
+        ->and($bar->selectedIndex())->toBe(0);
+
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::Down->value)));
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::Enter->value)));
+
+    expect($root->pumpEvent()?->isCommand(Cmd::Quit))->toBeTrue()
+        ->and($bar->activeIndex())->toBe(-1);
+});
+
+test('F10 opens the first pull-down and Esc dismisses it', function (): void {
+    [$root] = menuRoot(36, 10);
+    $bar = new MenuBar(
+        Rect::of(0, 0, 36, 1),
+        new SubMenu('~F~ile', Key::AltF)->items(new MenuItem('E~x~it', Cmd::Quit)),
+    );
+    $root->insert($bar);
+
+    $menu = Event::command(Cmd::Menu);
+    $bar->handleEvent($menu);
+    expect($menu->isNothing())->toBeTrue()
+        ->and($bar->activeIndex())->toBe(0);
+
+    $escape = Event::keyDown(new KeyDownEvent(Key::Esc->value));
+    $bar->handleEvent($escape);
+    expect($bar->activeIndex())->toBe(-1);
+});
+
+test('mouse clicks open a pull-down and activate its selected row', function (): void {
+    [$root] = menuRoot(36, 10);
+    $bar = new MenuBar(
+        Rect::of(0, 0, 36, 1),
+        new SubMenu('~F~ile', Key::AltF)->items(new MenuItem('~O~pen', 200)),
+    );
+    $root->insert($bar);
+
+    $root->handleEvent(Event::mouse(EventType::MouseDown, new MouseEvent(new Point(2, 0), buttons: 1)));
+    expect($bar->activeIndex())->toBe(0);
+
+    $root->handleEvent(Event::mouse(EventType::MouseDown, new MouseEvent(new Point(3, 2), buttons: 1)));
+    expect($root->pumpEvent()?->isCommand(200))->toBeTrue()
+        ->and($bar->activeIndex())->toBe(-1);
 });

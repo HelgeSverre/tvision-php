@@ -34,9 +34,9 @@ test('selectNext skips non-selectable views', function (): void {
     $group = new Group(Rect::of(0, 0, 10, 5));
 
     $plain = new View(Rect::of(0, 0, 5, 1));                 // not selectable
-    $a = new View(Rect::of(0, 1, 5, 1));
+    $a = new View(Rect::of(0, 1, 5, 2));
     $a->options |= State::Selectable;
-    $b = new View(Rect::of(0, 2, 5, 1));
+    $b = new View(Rect::of(0, 2, 5, 3));
     $b->options |= State::Selectable;
 
     $group->insert($plain);
@@ -48,4 +48,40 @@ test('selectNext skips non-selectable views', function (): void {
     expect($group->current())->toBe($b);
     $group->selectNext();
     expect($group->current())->toBe($a); // wraps, never lands on $plain
+});
+
+test('automatic focus and traversal skip hidden and disabled selectable views', function (): void {
+    $group = new Group(Rect::of(0, 0, 10, 5));
+    $hidden = new View(Rect::of(0, 0, 5, 1));
+    $hidden->options |= State::Selectable;
+    $hidden->setState(State::Visible, false);
+    $disabled = new View(Rect::of(0, 1, 5, 2));
+    $disabled->options |= State::Selectable;
+    $disabled->setState(State::Disabled, true);
+    $enabled = new View(Rect::of(0, 2, 5, 3));
+    $enabled->options |= State::Selectable;
+
+    $group->insert($hidden);
+    $group->insert($disabled);
+    $group->insert($enabled);
+
+    expect($group->current())->toBe($enabled);
+    $group->selectNext();
+    expect($group->current())->toBe($enabled);
+});
+
+test('removing the current view transfers focus to a remaining selectable view', function (): void {
+    $group = new Group(Rect::of(0, 0, 10, 5));
+    $first = new View(Rect::of(0, 0, 5, 1));
+    $second = new View(Rect::of(0, 1, 5, 2));
+    $first->options |= State::Selectable;
+    $second->options |= State::Selectable;
+    $group->insert($first);
+    $group->insert($second);
+
+    $group->remove($first);
+
+    expect($group->current())->toBe($second)
+        ->and($first->getState(State::Focused))->toBeFalse()
+        ->and($second->getState(State::Focused))->toBeTrue();
 });

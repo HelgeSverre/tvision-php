@@ -144,7 +144,8 @@ test('Calendar enables hover tracking without forcing cell backgrounds', functio
 );
 
 test('Turbo Studio starts with drag tracking and foreground-only output', function (): void {
-    $result = tvRunInPty(__DIR__ . '/../../examples/php/studio.php', 'q');
+    // A fresh starter project is intentionally dirty: quit, then discard it.
+    $result = tvRunInPty(__DIR__ . '/../../examples/php/studio.php', 'qd');
 
     if (! $result['supported']) {
         $this->markTestSkipped('No usable PTY on this platform.');

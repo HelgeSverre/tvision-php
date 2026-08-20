@@ -84,6 +84,28 @@ test('BIOS renders the key legend at the bottom', function (): void {
         ->and($text)->toContain('Esc');
 });
 
+test('BIOS uses the classic cyan blue and gray setup palette', function (): void {
+    $screen = new Screen(new HeadlessDriver(80, 25));
+    $app = new BiosApp($screen);
+    $app->bootForTest();
+    $app->drawAndFlushForTest();
+
+    expect($screen->back()->at(0, 0)->attr)->toBe(0x30)
+        ->and($screen->back()->at(0, 1)->attr)->toBe(0x1F)
+        ->and($screen->back()->at(10, 20)->attr)->toBe(0x70)
+        ->and($screen->back()->at(0, 24)->attr)->toBe(0x3F);
+});
+
+test('BIOS renders a boxed item-specific help pane with wrapped guidance', function (): void {
+    $app = biosApp();
+    $text = implode("\n", $app->backRowsForTest());
+
+    expect($text)->toContain('Item Specific Help')
+        ->and($text)->toContain('system date in')
+        ->and($text)->toContain('selects an')
+        ->and($text)->toContain('item. Enter');
+});
+
 test('BIOS reflows its full-screen view after a terminal resize', function (): void {
     $driver = new HeadlessDriver(80, 25);
     $app = new BiosApp(new Screen($driver));

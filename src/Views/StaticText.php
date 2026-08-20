@@ -11,13 +11,27 @@ use HelgeSverre\TurboVision\Geometry\Rect;
 
 /**
  * Non-interactive fixed text (faithful to TStaticText). Word-wraps to the view width
- * and supports the TV centering control char \003 (a line starting with it is centered).
+ * and supports explicit alignment. The classic leading \003 centering marker remains
+ * accepted for compatibility.
  */
 class StaticText extends View
 {
-    public function __construct(Rect $bounds, protected string $text)
-    {
+    public function __construct(
+        Rect $bounds,
+        protected string $text,
+        protected TextAlignment $alignment = TextAlignment::Left,
+    ) {
         parent::__construct($bounds);
+
+        if (str_starts_with($this->text, "\003")) {
+            $this->text = substr($this->text, 1);
+            $this->alignment = TextAlignment::Center;
+        }
+    }
+
+    public static function centered(Rect $bounds, string $text): self
+    {
+        return new self($bounds, $text, alignment: TextAlignment::Center);
     }
 
     /** StaticText uses palette index 1 -> its text color. */
@@ -44,14 +58,13 @@ class StaticText extends View
             if ($y >= $height) {
                 break;
             }
-            $centered = false;
-            if ($line !== '' && $line[0] === "\003") {
-                $centered = true;
-                $line = substr($line, 1);
-            }
 
             $len = TerminalText::length($line);
-            $x = $centered ? intdiv(max(0, $width - $len), 2) : 0;
+            $x = match ($this->alignment) {
+                TextAlignment::Left => 0,
+                TextAlignment::Center => intdiv(max(0, $width - $len), 2),
+                TextAlignment::Right => max(0, $width - $len),
+            };
 
             $b = new DrawBuffer($width);
             $b->moveChar(0, ' ', $attr, $width);
@@ -60,50 +73,48 @@ class StaticText extends View
         }
     }
 
-    /**
-     * Word-wrap $text to $width. A \003 prefix is preserved on its line so draw()
-     * can center it.
-     *
-     * @return list<string>
-     */
+    /** @return list<string> */
     private function layout(int $width): array
     {
         if ($width <= 0) {
             return [];
         }
 
-        $centerPrefix = '';
-        $body = $this->text;
-        if ($body !== '' && $body[0] === "\003") {
-            $centerPrefix = "\003";
-            $body = substr($body, 1);
-        }
-
-        $words = preg_split('/\s+/', trim($body)) ?: [];
         /** @var list<string> $lines */
         $lines = [];
-        $current = '';
+        $sourceLines = preg_split('/\R/u', $this->text) ?: [];
 
-        foreach ($words as $word) {
-            if ($word === '') {
+        foreach ($sourceLines as $sourceLine) {
+            if ($sourceLine === '') {
+                $lines[] = '';
+
                 continue;
             }
-            $candidate = $current === '' ? $word : $current . ' ' . $word;
-            if (TerminalText::length($candidate) <= $width) {
-                $current = $candidate;
-            } else {
-                if ($current !== '') {
-                    $lines[] = $centerPrefix . $current;
+
+            $words = preg_split('/\s+/u', trim($sourceLine)) ?: [];
+            $current = '';
+
+            foreach ($words as $word) {
+                if ($word === '') {
+                    continue;
                 }
-                while (TerminalText::length($word) > $width) {
-                    $lines[] = $centerPrefix . TerminalText::slice($word, 0, $width);
-                    $word = TerminalText::slice($word, $width);
+                $candidate = $current === '' ? $word : $current . ' ' . $word;
+                if (TerminalText::length($candidate) <= $width) {
+                    $current = $candidate;
+                } else {
+                    if ($current !== '') {
+                        $lines[] = $current;
+                    }
+                    while (TerminalText::length($word) > $width) {
+                        $lines[] = TerminalText::slice($word, 0, $width);
+                        $word = TerminalText::slice($word, $width);
+                    }
+                    $current = $word;
                 }
-                $current = $word;
             }
-        }
-        if ($current !== '') {
-            $lines[] = $centerPrefix . $current;
+            if ($current !== '') {
+                $lines[] = $current;
+            }
         }
 
         return $lines;

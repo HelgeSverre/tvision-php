@@ -19,3 +19,10 @@ test('point arithmetic and equality are value-based', function (): void {
         ->and($a->equals(new Point(2, 3)))->toBeTrue()
         ->and($a->equals($b))->toBeFalse();
 });
+
+test('point arithmetic saturates instead of promoting overflowing coordinates to floats', function (): void {
+    expect((new Point(PHP_INT_MAX, PHP_INT_MIN))->add(new Point(1, -1)))
+        ->toEqual(new Point(PHP_INT_MAX, PHP_INT_MIN))
+        ->and((new Point(PHP_INT_MIN, PHP_INT_MAX))->subtract(new Point(1, -1)))
+        ->toEqual(new Point(PHP_INT_MIN, PHP_INT_MAX));
+});

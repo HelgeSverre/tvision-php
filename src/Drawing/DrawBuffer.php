@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Drawing;
 
+use HelgeSverre\TurboVision\Support\IntMath;
+use InvalidArgumentException;
+
 /**
  * A single-row paint helper (faithful to Turbo Vision's TDrawBuffer). Views fill
  * one per row; the renderer blits the cells into the screen Buffer. All writes are
@@ -18,20 +21,34 @@ final class DrawBuffer
         public readonly int $width,
         int $fillAttr = 0x07,
     ) {
+        if ($this->width < 0) {
+            throw new InvalidArgumentException('Draw-buffer width must be non-negative.');
+        }
+        if ($this->width > Buffer::MAX_CELLS) {
+            throw new InvalidArgumentException('Draw-buffer width exceeds the safe cell limit.');
+        }
+
         $this->clear($fillAttr);
     }
 
     public function clear(int $attr = 0x07): void
     {
-        $this->cells = array_fill(0, max(0, $this->width), new Cell(' ', $attr));
+        $this->cells = array_fill(0, $this->width, new Cell(' ', $attr));
     }
 
     public function moveChar(int $x, string $char, int $attr, int $count): void
     {
+        if ($count <= 0 || $x >= $this->width) {
+            return;
+        }
+        if ($x < 0) {
+            $count = IntMath::add($count, $x);
+            $x = 0;
+        }
+        $count = min($count, $this->width - $x);
+
         for ($i = 0; $i < $count; $i++, $x++) {
-            if ($x >= 0 && $x < $this->width) {
-                $this->cells[$x] = new Cell($char, $attr);
-            }
+            $this->cells[$x] = new Cell($char, $attr);
         }
     }
 
@@ -41,7 +58,7 @@ final class DrawBuffer
             if ($x >= 0 && $x < $this->width) {
                 $this->cells[$x] = new Cell($ch, $attr);
             }
-            $x++;
+            $x = IntMath::add($x, 1);
         }
     }
 
@@ -62,7 +79,7 @@ final class DrawBuffer
             if ($x >= 0 && $x < $this->width) {
                 $this->cells[$x] = new Cell($ch, $attr);
             }
-            $x++;
+            $x = IntMath::add($x, 1);
         }
 
         return $x;

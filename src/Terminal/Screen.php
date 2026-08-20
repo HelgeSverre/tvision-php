@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Terminal;
 
+use Closure;
 use HelgeSverre\TurboVision\Drawing\Buffer;
 use HelgeSverre\TurboVision\Drawing\Cell;
 use HelgeSverre\TurboVision\Drivers\AnsiEncoder;
 use HelgeSverre\TurboVision\Drivers\Driver;
 use HelgeSverre\TurboVision\Drivers\EscapeDecoder;
+use HelgeSverre\TurboVision\Drivers\ProvidesTerminalCapabilities;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Rendering\DiffPresenter;
+use InvalidArgumentException;
 
 /**
  * Integration capstone tying a Driver to the render/input pipeline. Owns a back
@@ -21,6 +24,10 @@ use HelgeSverre\TurboVision\Rendering\DiffPresenter;
 final class Screen
 {
     private const int MAX_REMAINDER_BYTES = 4096;
+
+    private const float ESCAPE_TIMEOUT_SECONDS = 0.04;
+
+    private const float SEQUENCE_TIMEOUT_SECONDS = 0.25;
 
     private Buffer $back;
 
@@ -32,15 +39,32 @@ final class Screen
 
     private readonly DiffPresenter $presenter;
 
+    private readonly TerminalCapabilities $capabilities;
+
+    /** @var Closure():float */
+    private readonly Closure $clock;
+
     private string $remainder = '';
+
+    private ?float $remainderSince = null;
 
     private bool $wasResized = false;
 
-    public function __construct(private readonly Driver $driver, ?AnsiEncoder $encoder = null)
-    {
+    /** @param (Closure():float)|null $clock Monotonic seconds, injectable for tests. */
+    public function __construct(
+        private readonly Driver $driver,
+        ?AnsiEncoder $encoder = null,
+        ?Closure $clock = null,
+        ?TerminalCapabilities $capabilities = null,
+    ) {
         $this->encoder = $encoder ?? new AnsiEncoder();
         $this->decoder = new EscapeDecoder();
         $this->presenter = new DiffPresenter();
+        $this->capabilities = $capabilities
+            ?? ($driver instanceof ProvidesTerminalCapabilities
+                ? $driver->terminalCapabilities()
+                : new TerminalCapabilities());
+        $this->clock = $clock ?? static fn (): float => hrtime(true) / 1_000_000_000;
         // Provisional buffers until init() reads the real size.
         $this->back = new Buffer(0, 0);
         $this->front = new Buffer(0, 0);
@@ -53,6 +77,7 @@ final class Screen
             [$cols, $rows] = $this->driver->size();
             $this->resizeBuffers($cols, $rows);
             $this->remainder = '';
+            $this->remainderSince = null;
             $this->wasResized = false;
         } catch (\Throwable $exception) {
             // Driver::shutdown() is contractually idempotent and must unwind partial init.
@@ -97,13 +122,14 @@ final class Screen
     public function flush(): void
     {
         $ansi = $this->presenter->present($this->front, $this->back, $this->encoder);
-        if ($ansi !== '') {
-            // Wrap the frame so modern terminals present it atomically (no tearing).
-            $this->driver->write(
-                $this->encoder->beginSyncUpdate() . $ansi . $this->encoder->endSyncUpdate()
-            );
+        if ($ansi === '') {
+            return;
         }
-        $this->front = $this->copyOf($this->back);
+
+        $this->driver->write($this->capabilities->synchronizedUpdates
+            ? $this->encoder->beginSyncUpdate() . $ansi . $this->encoder->endSyncUpdate()
+            : $ansi);
+        $this->front = $this->back->copy();
     }
 
     /**
@@ -114,6 +140,10 @@ final class Screen
      */
     public function pollEvents(int $timeoutMs): array
     {
+        if ($timeoutMs < 0) {
+            throw new InvalidArgumentException('The poll timeout must be non-negative.');
+        }
+
         if ($this->driver->resized()) {
             [$cols, $rows] = $this->driver->size();
             $this->resizeBuffers($cols, $rows, invalidateFront: true);
@@ -123,20 +153,39 @@ final class Screen
         $bytes = $this->driver->pollInput($timeoutMs);
 
         if ($bytes === '') {
-            // A quiet tick resolves a lone ESC and discards any other incomplete
-            // sequence so it cannot swallow the user's next keystroke forever.
-            $pending = $this->decoder->flushPending($this->remainder);
-            if ($this->remainder !== '') {
-                $this->remainder = '';
+            if ($this->remainder === '') {
+                return [];
             }
 
-            return $pending === null ? [] : [$pending];
+            $now = ($this->clock)();
+            $this->remainderSince ??= $now;
+            $onlyEscapes = strspn($this->remainder, "\e") === strlen($this->remainder);
+            $timeout = $onlyEscapes
+                ? self::ESCAPE_TIMEOUT_SECONDS
+                : self::SEQUENCE_TIMEOUT_SECONDS;
+            if ($now - $this->remainderSince < $timeout) {
+                return [];
+            }
+
+            $pending = $this->decoder->flushPendingEvents($this->remainder);
+            $this->remainder = '';
+            $this->remainderSince = null;
+
+            return $pending;
         }
 
-        $result = $this->decoder->decode($this->remainder . $bytes);
+        $previousRemainder = $this->remainder;
+        $result = $this->decoder->decode($previousRemainder . $bytes);
         $this->remainder = $result->remainder;
         if (strlen($this->remainder) > self::MAX_REMAINDER_BYTES) {
             $this->remainder = '';
+            $this->remainderSince = null;
+        } elseif ($this->remainder === '') {
+            $this->remainderSince = null;
+        } else {
+            // The expiry is an inter-fragment timeout. Any new bytes that make
+            // progress buy the sequence a fresh window to complete.
+            $this->remainderSince = ($this->clock)();
         }
 
         return $result->events;
@@ -153,20 +202,16 @@ final class Screen
 
     private function resizeBuffers(int $cols, int $rows, bool $invalidateFront = false): void
     {
+        if ($cols < 0
+            || $rows < 0
+            || ($cols !== 0 && $rows > intdiv(Buffer::MAX_CELLS, $cols))
+        ) {
+            throw new InvalidArgumentException('Terminal dimensions are outside the safe screen-buffer limit.');
+        }
+
         $this->back = new Buffer($cols, $rows);
         $frontFill = $invalidateFront ? new Cell("\0", -1) : null;
         $this->front = new Buffer($cols, $rows, $frontFill);
     }
 
-    private function copyOf(Buffer $source): Buffer
-    {
-        $copy = new Buffer($source->width, $source->height);
-        for ($y = 0; $y < $source->height; $y++) {
-            for ($x = 0; $x < $source->width; $x++) {
-                $copy->put($x, $y, $source->at($x, $y));
-            }
-        }
-
-        return $copy;
-    }
 }

@@ -6,6 +6,7 @@ namespace HelgeSverre\TurboVision\Drivers;
 
 use Closure;
 use HelgeSverre\TurboVision\Exceptions\DriverException;
+use HelgeSverre\TurboVision\Terminal\TerminalCapabilities;
 
 /**
  * Real-TTY Driver: raw mode via `stty`, STDOUT writes, non-blocking STDIN polled
@@ -15,13 +16,26 @@ use HelgeSverre\TurboVision\Exceptions\DriverException;
  * (init() environment validation, parseSize(), idempotent shutdown()) is unit-tested.
  * Raw-mode entry/exit, live stream_select polling, SIGWINCH delivery, and alt-screen
  * visuals are inherently terminal-coupled and are exercised by bin/render-demo, not
- * by fragile unit mocks. Requires ext-posix and ext-pcntl.
+ * by fragile unit mocks. pcntl/posix improve integration but have safe fallbacks.
  *
  * @phpstan-type SttyRunner Closure(string):string
  */
-final class AnsiDriver implements Driver
+final class AnsiDriver implements Driver, ProvidesTerminalCapabilities
 {
+    private const int MAX_WRITE_STALLS = 256;
+
+    private const int WRITE_STALL_DELAY_MICROSECONDS = 1_000;
+
+    private const float RESIZE_POLL_SECONDS = 0.25;
+
     private readonly AnsiEncoder $encoder;
+
+    private readonly TerminalCapabilities $capabilities;
+
+    /** @var Closure(): float */
+    private readonly Closure $clock;
+
+    private readonly bool $signalsAvailable;
 
     /** @var resource */
     private $stdin;
@@ -41,21 +55,55 @@ final class AnsiDriver implements Driver
 
     private bool $resizeFlag = false;
 
+    /** @var array{0:int,1:int}|null */
+    private ?array $lastSize = null;
+
+    /** @var array{0:int,1:int}|null */
+    private ?array $pendingSize = null;
+
+    private float $nextResizePollAt = 0.0;
+
+    private bool $shutdownRegistered = false;
+
+    /** @var array<int, callable|int> signal => handler active before init() */
+    private array $savedSignalHandlers = [];
+
     /**
      * @param resource|null $stdin   defaults to STDIN
      * @param resource|null $stdout  defaults to STDOUT
      * @param (Closure(string):string)|null $sttyRunner runs an stty command, returns its stdout
+     * @param (Closure():float)|null $clock monotonic seconds, injectable for fallback-resize tests
      */
     public function __construct(
         $stdin = null,
         $stdout = null,
         ?Closure $sttyRunner = null,
         private readonly bool $trackMouseMotion = false,
+        ?TerminalCapabilities $capabilities = null,
+        ?Closure $clock = null,
+        ?bool $signalSupport = null,
     ) {
         $this->stdin = $stdin ?? STDIN;
         $this->stdout = $stdout ?? STDOUT;
-        $this->stty = $sttyRunner ?? static fn (string $cmd): string => (string) shell_exec($cmd);
+        $this->stty = $sttyRunner ?? static function (string $cmd): string {
+            if (! \function_exists('shell_exec')) {
+                return '';
+            }
+
+            return (string) shell_exec($cmd);
+        };
         $this->encoder = new AnsiEncoder();
+        $this->capabilities = $capabilities ?? TerminalCapabilities::detectProcess();
+        $this->clock = $clock ?? static fn (): float => hrtime(true) / 1_000_000_000;
+        $runtimeSignalSupport = (
+            \function_exists('pcntl_signal')
+            && \function_exists('pcntl_signal_dispatch')
+            && \defined('SIGWINCH')
+            && \defined('SIGINT')
+            && \defined('SIGTERM')
+            && \defined('SIGHUP')
+        );
+        $this->signalsAvailable = ($signalSupport ?? true) && $runtimeSignalSupport;
     }
 
     /**
@@ -67,7 +115,7 @@ final class AnsiDriver implements Driver
      */
     private static function isTty($stream): bool
     {
-        if (! \function_exists('posix_isatty') || ! \is_resource($stream)) {
+        if (! \is_resource($stream)) {
             return false;
         }
 
@@ -75,7 +123,11 @@ final class AnsiDriver implements Driver
             return false;
         }
 
-        return @posix_isatty($stream);
+        if (\function_exists('stream_isatty')) {
+            return @stream_isatty($stream);
+        }
+
+        return \function_exists('posix_isatty') && @posix_isatty($stream);
     }
 
     public function init(): void
@@ -111,6 +163,7 @@ final class AnsiDriver implements Driver
                 . $this->encoder->clearScreen()
                 . $this->encoder->hideCursor()
                 . $this->encoder->enableMouse($this->trackMouseMotion)
+                . ($this->capabilities->kittyKeyboard ? $this->encoder->pushKittyKeyboard() : '')
             );
 
             // Signals: handle them asynchronously so the terminal is restored even if the
@@ -120,21 +173,24 @@ final class AnsiDriver implements Driver
             // resized(), called each event-loop poll). We deliberately do NOT enable
             // async signals: that would let SIGWINCH interrupt a frame write mid-stream
             // (EINTR), truncating output. The write() loop also tolerates partial writes.
-            if (\function_exists('pcntl_signal')) {
-                pcntl_signal(SIGWINCH, function (): void {
+            if ($this->signalsAvailable) {
+                $this->installSignalHandler(SIGWINCH, function (): void {
                     $this->resizeFlag = true;
                 });
                 $restore = function (int $signo): never {
                     $this->shutdown();
                     exit(128 + $signo);
                 };
-                pcntl_signal(SIGINT, $restore);   // also covers Ctrl-C when ISIG is on
-                pcntl_signal(SIGTERM, $restore);
-                pcntl_signal(SIGHUP, $restore);
+                $this->installSignalHandler(SIGINT, $restore); // also covers Ctrl-C when ISIG is on
+                $this->installSignalHandler(SIGTERM, $restore);
+                $this->installSignalHandler(SIGHUP, $restore);
             }
 
             // Last-resort teardown for fatal errors / normal exit.
-            register_shutdown_function([$this, 'shutdown']);
+            if (! $this->shutdownRegistered) {
+                register_shutdown_function([$this, 'shutdown']);
+                $this->shutdownRegistered = true;
+            }
         } catch (\Throwable $exception) {
             $this->shutdown();
 
@@ -148,31 +204,66 @@ final class AnsiDriver implements Driver
             return;
         }
 
-        $this->write(
-            $this->encoder->disableMouse($this->trackMouseMotion)
-            . $this->encoder->showCursor()
-            . $this->encoder->leaveAltScreen()
-            . $this->encoder->reset()
-        );
+        // Mark it first so a teardown-time signal cannot recursively restore the
+        // same resources. Every cleanup step is best-effort and independent: a
+        // wedged output stream must never prevent raw-mode restoration.
+        $this->initialised = false;
+        try {
+            $this->write(
+                ($this->capabilities->kittyKeyboard ? $this->encoder->popKittyKeyboard() : '')
+                . $this->encoder->disableMouse($this->trackMouseMotion)
+                . $this->encoder->showCursor()
+                . $this->encoder->leaveAltScreen()
+                . $this->encoder->reset()
+            );
+        } catch (\Throwable) {
+            // Continue restoring the TTY even if the visual teardown cannot write.
+        }
 
-        if ($this->savedStty !== null && $this->savedStty !== '') {
-            ($this->stty)('stty ' . $this->savedStty);
-        } else {
-            ($this->stty)('stty sane');
+        try {
+            if ($this->savedStty !== null && $this->savedStty !== '') {
+                ($this->stty)('stty ' . $this->savedStty);
+            } else {
+                ($this->stty)('stty sane');
+            }
+        } catch (\Throwable) {
+            try {
+                ($this->stty)('stty sane');
+            } catch (\Throwable) {
+                // Nothing else can restore the OS terminal mode here.
+            }
         }
 
         if ($this->savedBlocking !== null) {
-            stream_set_blocking($this->stdin, $this->savedBlocking);
+            try {
+                stream_set_blocking($this->stdin, $this->savedBlocking);
+            } catch (\Throwable) {
+                // The stream may already have been closed by application teardown.
+            }
         }
 
-        $this->initialised = false;
+        $this->restoreSignalHandlers();
         $this->savedBlocking = null;
+        $this->savedStty = null;
     }
 
     /** @return array{0:int,1:int} */
     public function size(): array
     {
-        return self::parseSize(($this->stty)('stty size'));
+        if ($this->pendingSize !== null) {
+            $size = $this->pendingSize;
+            $this->pendingSize = null;
+        } else {
+            $size = $this->querySize();
+        }
+        $this->lastSize = $size;
+
+        return $size;
+    }
+
+    public function terminalCapabilities(): TerminalCapabilities
+    {
+        return $this->capabilities;
     }
 
     public function write(string $bytes): void
@@ -186,46 +277,174 @@ final class AnsiDriver implements Driver
         $stalls = 0;
 
         while ($offset < $length) {
-            $written = @fwrite($this->stdout, substr($bytes, $offset));
+            $writeWarning = null;
+            set_error_handler(static function (int $severity, string $message) use (&$writeWarning): bool {
+                $writeWarning = $message;
+
+                return true;
+            }, E_WARNING | E_USER_WARNING);
+            try {
+                $written = fwrite($this->stdout, substr($bytes, $offset));
+            } catch (\Throwable $exception) {
+                throw DriverException::writeFailed($exception);
+            } finally {
+                restore_error_handler();
+            }
             if ($written === false || $written === 0) {
-                if (++$stalls > 100000) {
-                    return; // stream is wedged; give up rather than spin forever
+                $stalls++;
+                if ($stalls >= self::MAX_WRITE_STALLS) {
+                    $previous = $writeWarning === null ? null : new \RuntimeException($writeWarning);
+
+                    throw DriverException::writeFailed($previous);
                 }
 
-                continue; // interrupted / transiently unwritable: retry the remainder
+                if (self::operationWasInterrupted($writeWarning)) {
+                    if ($this->signalsAvailable) {
+                        pcntl_signal_dispatch();
+                    }
+                    usleep(self::WRITE_STALL_DELAY_MICROSECONDS);
+
+                    continue;
+                }
+
+                if ($this->signalsAvailable) {
+                    pcntl_signal_dispatch();
+                }
+                usleep(self::WRITE_STALL_DELAY_MICROSECONDS);
+
+                continue; // transiently unwritable: retry the remainder
             }
             $stalls = 0;
             $offset += $written;
         }
     }
 
+    private function installSignalHandler(int $signal, callable $handler): void
+    {
+        $previous = \function_exists('pcntl_signal_get_handler')
+            ? pcntl_signal_get_handler($signal)
+            : SIG_DFL;
+        if (pcntl_signal($signal, $handler)) {
+            $this->savedSignalHandlers[$signal] = $previous;
+        }
+    }
+
+    private function restoreSignalHandlers(): void
+    {
+        if (! $this->signalsAvailable) {
+            $this->savedSignalHandlers = [];
+
+            return;
+        }
+
+        foreach ($this->savedSignalHandlers as $signal => $handler) {
+            try {
+                pcntl_signal($signal, $handler);
+            } catch (\Throwable) {
+                // Best effort during shutdown; terminal restoration has priority.
+            }
+        }
+        $this->savedSignalHandlers = [];
+    }
+
     public function pollInput(int $timeoutMs): string
     {
+        if ($timeoutMs < 0) {
+            throw new \InvalidArgumentException('The poll timeout must be non-negative.');
+        }
+
         $read = [$this->stdin];
         $write = null;
         $except = null;
         $sec = intdiv($timeoutMs, 1000);
         $usec = ($timeoutMs % 1000) * 1000;
 
-        $ready = @stream_select($read, $write, $except, $sec, $usec);
-        if ($ready === false || $ready === 0) {
+        $selectWarning = null;
+        set_error_handler(static function (int $severity, string $message) use (&$selectWarning): bool {
+            $selectWarning = $message;
+
+            return true;
+        }, E_WARNING);
+        try {
+            $ready = stream_select($read, $write, $except, $sec, $usec);
+        } catch (\Throwable $exception) {
+            throw DriverException::readFailed($exception);
+        } finally {
+            restore_error_handler();
+        }
+        if ($ready === false) {
+            if (self::operationWasInterrupted($selectWarning)) {
+                if ($this->signalsAvailable) {
+                    pcntl_signal_dispatch();
+                }
+
+                return '';
+            }
+
+            $previous = $selectWarning === null ? null : new \RuntimeException($selectWarning);
+
+            throw DriverException::readFailed($previous);
+        }
+        if ($ready === 0) {
             return '';
         }
 
-        $bytes = fread($this->stdin, 8192);
+        try {
+            $bytes = fread($this->stdin, 8192);
+        } catch (\Throwable $exception) {
+            throw DriverException::readFailed($exception);
+        }
 
-        return $bytes === false ? '' : $bytes;
+        if ($bytes === false || ($bytes === '' && feof($this->stdin))) {
+            throw DriverException::readFailed();
+        }
+
+        return $bytes;
+    }
+
+    /** Whether an I/O operation failed only because a signal interrupted the syscall. */
+    private static function operationWasInterrupted(?string $warning): bool
+    {
+        if ($warning === null) {
+            return false;
+        }
+
+        if (\defined('PCNTL_EINTR')) {
+            foreach (['/Unable to select \[(\d+)\]/', '/errno[=:\s]+(\d+)/i'] as $pattern) {
+                if (preg_match($pattern, $warning, $matches) === 1) {
+                    return (int) $matches[1] === (int) \constant('PCNTL_EINTR');
+                }
+            }
+        }
+
+        return str_contains($warning, 'Interrupted system call');
     }
 
     public function resized(): bool
     {
-        if (\function_exists('pcntl_signal_dispatch')) {
+        if ($this->signalsAvailable) {
             pcntl_signal_dispatch();
+        } else {
+            $now = ($this->clock)();
+            if ($now >= $this->nextResizePollAt) {
+                $this->nextResizePollAt = $now + self::RESIZE_POLL_SECONDS;
+                $current = $this->querySize();
+                if ($this->lastSize !== null && $current !== $this->lastSize) {
+                    $this->pendingSize = $current;
+                    $this->resizeFlag = true;
+                }
+            }
         }
         $was = $this->resizeFlag;
         $this->resizeFlag = false;
 
         return $was;
+    }
+
+    /** @return array{0:int,1:int} */
+    private function querySize(): array
+    {
+        return self::parseSize(($this->stty)('stty size'));
     }
 
     /**
@@ -235,7 +454,7 @@ final class AnsiDriver implements Driver
      */
     public static function parseSize(string $raw): array
     {
-        if (preg_match('/(\d+)\s+(\d+)/', trim($raw), $m) === 1) {
+        if (preg_match('/^(\d+)\s+(\d+)$/D', trim($raw), $m) === 1) {
             $rows = (int) $m[1];
             $cols = (int) $m[2];
             if ($rows > 0 && $cols > 0) {

@@ -87,4 +87,15 @@ final readonly class StudioTheme
             ),
         ];
     }
+
+    public static function named(string $name): ?self
+    {
+        foreach (self::presets() as $theme) {
+            if ($theme->name === $name) {
+                return $theme;
+            }
+        }
+
+        return null;
+    }
 }

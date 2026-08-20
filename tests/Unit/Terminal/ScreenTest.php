@@ -8,6 +8,7 @@ use HelgeSverre\TurboVision\Drivers\HeadlessDriver;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Terminal\Screen;
+use HelgeSverre\TurboVision\Terminal\TerminalCapabilities;
 
 test('init sizes the back buffer from the driver and delegates lifecycle', function (): void {
     $driver = new HeadlessDriver(10, 4);
@@ -66,6 +67,26 @@ test('flush wraps a non-empty frame in DEC 2026 synchronized-update markers', fu
         ->and($out)->toContain('X');
 });
 
+test('flush falls back to plain ANSI when synchronized updates are unavailable', function (): void {
+    $driver = new HeadlessDriver(5, 1, new TerminalCapabilities());
+    $screen = new Screen($driver);
+    $screen->init();
+    $screen->back()->put(0, 0, new Cell('X', 0x07));
+
+    $screen->flush();
+
+    expect($driver->takeOutput())->toStartWith("\e[1;1H");
+});
+
+test('screen rejects driver dimensions that would exhaust the process', function (): void {
+    $driver = new HeadlessDriver(2000, 1000);
+    $screen = new Screen($driver);
+
+    expect(fn () => $screen->init())
+        ->toThrow(InvalidArgumentException::class, 'safe screen-buffer limit')
+        ->and($driver->isInitialised())->toBeFalse();
+});
+
 test('clear() blanks the back buffer', function (): void {
     $driver = new HeadlessDriver(3, 1);
     $screen = new Screen($driver);
@@ -105,32 +126,120 @@ test('pollEvents reassembles a split escape sequence across two polls', function
 
 test('a stranded ESC becomes Key::Esc when the next poll is empty', function (): void {
     $driver = new HeadlessDriver(5, 1);
-    $screen = new Screen($driver);
+    $now = 1.0;
+    $screen = new Screen($driver, clock: static function () use (&$now): float {
+        return $now;
+    });
     $screen->init();
 
     $driver->feedInput("\e");            // lone ESC -> held as remainder
     expect($screen->pollEvents(0))->toBe([]);
 
-    // no further input: the pending ESC is flushed as Key::Esc
+    $now += 0.05;
+    // no further input after the ambiguity timeout: emit Key::Esc
     $events = $screen->pollEvents(0);
     expect($events)->toHaveCount(1)
         ->and($events[0]->asKey()?->is(Key::Esc))->toBeTrue();
 });
 
+test('consecutive ESC presses survive the ambiguity timeout', function (): void {
+    $driver = new HeadlessDriver(5, 1);
+    $now = 1.0;
+    $screen = new Screen($driver, clock: static function () use (&$now): float {
+        return $now;
+    });
+    $screen->init();
+
+    $driver->feedInput("\e\e");
+    expect($screen->pollEvents(0))->toBe([]);
+
+    $now += 0.05;
+    $events = $screen->pollEvents(0);
+
+    expect($events)->toHaveCount(2)
+        ->and($events[0]->asKey()?->is(Key::Esc))->toBeTrue()
+        ->and($events[1]->asKey()?->is(Key::Esc))->toBeTrue();
+});
+
 test('an incomplete escape sequence expires instead of swallowing the next key', function (): void {
     $driver = new HeadlessDriver(5, 1);
-    $screen = new Screen($driver);
+    $now = 1.0;
+    $screen = new Screen($driver, clock: static function () use (&$now): float {
+        return $now;
+    });
     $screen->init();
 
     $driver->feedInput("\e[");
     expect($screen->pollEvents(0))->toBe([])
         ->and($screen->pollEvents(0))->toBe([]);
 
+    $now += 0.3;
+    expect($screen->pollEvents(0))->toBe([]);
+
     $driver->feedInput('q');
     $events = $screen->pollEvents(0);
 
     expect($events)->toHaveCount(1)
         ->and($events[0]->asKey()?->char)->toBe('q');
+});
+
+test('fragmented escape and UTF-8 input survives quiet polls inside the sequence timeout', function (): void {
+    $driver = new HeadlessDriver(5, 1);
+    $now = 1.0;
+    $screen = new Screen($driver, clock: static function () use (&$now): float {
+        return $now;
+    });
+    $screen->init();
+
+    $driver->feedInput("\e[");
+    expect($screen->pollEvents(0))->toBe([]);
+    $now += 0.1;
+    expect($screen->pollEvents(0))->toBe([]);
+    $driver->feedInput('A');
+    $arrow = $screen->pollEvents(0);
+
+    $driver->feedInput("\xE2");
+    expect($screen->pollEvents(0))->toBe([]);
+    $now += 0.1;
+    expect($screen->pollEvents(0))->toBe([]);
+    $driver->feedInput("\x82\xAC");
+    $unicode = $screen->pollEvents(0);
+
+    expect($arrow)->toHaveCount(1)
+        ->and($arrow[0]->asKey()?->is(Key::Up))->toBeTrue()
+        ->and($unicode)->toHaveCount(1)
+        ->and($unicode[0]->asKey()?->char)->toBe('€');
+});
+
+test('sequence expiry follows the last fragment rather than the first fragment', function (): void {
+    $driver = new HeadlessDriver(5, 1);
+    $now = 1.0;
+    $screen = new Screen($driver, clock: static function () use (&$now): float {
+        return $now;
+    });
+    $screen->init();
+
+    $driver->feedInput("\e[");
+    expect($screen->pollEvents(0))->toBe([]);
+    $now += 0.2;
+    expect($screen->pollEvents(0))->toBe([]);
+    $driver->feedInput('1;');
+    expect($screen->pollEvents(0))->toBe([]);
+    $now += 0.2;
+    expect($screen->pollEvents(0))->toBe([]);
+    $driver->feedInput('2A');
+    $events = $screen->pollEvents(0);
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]->asKey()?->is(Key::Up))->toBeTrue();
+});
+
+test('pollEvents rejects a negative timeout', function (): void {
+    $screen = new Screen(new HeadlessDriver(5, 1));
+    $screen->init();
+
+    expect(fn () => $screen->pollEvents(-1))
+        ->toThrow(InvalidArgumentException::class, 'non-negative');
 });
 
 test('oversized incomplete input is discarded at the decoder boundary', function (): void {

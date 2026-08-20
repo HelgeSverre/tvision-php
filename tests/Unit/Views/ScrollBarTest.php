@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\Key;
+use HelgeSverre\TurboVision\Events\KeyDownEvent;
+use HelgeSverre\TurboVision\Drawing\Buffer;
 use HelgeSverre\TurboVision\Views\ScrollBar;
 use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarPart;
 use HelgeSverre\TurboVision\Views\State;
@@ -65,6 +69,29 @@ test('getPos: value scales across the track (faithful integer arithmetic)', func
 
     $b->setValue(100);
     expect($b->getPos())->toBe(8);          // (100*7 + 50)/100 + 1 = 7 + 1 = 8
+});
+
+test('full-range values and hostile step sizes cannot overflow scroll arithmetic', function (): void {
+    $bar = new ScrollBar(Rect::of(0, 0, 1, 10));
+    $bar->setParams(0, PHP_INT_MIN, PHP_INT_MAX, PHP_INT_MIN, PHP_INT_MIN);
+
+    expect($bar->getPos())->toBe(5)
+        ->and($bar->pageStep)->toBe(0)
+        ->and($bar->arrowStep)->toBe(0);
+
+    $bar->pageStep = PHP_INT_MAX;
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::PageDown->value)));
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::PageDown->value)));
+
+    expect($bar->value)->toBe(PHP_INT_MAX);
+});
+
+test('a maximum drawable track retains an in-range thumb position', function (): void {
+    $bar = new ScrollBar(Rect::of(0, 0, 1, Buffer::MAX_CELLS));
+    $bar->setRange(0, 1);
+    $bar->setValue(1);
+
+    expect($bar->getPos())->toBe(Buffer::MAX_CELLS - 2);
 });
 
 test('ScrollBar growMode follows orientation', function (): void {

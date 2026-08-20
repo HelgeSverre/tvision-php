@@ -17,30 +17,28 @@ use HelgeSverre\TurboVision\Views\View;
 /**
  * Full-screen BIOS Setup Utility view. Handles rendering and all keyboard input.
  *
- * Colour constants (attr byte = fg | bg<<4):
- *   0x00 = black-on-black   0x07 = lightgray-on-black  0x0F = white-on-black
- *   0x70 = black-on-lgray   0x1F = white-on-blue        0x03 = cyan-on-black
- *   0x0B = lt-cyan-on-black 0x30 = black-on-cyan
+ * Palette follows the iconic Phoenix-era setup utility: cyan title and legend
+ * bands, a blue tab strip, a light-gray work surface, black rules, and blue values.
  */
 final class BiosScreen extends View
 {
     // ── Colours ──────────────────────────────────────────────────────────────
-    private const int C_BORDER      = 0x07; // frame / title
-    private const int C_TITLE       = 0x0F; // bright title text
-    private const int C_TAB_NORMAL  = 0x07; // inactive tab
-    private const int C_TAB_ACTIVE  = 0x70; // active tab
-    private const int C_DIVIDER     = 0x07;
-    private const int C_LABEL       = 0x07; // field label
-    private const int C_VALUE       = 0x0F; // field value
-    private const int C_VALUE_INFO  = 0x07; // Info field
-    private const int C_VALUE_ACT   = 0x0E; // Action label (yellow)
-    private const int C_ROW_HL      = 0x70; // highlighted row (current)
-    private const int C_CURSOR      = 0x70; // edit cursor char
-    private const int C_HELP_HDR    = 0x0F; // help pane header
-    private const int C_HELP        = 0x03; // help text (cyan-on-black)
-    private const int C_LEGEND      = 0x07; // bottom key legend
-    private const int C_STATUS      = 0x0E; // status message (yellow)
-    private const int C_BG          = 0x00; // background fill
+    private const int C_BORDER      = 0x70; // black on light gray
+    private const int C_TITLE       = 0x30; // black on cyan
+    private const int C_TAB_NORMAL  = 0x1F; // white on blue
+    private const int C_TAB_ACTIVE  = 0x70; // black on light gray
+    private const int C_DIVIDER     = 0x70;
+    private const int C_LABEL       = 0x70;
+    private const int C_VALUE       = 0x71; // blue on light gray
+    private const int C_VALUE_INFO  = 0x70;
+    private const int C_VALUE_ACT   = 0x74; // red on light gray
+    private const int C_ROW_HL      = 0x1F; // white on blue
+    private const int C_CURSOR      = 0x1E; // yellow on blue
+    private const int C_HELP_HDR    = 0x70;
+    private const int C_HELP        = 0x70;
+    private const int C_LEGEND      = 0x3F; // white on cyan
+    private const int C_STATUS      = 0x3E; // yellow on cyan
+    private const int C_BG          = 0x70;
 
     // ── Tab / field state ────────────────────────────────────────────────────
     private int $tab     = 0;
@@ -95,29 +93,28 @@ final class BiosScreen extends View
         $w = $this->bounds->width();
         $h = $this->bounds->height();
 
-        // Fill background black
+        if ($w <= 0 || $h <= 0) {
+            return;
+        }
+
         $this->fillRect(0, 0, $w, $h, ' ', self::C_BG);
 
-        // Outer border
-        $this->drawBorder($w, $h);
-
-        // Title line (row 1 inside border)
-        $title = ' TurboVision BIOS Setup Utility ';
+        // Cyan title band, matching the classic centered firmware heading.
+        $this->fillRect(0, 0, $w, 1, ' ', self::C_TITLE);
+        $title = 'PhoenixBIOS Setup Utility';
         $this->drawCenteredStr(0, $w, $title, self::C_TITLE);
 
-        // Tab bar (row 2)
-        $this->drawTabBar(2, $w);
+        // Blue navigation strip directly below the title.
+        $this->drawTabBar(1, $w);
 
-        // Horizontal divider after tab bar (row 3)
-        $this->drawHLine(3, $w);
-
-        // Body rows: 4..h-3 (leave rows h-2 and h-1 for legend/status + border)
-        $bodyTop    = 4;
-        $bodyBottom = $h - 2; // exclusive: legend on h-2, border on h-1
+        // Gray work area enclosed by a thin black frame.
+        $bodyTop = 2;
+        $bodyBottom = max($bodyTop + 1, $h - 2);
+        $this->drawBodyBorder($bodyTop, $bodyBottom, $w);
         $this->drawBody($bodyTop, $bodyBottom, $w);
 
-        // Legend / status row
-        $this->drawLegend($h - 2, $w);
+        // Two cyan legend rows are a defining part of the original setup utility.
+        $this->drawLegend(max(0, $h - 2), $w);
     }
 
     // ── Drawing helpers ───────────────────────────────────────────────────────
@@ -131,35 +128,30 @@ final class BiosScreen extends View
         }
     }
 
-    private function drawBorder(int $w, int $h): void
+    private function drawBodyBorder(int $top, int $bottom, int $w): void
     {
-        // Top/bottom horizontal lines
         $topBuf = new DrawBuffer($w);
         $topBuf->moveChar(0, '─', self::C_BORDER, $w);
         $topBuf->moveStr(0, '┌', self::C_BORDER);
-        $topBuf->moveStr($w - 1, '┐', self::C_BORDER);
-        $this->writeLine(0, 0, $w, 1, $topBuf);
+        $topBuf->moveStr(max(0, $w - 1), '┐', self::C_BORDER);
+        $this->writeLine(0, $top, $w, 1, $topBuf);
 
         $botBuf = new DrawBuffer($w);
         $botBuf->moveChar(0, '─', self::C_BORDER, $w);
         $botBuf->moveStr(0, '└', self::C_BORDER);
-        $botBuf->moveStr($w - 1, '┘', self::C_BORDER);
-        $this->writeLine(0, $h - 1, $w, 1, $botBuf);
+        $botBuf->moveStr(max(0, $w - 1), '┘', self::C_BORDER);
+        $this->writeLine(0, $bottom - 1, $w, 1, $botBuf);
 
-        // Side borders
-        $sideBuf = new DrawBuffer($w);
-        $sideBuf->moveChar(0, ' ', self::C_BG, $w);
-        $sideBuf->moveStr(0, '│', self::C_BORDER);
-        $sideBuf->moveStr($w - 1, '│', self::C_BORDER);
-        for ($y = 1; $y < $h - 1; $y++) {
-            $this->writeLine(0, $y, $w, 1, $sideBuf);
+        for ($y = $top + 1; $y < $bottom - 1; $y++) {
+            $this->writeStr(0, $y, '│', self::C_BORDER);
+            $this->writeStr(max(0, $w - 1), $y, '│', self::C_BORDER);
         }
     }
 
     private function drawCenteredStr(int $y, int $w, string $text, int $attr): void
     {
         $len = mb_strlen($text);
-        $x   = max(1, intval(($w - $len) / 2));
+        $x = max(0, intdiv(max(0, $w - $len), 2));
         $this->writeStr($x, $y, $text, $attr);
     }
 
@@ -168,8 +160,10 @@ final class BiosScreen extends View
         $b = new DrawBuffer($w);
         $b->moveChar(0, ' ', self::C_TAB_NORMAL, $w);
 
-        // Distribute tabs evenly; start at col 2 (inside border)
-        $x = 2;
+        $x = max(1, intdiv(max(0, $w - array_sum(array_map(
+            static fn (BiosTab $tab): int => mb_strlen($tab->name) + 3,
+            $this->tabs,
+        ))), 2));
         foreach ($this->tabs as $i => $tab) {
             $label = ' ' . $tab->name . ' ';
             $attr  = ($i === $this->tab) ? self::C_TAB_ACTIVE : self::C_TAB_NORMAL;
@@ -180,23 +174,16 @@ final class BiosScreen extends View
         $this->writeLine(0, $y, $w, 1, $b);
     }
 
-    private function drawHLine(int $y, int $w): void
-    {
-        $b = new DrawBuffer($w);
-        $b->moveChar(0, '─', self::C_DIVIDER, $w);
-        $b->moveStr(0, '├', self::C_DIVIDER);
-        $b->moveStr($w - 1, '┤', self::C_DIVIDER);
-        $this->writeLine(0, $y, $w, 1, $b);
-    }
-
     /**
      * Draw the body: left field area + vertical divider + right help pane.
      * Left ~60% of inner width, right ~40%.
      */
     private function drawBody(int $top, int $bottom, int $w): void
     {
-        $innerW  = $w - 2; // inside border cols
-        $leftW   = intval($innerW * 0.60);
+        $contentTop = $top + 1;
+        $contentBottom = $bottom - 1;
+        $innerW  = max(0, $w - 2);
+        $leftW   = intval($innerW * 0.67);
         $divX    = $leftW + 1; // absolute col of vertical divider
         $rightX  = $divX + 1;
         $rightW  = $w - 1 - $rightX; // to border
@@ -209,19 +196,22 @@ final class BiosScreen extends View
         $valueW  = $leftW - $labelW - 1;
 
         // Draw vertical divider
-        for ($y = $top; $y < $bottom; $y++) {
+        for ($y = $contentTop; $y < $contentBottom; $y++) {
             $this->writeStr($divX, $y, '│', self::C_DIVIDER);
         }
 
-        // Help pane header
-        if ($top < $bottom) {
-            $this->writeStr($rightX, $top, 'Item Help', self::C_HELP_HDR);
+        if ($contentTop < $contentBottom) {
+            $header = ' Item Specific Help ';
+            $this->writeStr($rightX, $contentTop, mb_substr($header, 0, $rightW), self::C_HELP_HDR);
+            if ($contentTop + 1 < $contentBottom) {
+                $this->writeStr($rightX, $contentTop + 1, str_repeat('─', $rightW), self::C_DIVIDER);
+            }
         }
 
         // Field rows
         foreach ($fields as $i => $field) {
-            $rowY = $top + 1 + $i; // +1 to leave help header row
-            if ($rowY >= $bottom) {
+            $rowY = $contentTop + 2 + $i;
+            if ($rowY >= $contentBottom) {
                 break;
             }
 
@@ -241,12 +231,12 @@ final class BiosScreen extends View
             // Value
             $this->drawFieldValue($field, $isCurrent, $valueX, $rowY, $valueW);
 
-            // Help text for current row
-            if ($isCurrent && $rightW > 0) {
-                $helpText = mb_substr($field->help, 0, $rightW);
-                $this->writeStr($rightX, $rowY, $helpText, self::C_HELP);
-            }
         }
+
+        $help = $this->currentField()->help . "\n\n"
+            . '↑/↓ selects an item. Enter edits or expands it. '
+            . '+/- changes values. ←/→ selects a menu.';
+        $this->drawWrappedText($rightX + 1, $contentTop + 3, max(0, $rightW - 2), max(0, $contentBottom - $contentTop - 4), $help);
     }
 
     private function drawFieldValue(BiosField $field, bool $isCurrent, int $x, int $y, int $w): void
@@ -304,18 +294,39 @@ final class BiosScreen extends View
 
     private function drawLegend(int $y, int $w): void
     {
-        $b = new DrawBuffer($w);
-        $b->moveChar(0, ' ', self::C_BG, $w);
+        $this->fillRect(0, $y, $w, min(2, $this->bounds->height() - $y), ' ', self::C_TITLE);
 
         if ($this->statusMsg !== '') {
-            $text = ' ' . $this->statusMsg;
-            $b->moveStr(1, $text, self::C_STATUS);
+            $this->writeStr(2, $y, mb_substr($this->statusMsg, 0, max(0, $w - 4)), self::C_STATUS);
         } else {
-            $legend = ' ↑↓ Select   ←→ Tab   ↵ Edit   +/- Change   F10 Save   Esc Exit';
-            $b->moveStr(0, mb_substr($legend, 0, $w - 2), self::C_LEGEND);
+            $first = ' F1 Help    ↑↓ Select Item    -/+ Change Values      F9 Setup Defaults';
+            $second = ' Esc Exit    ←→ Select Menu    Enter Select / Edit    F10 Save and Exit';
+            $this->writeStr(0, $y, mb_substr($first, 0, $w), self::C_LEGEND);
+            if ($y + 1 < $this->bounds->height()) {
+                $this->writeStr(0, $y + 1, mb_substr($second, 0, $w), self::C_LEGEND);
+            }
+        }
+    }
+
+    private function drawWrappedText(int $x, int $y, int $width, int $height, string $text): void
+    {
+        if ($width <= 0 || $height <= 0) {
+            return;
         }
 
-        $this->writeLine(0, $y, $w, 1, $b);
+        $lines = [];
+        foreach (preg_split('/\R/u', $text) ?: [] as $paragraph) {
+            if ($paragraph === '') {
+                $lines[] = '';
+                continue;
+            }
+            foreach (explode("\n", wordwrap($paragraph, $width, "\n", true)) as $line) {
+                $lines[] = $line;
+            }
+        }
+        foreach (array_slice($lines, 0, $height) as $offset => $line) {
+            $this->writeStr($x, $y + $offset, mb_substr($line, 0, $width), self::C_HELP);
+        }
     }
 
     // ── Event handling ────────────────────────────────────────────────────────

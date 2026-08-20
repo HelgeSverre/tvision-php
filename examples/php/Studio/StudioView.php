@@ -74,8 +74,6 @@ final class StudioView extends View
     /** @var list<StudioTheme> */
     private array $themes;
 
-    private int $themeIndex = 0;
-
     private bool $gridVisible = true;
 
     private bool $snapEnabled = true;
@@ -85,6 +83,9 @@ final class StudioView extends View
     private string $status = '';
 
     private bool $statusIsError = false;
+
+    /** @var 'new'|'load'|'quit'|null */
+    private ?string $destructiveAction = null;
 
     public function __construct(
         Rect $bounds,
@@ -159,6 +160,16 @@ final class StudioView extends View
         return $this->snapEnabled;
     }
 
+    public function isDirty(): bool
+    {
+        return $this->dirty;
+    }
+
+    public function confirmationOpen(): bool
+    {
+        return $this->destructiveAction !== null;
+    }
+
     public function showStatus(string $message, bool $error = false): void
     {
         $this->setStatus($message, $error);
@@ -175,6 +186,9 @@ final class StudioView extends View
         $this->fillRect(0, 0, $width, $height, ' ', $this->theme()->canvas);
         if ($width < 100 || $height < 26) {
             $this->drawCompactWarning($width, $height);
+            if ($this->destructiveAction !== null && $width >= 58 && $height >= 9) {
+                $this->drawDestructiveConfirmation();
+            }
 
             return;
         }
@@ -197,10 +211,18 @@ final class StudioView extends View
         } elseif ($this->contextOrigin !== null) {
             $this->drawContextMenu();
         }
+        if ($this->destructiveAction !== null) {
+            $this->drawDestructiveConfirmation();
+        }
     }
 
     public function handleEvent(Event $event): void
     {
+        if ($this->destructiveAction !== null) {
+            $this->handleDestructiveConfirmation($event);
+
+            return;
+        }
         if ($this->propertyEditing) {
             if ($event->what === EventType::KeyDown) {
                 $this->handlePropertyEditorKey($event);
@@ -718,6 +740,11 @@ final class StudioView extends View
 
     private function newProject(): void
     {
+        $this->requestDestructiveAction('new');
+    }
+
+    private function newProjectNow(): void
+    {
         $this->history->remember($this->project);
         $this->project = StudioProject::blank();
         $this->selectedId = null;
@@ -726,10 +753,15 @@ final class StudioView extends View
         $this->setStatus('New project — double-click a component to begin.');
     }
 
-    private function saveProject(): void
+    private function saveProject(): bool
     {
         if (! $this->persistenceAvailable()) {
-            return;
+            return false;
+        }
+        if (StudioPathGuard::sameTarget($this->projectPath, $this->exportPath)) {
+            $this->setStatus('Project and PHP export paths resolve to the same file; save was cancelled.', true);
+
+            return false;
         }
 
         try {
@@ -737,8 +769,12 @@ final class StudioView extends View
             $this->dirty = false;
             $this->log('Saved ' . basename($this->projectPath) . '.');
             $this->setStatus('Project saved to ' . $this->projectPath . '.');
+
+            return true;
         } catch (RuntimeException $exception) {
             $this->setStatus($exception->getMessage(), true);
+
+            return false;
         }
     }
 
@@ -749,6 +785,11 @@ final class StudioView extends View
 
             return;
         }
+        $this->requestDestructiveAction('load');
+    }
+
+    private function loadProjectNow(): void
+    {
         try {
             $this->project = $this->store->load($this->projectPath);
             $this->persistenceBlocked = false;
@@ -779,6 +820,12 @@ final class StudioView extends View
 
     private function exportPhp(): void
     {
+        if (StudioPathGuard::sameTarget($this->projectPath, $this->exportPath)) {
+            $this->setStatus('Project and PHP export paths resolve to the same file; export was cancelled.', true);
+
+            return;
+        }
+
         try {
             $this->exporter->save($this->exportPath, $this->project);
             $this->log('Exported runnable PHP to ' . basename($this->exportPath) . '.');
@@ -790,9 +837,17 @@ final class StudioView extends View
 
     private function cycleTheme(): void
     {
-        $this->themeIndex = ($this->themeIndex + 1) % count($this->themes);
-        $this->log('Theme switched to ' . $this->theme()->name . '.');
-        $this->setStatus($this->theme()->name . ' theme applied to chrome, canvas, components, and overlays.');
+        $currentIndex = 0;
+        foreach ($this->themes as $index => $theme) {
+            if ($theme->name === $this->project->themeName()) {
+                $currentIndex = $index;
+                break;
+            }
+        }
+        $next = $this->themes[($currentIndex + 1) % count($this->themes)];
+        $this->history->remember($this->project);
+        $this->project->setThemeName($next->name);
+        $this->markChanged('Theme switched to ' . $next->name . ' across Studio, preview, and generated PHP.');
     }
 
     private function toggleGrid(): void
@@ -955,8 +1010,102 @@ final class StudioView extends View
 
     private function quit(): void
     {
+        $this->requestDestructiveAction('quit');
+    }
+
+    private function quitNow(): void
+    {
         if ($this->owner instanceof Group) {
             $this->owner->putEvent(Event::command(Cmd::Quit));
+        }
+    }
+
+    /** @param 'new'|'load'|'quit' $action */
+    private function requestDestructiveAction(string $action): void
+    {
+        if (! $this->dirty) {
+            $this->performDestructiveAction($action);
+
+            return;
+        }
+
+        $this->destructiveAction = $action;
+        $this->setStatus('Unsaved changes — Save, Discard, or Cancel before continuing.', true);
+    }
+
+    private function handleDestructiveConfirmation(Event $event): void
+    {
+        if ($event->what === EventType::KeyDown) {
+            $key = $event->asKey();
+            if ($key === null) {
+                return;
+            }
+            $character = strtolower($key->char);
+            if ($key->is(Key::Esc) || $character === 'c' || $character === 'n') {
+                $this->cancelDestructiveAction();
+            } elseif ($character === 's') {
+                $this->saveThenPerformDestructiveAction();
+            } elseif ($character === 'd' || $character === 'y') {
+                $this->discardThenPerformDestructiveAction();
+            }
+            $this->clearEvent($event);
+
+            return;
+        }
+        if ($event->what !== EventType::MouseDown) {
+            return;
+        }
+        $mouse = $event->asMouse();
+        if ($mouse === null || ($mouse->buttons & 1) === 0) {
+            return;
+        }
+        $local = $this->makeLocal($mouse->where);
+        [$x, $y] = $this->destructiveConfirmationGeometry();
+        if ($local->y === $y + 5) {
+            if ($local->x >= $x + 3 && $local->x < $x + 11) {
+                $this->saveThenPerformDestructiveAction();
+            } elseif ($local->x >= $x + 14 && $local->x < $x + 25) {
+                $this->discardThenPerformDestructiveAction();
+            } elseif ($local->x >= $x + 28 && $local->x < $x + 38) {
+                $this->cancelDestructiveAction();
+            }
+        }
+        $this->clearEvent($event);
+    }
+
+    private function saveThenPerformDestructiveAction(): void
+    {
+        $action = $this->destructiveAction;
+        if ($action !== null && $this->saveProject()) {
+            $this->destructiveAction = null;
+            $this->performDestructiveAction($action);
+        }
+    }
+
+    private function discardThenPerformDestructiveAction(): void
+    {
+        $action = $this->destructiveAction;
+        $this->destructiveAction = null;
+        if ($action !== null) {
+            $this->performDestructiveAction($action);
+        }
+    }
+
+    private function cancelDestructiveAction(): void
+    {
+        $this->destructiveAction = null;
+        $this->setStatus('Action cancelled; unsaved changes are still in the project.');
+    }
+
+    /** @param 'new'|'load'|'quit' $action */
+    private function performDestructiveAction(string $action): void
+    {
+        if ($action === 'new') {
+            $this->newProjectNow();
+        } elseif ($action === 'load') {
+            $this->loadProjectNow();
+        } else {
+            $this->quitNow();
         }
     }
 
@@ -996,7 +1145,13 @@ final class StudioView extends View
 
     private function theme(): StudioTheme
     {
-        return $this->themes[$this->themeIndex];
+        foreach ($this->themes as $theme) {
+            if ($theme->name === $this->project->themeName()) {
+                return $theme;
+            }
+        }
+
+        return $this->themes[0];
     }
 
     private function activateToolbarAt(int $x): void
@@ -1491,6 +1646,40 @@ final class StudioView extends View
                 $selected ? $this->theme()->accent : ($action === 'Delete' ? $this->theme()->error : $this->theme()->canvas),
             );
         }
+    }
+
+    private function drawDestructiveConfirmation(): void
+    {
+        [$x, $y, $width, $height] = $this->destructiveConfirmationGeometry();
+        $action = match ($this->destructiveAction) {
+            'new' => 'create a new project',
+            'load' => 'open the saved project',
+            'quit' => 'quit Turbo Studio',
+            default => 'continue',
+        };
+        $this->fillRect($x + 2, $y + 1, $width, $height, $this->theme()->shadowGlyph, $this->theme()->shadow);
+        $this->fillRect($x, $y, $width, $height, ' ', $this->theme()->canvas);
+        $this->drawBox($x, $y, $width, $height, $this->theme()->grid);
+        $this->writeClipped($x + 3, $y, ' Unsaved changes ', max(0, $width - 6), $this->theme()->warning);
+        $this->writeClipped($x + 3, $y + 2, 'Save changes before you ' . $action . '?', max(0, $width - 6), $this->theme()->primary);
+        $this->writeClipped($x + 3, $y + 5, '[ Save ]', 8, $this->theme()->success);
+        $this->writeClipped($x + 14, $y + 5, '[ Discard ]', 11, $this->theme()->error);
+        $this->writeClipped($x + 28, $y + 5, '[ Cancel ]', 10, $this->theme()->canvas);
+        $this->writeClipped($x + 3, $y + 6, 'S save   D discard   C/Esc cancel', max(0, $width - 6), $this->theme()->muted);
+    }
+
+    /** @return array{int, int, int, int} */
+    private function destructiveConfirmationGeometry(): array
+    {
+        $width = 58;
+        $height = 9;
+
+        return [
+            intdiv($this->bounds->width() - $width, 2),
+            intdiv($this->bounds->height() - $height, 2),
+            $width,
+            $height,
+        ];
     }
 
     private function drawCompactWarning(int $width, int $height): void

@@ -15,3 +15,8 @@ test('named constructors describe the failure mode', function (): void {
         ->and(DriverException::sttyUnavailable()->getMessage())
         ->toContain('stty');
 });
+
+test('write failures have a driver-specific exception', function (): void {
+    expect(DriverException::writeFailed()->getMessage())->toContain('terminal output')
+        ->and(DriverException::readFailed()->getMessage())->toContain('terminal input');
+});

@@ -10,6 +10,8 @@ namespace HelgeSverre\TurboVision\Drawing;
  */
 final readonly class Attribute
 {
+    private const int EXTENDED_CELL_MARKER = 0x10000;
+
     public function __construct(
         public Color $fg = Color::LightGray,
         public Color $bg = Color::Black,
@@ -30,6 +32,37 @@ final readonly class Attribute
             Color::from($byte & 0x0F),
             Color::from(($byte >> 4) & 0x07),
             (bool) ($byte & 0x80),
+        );
+    }
+
+    /**
+     * Pack an attribute for a rendered cell. Classic attributes retain their exact
+     * byte value; bright backgrounds use an extended marker because CGA reserves
+     * bit 7 for blink and therefore cannot encode background colours 8–15.
+     */
+    public function toCellValue(): int
+    {
+        if (! $this->bg->isBright()) {
+            return $this->toByte();
+        }
+
+        return self::EXTENDED_CELL_MARKER
+            | $this->fg->value
+            | ($this->bg->value << 4)
+            | ($this->blink ? 0x100 : 0);
+    }
+
+    /** Decode either a classic packed byte or an extended rendered-cell value. */
+    public static function fromCellValue(int $value): self
+    {
+        if (($value & self::EXTENDED_CELL_MARKER) === 0) {
+            return self::fromByte($value);
+        }
+
+        return new self(
+            Color::from($value & 0x0F),
+            Color::from(($value >> 4) & 0x0F),
+            (bool) ($value & 0x100),
         );
     }
 

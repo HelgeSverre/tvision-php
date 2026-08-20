@@ -12,6 +12,7 @@ declare(strict_types=1);
 use HelgeSverre\TurboVision\Drivers\EscapeDecoder;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
+use HelgeSverre\TurboVision\Events\KeyModifier;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -272,25 +273,27 @@ test('double-ESC passthrough ESC ESC [ A decodes to single Key::Up event', funct
     expect($result->events[0]->asKey()?->is(Key::Up))->toBeTrue();
 });
 
-test('double-ESC ESC ESC emits one Esc event and returns second ESC as remainder', function (): void {
-    // Defect: both ESC bytes were silently swallowed.
+test('double ESC remains ambiguous until another byte or timeout arrives', function (): void {
     // Sequence: 1b 1b
     $result = regressionDecode('1b1b');
 
-    // First ESC is emitted as Key::Esc; second ESC is returned as remainder
-    // (to be resolved by flushPending after timeout).
-    expect($result->events)->toHaveCount(1)
-        ->and($result->remainder)->toBe("\e");
+    expect($result->events)->toBe([])
+        ->and($result->remainder)->toBe("\e\e");
+});
 
-    expect($result->events[0]->asKey()?->is(Key::Esc))->toBeTrue();
+test('double ESC flushes as two key presses after timeout', function (): void {
+    $events = (new EscapeDecoder())->flushPendingEvents("\e\e");
+
+    expect($events)->toHaveCount(2)
+        ->and($events[0]->asKey()?->is(Key::Esc))->toBeTrue()
+        ->and($events[1]->asKey()?->is(Key::Esc))->toBeTrue();
 });
 
 // ---------------------------------------------------------------------------
 // Kitty progressive-enhancement — CSI 'u' final byte
 // ---------------------------------------------------------------------------
 
-test('Kitty CSI u final ESC[13;2u emits a synthetic keyCode=0 event not silent discard', function (): void {
-    // Defect: CSI_LETTER and SS3 both skip 'u'; sequence was consumed with 0 events.
+test('Kitty CSI u final ESC[13;2u decodes Shift+Enter', function (): void {
     // Sequence: 1b 5b 31 33 3b 32 75
     $result = regressionDecode('1b5b31333b3275');
 
@@ -299,7 +302,38 @@ test('Kitty CSI u final ESC[13;2u emits a synthetic keyCode=0 event not silent d
 
     $key = $result->events[0]->asKey();
     expect($key)->not->toBeNull();
-    expect($key?->keyCode)->toBe(0, 'Unknown CSI final should yield keyCode=0 sentinel');
+    expect($key?->is(Key::Enter))->toBeTrue()
+        ->and($key?->modifiers)->toBe(KeyModifier::Shift);
+});
+
+test('xterm cursor-position reports cannot masquerade as F3', function (): void {
+    $result = regressionDecode('1b5b31323b343052'); // CSI 12;40 R
+
+    expect($result->events)->toBe([])
+        ->and($result->remainder)->toBe('');
+});
+
+test('Kitty printable, alternate, associated-text, repeat, and release fields degrade safely', function (): void {
+    $decoder = new EscapeDecoder();
+    $shifted = $decoder->decode("\e[97:65;2u");
+    $associated = $decoder->decode("\e[0;1;229u");
+    $repeat = $decoder->decode("\e[97;1:2u");
+    $release = $decoder->decode("\e[97;1:3u");
+
+    expect($shifted->events[0]->asKey()?->char)->toBe('A')
+        ->and($shifted->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Shift)
+        ->and($associated->events[0]->asKey()?->char)->toBe('å')
+        ->and($repeat->events[0]->asKey()?->char)->toBe('a')
+        ->and($release->events)->toBe([]);
+});
+
+test('legacy modifier parameters are retained for arrows and tilde keys', function (): void {
+    $shiftUp = regressionDecode('1b5b313b3241');
+    $ctrlF5 = regressionDecode('1b5b31353b357e');
+
+    expect($shiftUp->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Shift)
+        ->and($ctrlF5->events[0]->asKey()?->is(Key::F5))->toBeTrue()
+        ->and($ctrlF5->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Ctrl);
 });
 
 // ---------------------------------------------------------------------------

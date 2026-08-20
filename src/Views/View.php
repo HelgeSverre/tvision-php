@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Views;
 
+use HelgeSverre\TurboVision\Drawing\Buffer;
 use HelgeSverre\TurboVision\Drawing\Cell;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
@@ -11,7 +12,9 @@ use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Support\IntMath;
 use HelgeSverre\TurboVision\Terminal\Screen;
+use InvalidArgumentException;
 
 /**
  * The base of every visible object (faithful to Turbo Vision's TView). Mutable.
@@ -21,7 +24,7 @@ use HelgeSverre\TurboVision\Terminal\Screen;
  */
 class View
 {
-    public ?View $owner = null;
+    public private(set) ?View $owner = null;
 
     public int $state = State::Visible;
 
@@ -32,8 +35,9 @@ class View
     /** Cursor position in local coordinates (set by setCursor). */
     protected Point $cursor;
 
-    public function __construct(public Rect $bounds)
+    public function __construct(public private(set) Rect $bounds)
     {
+        self::assertValidBounds($bounds);
         $this->cursor = new Point(0, 0);
     }
 
@@ -41,6 +45,11 @@ class View
 
     public function setOwner(?View $owner): void
     {
+        for ($ancestor = $owner; $ancestor !== null; $ancestor = $ancestor->owner) {
+            if ($ancestor === $this) {
+                throw new InvalidArgumentException('A view cannot own itself or one of its ancestors.');
+            }
+        }
         $this->owner = $owner;
     }
 
@@ -60,8 +69,8 @@ class View
         $y = $this->bounds->a->y;
         $node = $this->owner;
         while ($node !== null && $node->owner !== null) {
-            $x += $node->bounds->a->x;
-            $y += $node->bounds->a->y;
+            $x = IntMath::add($x, $node->bounds->a->x);
+            $y = IntMath::add($y, $node->bounds->a->y);
             $node = $node->owner;
         }
 
@@ -83,7 +92,23 @@ class View
 
     public function setBounds(Rect $bounds): void
     {
+        self::assertValidBounds($bounds);
         $this->bounds = $bounds;
+    }
+
+    private static function assertValidBounds(Rect $bounds): void
+    {
+        $width = $bounds->width();
+        $height = $bounds->height();
+        if ($width < 0 || $height < 0) {
+            throw new InvalidArgumentException('View bounds must have a non-negative extent.');
+        }
+        if ($width > Buffer::MAX_CELLS
+            || $height > Buffer::MAX_CELLS
+            || ($width !== 0 && $height > intdiv(Buffer::MAX_CELLS, $width))
+        ) {
+            throw new InvalidArgumentException('View bounds exceed the safe drawable-cell limit.');
+        }
     }
 
     /**
@@ -107,7 +132,10 @@ class View
     {
         $origin = $this->absoluteOrigin();
 
-        return new Point($global->x - $origin->x, $global->y - $origin->y);
+        return new Point(
+            IntMath::subtract($global->x, $origin->x),
+            IntMath::subtract($global->y, $origin->y),
+        );
     }
 
     /** True if a global point falls within this view's bounds. */
@@ -128,8 +156,8 @@ class View
     /**
      * Compute new bounds when the owner grows by $delta, honoring this view's growMode.
      * Faithful to TView::calcBounds: gfGrowLoX/HiX move the left/right edge, gfGrowLoY/
-     * HiY the top/bottom edge. gfGrowAll = all four. (gfGrowRel — proportional resize —
-     * is not yet implemented; tracked for a future Window::calcBounds override.)
+     * HiY the top/bottom edge. gfGrowAll = all four. gfGrowRel scales each selected
+     * edge in proportion to the owner's old/new size (the default Window behavior).
      */
     public function calcBounds(Point $delta): Rect
     {
@@ -137,21 +165,61 @@ class View
         $ay = $this->bounds->a->y;
         $bx = $this->bounds->b->x;
         $by = $this->bounds->b->y;
+        $ownerExtent = $this->owner?->getExtent();
+        $ownerWidth = $ownerExtent?->width() ?? 0;
+        $ownerHeight = $ownerExtent?->height() ?? 0;
 
         if (($this->growMode & State::GrowLoX) !== 0) {
-            $ax += $delta->x;
+            $ax = $this->growCoordinate($ax, $ownerWidth, $delta->x);
         }
         if (($this->growMode & State::GrowHiX) !== 0) {
-            $bx += $delta->x;
+            $bx = $this->growCoordinate($bx, $ownerWidth, $delta->x);
         }
         if (($this->growMode & State::GrowLoY) !== 0) {
-            $ay += $delta->y;
+            $ay = $this->growCoordinate($ay, $ownerHeight, $delta->y);
         }
         if (($this->growMode & State::GrowHiY) !== 0) {
-            $by += $delta->y;
+            $by = $this->growCoordinate($by, $ownerHeight, $delta->y);
         }
 
+        [$minWidth, $minHeight, $maxWidth, $maxHeight] = $this->sizeLimits();
+        $width = max($minWidth, min($maxWidth, IntMath::subtract($bx, $ax)));
+        $height = max($minHeight, min($maxHeight, IntMath::subtract($by, $ay)));
+        [$width, $height] = self::fitDrawableSize($width, $height);
+
+        $bx = IntMath::add($ax, max(0, $width));
+        $by = IntMath::add($ay, max(0, $height));
+
         return Rect::of($ax, $ay, $bx, $by);
+    }
+
+    /** @return array{0:int,1:int} */
+    private static function fitDrawableSize(int $width, int $height): array
+    {
+        $width = min(Buffer::MAX_CELLS, max(0, $width));
+        $height = min(Buffer::MAX_CELLS, max(0, $height));
+        if ($width !== 0) {
+            $height = min($height, intdiv(Buffer::MAX_CELLS, $width));
+        }
+
+        return [$width, $height];
+    }
+
+    private function growCoordinate(int $coordinate, int $newOwnerSize, int $delta): int
+    {
+        if (($this->growMode & State::GrowRel) === 0) {
+            return IntMath::add($coordinate, $delta);
+        }
+
+        $oldOwnerSize = IntMath::subtract($newOwnerSize, $delta);
+        if ($oldOwnerSize <= 0) {
+            return IntMath::add($coordinate, $delta);
+        }
+
+        return intdiv(
+            IntMath::add(IntMath::multiply($coordinate, $newOwnerSize), intdiv($oldOwnerSize, 2)),
+            $oldOwnerSize,
+        );
     }
 
     /**
@@ -177,10 +245,10 @@ class View
         $ax = $newBounds->a->x;
         $ay = $newBounds->a->y;
         // Keep the view fully inside $limits.
-        $ax = max($limits->a->x, min($limits->b->x - $w, $ax));
-        $ay = max($limits->a->y, min($limits->b->y - $h, $ay));
+        $ax = max($limits->a->x, min(IntMath::subtract($limits->b->x, $w), $ax));
+        $ay = max($limits->a->y, min(IntMath::subtract($limits->b->y, $h), $ay));
 
-        $this->changeBounds(Rect::of($ax, $ay, $ax + $w, $ay + $h));
+        $this->changeBounds(Rect::of($ax, $ay, IntMath::add($ax, $w), IntMath::add($ay, $h)));
     }
 
     // --- state flags ---
@@ -214,12 +282,15 @@ class View
     /** Draw only if visible and exposed (owned by a Screen-backed root). */
     public function drawView(): void
     {
-        if (! $this->getState(State::Visible)) {
-            return;
+        for ($view = $this; $view !== null; $view = $view->owner) {
+            if (! $view->getState(State::Visible)) {
+                return;
+            }
         }
         if ($this->screen() === null) {
             return;
         }
+
         $this->draw();
     }
 
@@ -318,18 +389,48 @@ class View
      */
     public function writeBuf(int $x, int $y, int $w, int $h, DrawBuffer $source): void
     {
-        $cells = $source->cells();
-        for ($row = 0; $row < $h; $row++) {
-            $this->writeRowCells($x, $y + $row, $w, $cells);
-        }
+        $this->writeRows($x, $y, $w, $h, $source->cells());
     }
 
     /** Like writeBuf but repeats one DrawBuffer row down $h lines. */
     public function writeLine(int $x, int $y, int $w, int $h, DrawBuffer $source): void
     {
-        $cells = $source->cells();
-        for ($row = 0; $row < $h; $row++) {
-            $this->writeRowCells($x, $y + $row, $w, $cells);
+        $this->writeRows($x, $y, $w, $h, $source->cells());
+    }
+
+    /**
+     * Repeat one source row only across the portion intersecting this view. Deriving
+     * the target interval first keeps adversarial widths/heights from becoming loop
+     * counts and avoids overflowing `$y + $row` near the integer limits.
+     *
+     * @param Cell[] $cells
+     */
+    private function writeRows(int $x, int $y, int $w, int $h, array $cells): void
+    {
+        if ($w <= 0 || $h <= 0) {
+            return;
+        }
+
+        $height = $this->bounds->height();
+        if ($height <= 0 || $y >= $height) {
+            return;
+        }
+
+        $skippedRows = 0;
+        $targetY = $y;
+        if ($y < 0) {
+            // If the requested interval ends at/before row zero, it is wholly clipped.
+            // `$h` is positive here, so negating it cannot overflow.
+            if ($y <= -$h) {
+                return;
+            }
+            $skippedRows = -$y;
+            $targetY = 0;
+        }
+
+        $visibleRows = min($h - $skippedRows, $height - $targetY);
+        for ($row = 0; $row < $visibleRows; $row++) {
+            $this->writeRowCells($x, $targetY + $row, $w, $cells);
         }
     }
 
@@ -356,6 +457,10 @@ class View
      */
     private function writeRowCells(int $localX, int $localY, int $count, array $cells): void
     {
+        if ($count <= 0) {
+            return;
+        }
+
         $screen = $this->screen();
         if ($screen === null) {
             return;
@@ -369,8 +474,8 @@ class View
         $clip = Rect::of(
             $origin->x,
             $origin->y,
-            $origin->x + $this->bounds->width(),
-            $origin->y + $this->bounds->height(),
+            IntMath::add($origin->x, $this->bounds->width()),
+            IntMath::add($origin->y, $this->bounds->height()),
         );
         $ancestor = $this->owner;
         while ($ancestor !== null) {
@@ -378,24 +483,41 @@ class View
             $clip = $clip->intersect(Rect::of(
                 $ancestorOrigin->x,
                 $ancestorOrigin->y,
-                $ancestorOrigin->x + $ancestor->bounds->width(),
-                $ancestorOrigin->y + $ancestor->bounds->height(),
+                IntMath::add($ancestorOrigin->x, $ancestor->bounds->width()),
+                IntMath::add($ancestorOrigin->y, $ancestor->bounds->height()),
             ));
             $ancestor = $ancestor->owner;
         }
         $clip = $clip->intersect(Rect::of(0, 0, $screen->cols(), $screen->rows()));
-        $globalY = $origin->y + $localY;
+        $globalY = IntMath::add($origin->y, $localY);
         if ($clip->isEmpty() || $globalY < $clip->a->y || $globalY >= $clip->b->y) {
             return;
         }
 
-        for ($i = 0; $i < $count; $i++) {
-            $cx = $localX + $i;
-            if ($cx < 0 || $cx >= $this->bounds->width()) {
-                continue; // outside the view extent
+        $width = $this->bounds->width();
+        if ($width <= 0 || $localX >= $width) {
+            return;
+        }
+
+        $firstSource = 0;
+        $targetX = $localX;
+        if ($localX < 0) {
+            // No part of [localX, localX + count) reaches the view. Avoid adding the
+            // two caller-controlled integers because that addition itself may overflow.
+            if ($localX <= -$count) {
+                return;
             }
-            $cell = $cells[$i] ?? new Cell();
-            $globalX = $origin->x + $cx;
+            $firstSource = -$localX;
+            $targetX = 0;
+        }
+
+        $visibleCells = min($count - $firstSource, $width - $targetX);
+        $blank = new Cell();
+        for ($offset = 0; $offset < $visibleCells; $offset++) {
+            $sourceX = $firstSource + $offset;
+            $cx = $targetX + $offset;
+            $cell = $cells[$sourceX] ?? $blank;
+            $globalX = IntMath::add($origin->x, $cx);
             if ($globalX < $clip->a->x || $globalX >= $clip->b->x) {
                 continue;
             }

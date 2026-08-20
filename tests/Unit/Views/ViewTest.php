@@ -44,6 +44,29 @@ test('setBounds replaces bounds and recomputes the extent', function (): void {
         ->and($v->getExtent())->toEqual(Rect::of(0, 0, 10, 4));
 });
 
+test('view bounds cannot have a negative extent', function (): void {
+    expect(fn () => new View(Rect::of(4, 0, 3, 1)))
+        ->toThrow(InvalidArgumentException::class, 'non-negative')
+        ->and(fn () => (new View(Rect::of(0, 0, 1, 1)))->setBounds(Rect::of(0, 2, 1, 1)))
+        ->toThrow(InvalidArgumentException::class, 'non-negative');
+});
+
+test('view bounds reject process-exhausting draw extents before rendering', function (): void {
+    expect(fn () => new View(Rect::of(0, 0, 1, PHP_INT_MAX)))
+        ->toThrow(InvalidArgumentException::class, 'safe drawable-cell limit')
+        ->and(fn () => new View(Rect::of(0, 0, 2_000, 2_000)))
+        ->toThrow(InvalidArgumentException::class, 'safe drawable-cell limit');
+});
+
+test('validated ownership rejects direct cycles', function (): void {
+    $parent = new View(Rect::of(0, 0, 2, 2));
+    $child = new View(Rect::of(0, 0, 1, 1));
+    $child->setOwner($parent);
+
+    expect(fn () => $parent->setOwner($child))
+        ->toThrow(InvalidArgumentException::class, 'cannot own itself');
+});
+
 test('clearEvent consumes an event (sets what=Nothing)', function (): void {
     $v = new View(Rect::of(0, 0, 4, 4));
     $e = Event::command(Cmd::Quit);
@@ -114,6 +137,26 @@ test('screen writes are clipped to every ancestor extent', function (): void {
     ]);
 });
 
+test('drawView does not paint through a hidden ancestor', function (): void {
+    $screen = new Screen(new HeadlessDriver(8, 2));
+    $screen->init();
+    $root = new RootStub($screen);
+    $parent = new Group(Rect::of(0, 0, 8, 2));
+    $child = new class(Rect::of(0, 0, 4, 1)) extends View {
+        public function draw(): void
+        {
+            $this->writeStr(0, 0, 'LEAK', 0x07);
+        }
+    };
+    $root->insert($parent);
+    $parent->insert($child);
+    $parent->setState(State::Visible, false);
+
+    $child->drawView();
+
+    expect($screen->back()->rows()[0])->toBe('        ');
+});
+
 test('writeLine copies from source column zero when the destination x is non-zero', function (): void {
     $screen = new Screen(new HeadlessDriver(8, 2));
     $screen->init();
@@ -126,6 +169,35 @@ test('writeLine copies from source column zero when the destination x is non-zer
     $view->writeLine(3, 0, 3, 1, $buffer);
 
     expect($screen->back()->rows()[0])->toBe('   ABC  ');
+});
+
+test('screen writes bound pathological dimensions to the visible intersection', function (): void {
+    $screen = new Screen(new HeadlessDriver(4, 2));
+    $screen->init();
+    $root = new RootStub($screen);
+    $view = new View(Rect::of(0, 0, 4, 2));
+    $root->insert($view);
+    $buffer = new DrawBuffer(2);
+    $buffer->moveStr(0, 'AB', 0x07);
+
+    $view->writeBuf(-1, -1, PHP_INT_MAX, PHP_INT_MAX, $buffer);
+
+    expect($screen->back()->rows())->toBe(['B   ', 'B   ']);
+});
+
+test('nested views with extreme off-screen origins clip without coordinate overflow', function (): void {
+    $screen = new Screen(new HeadlessDriver(4, 2));
+    $screen->init();
+    $root = new RootStub($screen);
+    $parent = new Group(Rect::of(PHP_INT_MAX - 2, 0, PHP_INT_MAX, 1));
+    $child = new View(Rect::of(10, 0, 11, 1));
+    $root->insert($parent);
+    $parent->insert($child);
+
+    $child->writeStr(0, 0, 'X', 0x07);
+
+    expect($child->absoluteOrigin())->toEqual(new Point(PHP_INT_MAX, 0))
+        ->and($screen->back()->rows())->toBe(['    ', '    ']);
 });
 
 test('mapColor resolves through the view own palette', function (): void {

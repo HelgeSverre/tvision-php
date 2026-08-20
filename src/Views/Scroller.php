@@ -59,6 +59,9 @@ class Scroller extends View
     /** Set the logical size and reparameterise the attached bars (faithful setLimit). */
     public function setLimit(int $x, int $y): void
     {
+        $x = max(0, $x);
+        $y = max(0, $y);
+        $changed = $x !== $this->limit->x || $y !== $this->limit->y;
         $this->limit = new Point($x, $y);
         $this->drawLock++;
 
@@ -82,6 +85,9 @@ class Scroller extends View
         }
 
         $this->drawLock--;
+        if ($changed) {
+            $this->drawFlag = true;
+        }
         $this->checkDraw();
     }
 

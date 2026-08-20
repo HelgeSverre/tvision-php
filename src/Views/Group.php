@@ -13,8 +13,8 @@ use InvalidArgumentException;
 
 /**
  * A View owning an ordered Z-ordered subview list (faithful to TGroup). Routes events
- * (positional -> subview under the mouse; focused -> current then any handler;
- * broadcast -> all), manages focus, and runs the execView modal sub-loop.
+ * (positional -> subview under the mouse; focused -> pre-processors, current, then
+ * post-processors; broadcast -> all), manages focus, and runs the execView modal loop.
  */
 class Group extends View
 {
@@ -25,6 +25,9 @@ class Group extends View
 
     /** Non-zero ends the active modal execute() loop with this command code. */
     protected int $endState = 0;
+
+    /** @var list<Event> Events queued on a root Group that is not a Program. */
+    private array $queuedEvents = [];
 
     public function insert(View $view): void
     {
@@ -43,7 +46,10 @@ class Group extends View
         $view->setOwner($this);
         $this->children[] = $view;
         // ofSelectable is an OPTION flag (lives in $options), not a state flag.
-        if ($this->currentView === null && ($view->options & State::Selectable) !== 0) {
+        if ($this->currentView === null
+            && ($view->options & State::Selectable) !== 0
+            && $this->acceptsFocusedEvents($view)
+        ) {
             $this->setCurrent($view);
         }
     }
@@ -55,12 +61,17 @@ class Group extends View
             return;
         }
 
+        $wasCurrent = $this->currentView === $view;
         array_splice($this->children, $index, 1);
-        if ($this->currentView === $view) {
+        if ($wasCurrent) {
             $view->setState(State::Focused | State::Selected, false);
             $this->currentView = null;
         }
         $view->setOwner(null);
+
+        if ($wasCurrent) {
+            $this->focusReplacement($index);
+        }
     }
 
     /** @return list<View> */
@@ -120,6 +131,7 @@ class Group extends View
         $selectable = array_values(array_filter(
             $this->children,
             static fn (View $v): bool => ($v->options & State::Selectable) !== 0
+                && $v->getState(State::Visible)
                 && ! $v->getState(State::Disabled),
         ));
         if ($selectable === []) {
@@ -236,20 +248,61 @@ class Group extends View
             return;
         }
 
-        // Focused events (keyboard | command): current first, then any subview.
+        // Focused events (keyboard | command) travel through the three Turbo Vision
+        // phases. Ordinary non-current children must not observe someone else's key
+        // presses or commands merely because they share an owner.
         if (($bit & EventMask::Focused) !== 0) {
-            $this->currentView?->handleEvent($event);
+            $this->handleFocusedPhase($event, State::PreProcess);
+
+            if (! $event->isNothing()
+                && $this->currentView !== null
+                && $this->acceptsFocusedEvents($this->currentView)
+            ) {
+                $this->currentView->handleEvent($event);
+            }
+
+            $this->handleFocusedPhase($event, State::PostProcess);
+        }
+    }
+
+    private function handleFocusedPhase(Event $event, int $option): void
+    {
+        if ($event->isNothing()) {
+            return;
+        }
+
+        foreach ($this->children as $child) {
+            if ($child === $this->currentView
+                || ($child->options & $option) === 0
+                || ! $this->acceptsFocusedEvents($child)
+            ) {
+                continue;
+            }
+
+            $child->handleEvent($event);
             if ($event->isNothing()) {
                 return;
             }
-            foreach ($this->children as $child) {
-                if ($child === $this->currentView) {
-                    continue;
-                }
-                $child->handleEvent($event);
-                if ($event->isNothing()) {
-                    return;
-                }
+        }
+    }
+
+    private function acceptsFocusedEvents(View $view): bool
+    {
+        return $view->getState(State::Visible) && ! $view->getState(State::Disabled);
+    }
+
+    /** Select the closest eligible child at or after a removed child's old index. */
+    private function focusReplacement(int $start): void
+    {
+        $count = count($this->children);
+        for ($offset = 0; $offset < $count; $offset++) {
+            $candidate = $this->children[($start + $offset) % $count];
+            if (($candidate->options & State::Selectable) !== 0
+                && $this->acceptsFocusedEvents($candidate)
+            ) {
+                $this->setCurrent($candidate);
+
+                return;
             }
         }
     }
@@ -359,7 +412,11 @@ class Group extends View
         $owner = $this->owner;
         if ($owner instanceof Group) {
             $owner->putEvent($event);
+
+            return;
         }
+
+        $this->queuedEvents[] = $event;
     }
 
     /**
@@ -374,12 +431,19 @@ class Group extends View
             return $this->owner->pumpEvent();
         }
 
+        if ($this->queuedEvents !== []) {
+            return array_shift($this->queuedEvents);
+        }
+
         $screen = $this->screen();
         if ($screen === null) {
             return null;
         }
 
-        $events = $screen->pollEvents(0);
+        $events = $screen->pollEvents(20);
+        if (count($events) > 1) {
+            array_push($this->queuedEvents, ...array_slice($events, 1));
+        }
 
         return $events[0] ?? null;
     }

@@ -61,6 +61,14 @@ test('a fresh list viewer is selectable with zeroed state', function (): void {
         ->and(($lv->options & State::Selectable) !== 0)->toBeTrue();
 });
 
+test('list viewer normalizes invalid column and range counts', function (): void {
+    $lv = new NumberList(Rect::of(0, 0, 12, 5), 0, null, null);
+    $lv->setRange(-10);
+
+    expect($lv->numCols)->toBe(1)
+        ->and($lv->range)->toBe(0);
+});
+
 test('setRange updates the vertical scroll bar parameters', function (): void {
     $bar = new ScrollBar(Rect::of(0, 0, 1, 5));
     $lv = new NumberList(Rect::of(0, 0, 12, 5), 1, null, $bar);
@@ -138,6 +146,20 @@ test('draw paints visible items and highlights the focused one when selected+act
     $rows = $screen->back()->rows();
     expect($rows[0])->toContain('Item 0')
         ->and($rows[1])->toContain('Item 1');
+});
+
+test('pathological public column counts are bounded by the visible list geometry', function (): void {
+    [$group, $screen] = lvRoot(8, 2);
+    $list = new NumberList(Rect::of(0, 0, 4, 1), 1, null, null);
+    $group->insert($list);
+    $list->setRange(10);
+    $list->numCols = PHP_INT_MAX;
+
+    $list->draw();
+    $list->handleEvent(Event::keyDown(new KeyDownEvent(Key::PageDown->value)));
+
+    expect($screen->back()->rows()[0])->toContain('I')
+        ->and($list->focused)->toBeLessThan(10);
 });
 
 test('a cmScrollBarChanged from the vertical bar re-focuses to the bar value', function (): void {

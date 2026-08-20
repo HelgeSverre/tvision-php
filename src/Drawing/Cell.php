@@ -22,7 +22,7 @@ final readonly class Cell
 
     public static function of(string $char, Attribute $attribute): self
     {
-        return new self($char, $attribute->toByte());
+        return new self($char, $attribute->toCellValue());
     }
 
     public function equals(Cell $other): bool

@@ -8,14 +8,15 @@ use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
+use HelgeSverre\TurboVision\Events\KeyModifier;
 use HelgeSverre\TurboVision\Events\MouseEvent;
 use HelgeSverre\TurboVision\Geometry\Point;
 
 /**
  * Pure, incremental decoder: raw terminal bytes -> DecodeResult (events + remainder).
  * Total by construction — unknown sequences are consumed and dropped, never thrown.
- * Targets the common xterm/VT/rxvt subset used by M1; multi-terminal hardening is a
- * planned follow-up (see plan NOTE).
+ * Supports classic xterm sequences, SGR mouse input, and the Kitty keyboard
+ * protocol while safely consuming terminal replies and unsupported sequences.
  */
 final class EscapeDecoder
 {
@@ -174,11 +175,27 @@ final class EscapeDecoder
      */
     public function flushPending(string $remainder): ?Event
     {
-        if ($remainder === "\e") {
-            return Event::keyDown(new KeyDownEvent(Key::Esc->value));
+        return $this->flushPendingEvents($remainder)[0] ?? null;
+    }
+
+    /**
+     * Turn an ambiguous run of bare ESC bytes into key presses after the caller's
+     * inter-fragment timeout. Keeping the whole run pending makes decoding invariant
+     * to read boundaries without losing rapid consecutive Esc presses.
+     *
+     * @return list<Event>
+     */
+    public function flushPendingEvents(string $remainder): array
+    {
+        if ($remainder === '' || strspn($remainder, "\e") !== strlen($remainder)) {
+            return [];
         }
 
-        return null;
+        return array_fill(
+            0,
+            strlen($remainder),
+            Event::keyDown(new KeyDownEvent(Key::Esc->value)),
+        );
     }
 
     /**
@@ -249,24 +266,35 @@ final class EscapeDecoder
             return 3;
         }
 
+        // ECMA-48 control strings. Terminal replies (OSC, DCS, SOS, PM, APC)
+        // are protocol traffic, not keyboard input; consume them through BEL or ST
+        // so their payload cannot leak into the application as typed characters.
+        if (str_contains(']PX^_', $next)) {
+            return $this->decodeControlString($bytes, $i, $len, $next === ']');
+        }
+
         // ESC ESC … — double-escape passthrough (tmux/screen wraps inner sequences).
         // If the byte following the second ESC would start a proper CSI or SS3 sequence
         // ('[' or 'O'), strip the outer ESC silently and decode the inner sequence.
         // Otherwise emit the first ESC as Key::Esc and consume only 1 byte so the
         // second ESC is available for the next iteration.
         if ($next === "\e") {
-            if ($i + 2 < $len) {
-                $after = $bytes[$i + 2];
-                if ($after === '[' || $after === 'O') {
-                    // Decode the inner escape sequence starting at i+1.
-                    $inner = $this->decodeEscape($bytes, $i + 1, $len, $events);
-                    if ($inner === 0) {
-                        // Inner sequence is incomplete — treat the whole thing as incomplete.
-                        return 0;
-                    }
+            // The third byte decides whether this is a wrapped sequence or two
+            // independent Esc presses. Preserve both until it arrives (or timeout).
+            if ($i + 2 >= $len) {
+                return 0;
+            }
 
-                    return 1 + $inner;
+            $after = $bytes[$i + 2];
+            if ($after === '[' || $after === 'O') {
+                // Decode the inner escape sequence starting at i+1.
+                $inner = $this->decodeEscape($bytes, $i + 1, $len, $events);
+                if ($inner === 0) {
+                    // Inner sequence is incomplete — treat the whole thing as incomplete.
+                    return 0;
                 }
+
+                return 1 + $inner;
             }
 
             // Two bare ESC bytes (or ESC ESC followed by non-sequence byte):
@@ -334,11 +362,17 @@ final class EscapeDecoder
         }
 
         // CSI <n>~ : function / navigation tilde sequence.
-        if ($final === '~' && $params !== '' && ctype_digit($params)) {
-            $n = (int) $params;
-            if (isset(self::CSI_TILDE[$n])) {
-                $events[] = Event::keyDown(new KeyDownEvent(self::CSI_TILDE[$n]->value));
+        if ($final === '~') {
+            [$n, $modifiers] = $this->legacyKeyParameters($params);
+            if ($n !== null && isset(self::CSI_TILDE[$n])) {
+                $events[] = Event::keyDown(new KeyDownEvent(self::CSI_TILDE[$n]->value, modifiers: $modifiers));
             }
+
+            return;
+        }
+
+        if ($final === 'u') {
+            $this->emitKittyKey($params, $events);
 
             return;
         }
@@ -353,22 +387,180 @@ final class EscapeDecoder
         // Strategy: ignore the parameter(s) and map the final byte using CSI_LETTER
         // or SS3, emitting the base key without modifier metadata.
         if ($params !== '' && isset(self::CSI_LETTER[$final])) {
-            $events[] = Event::keyDown(new KeyDownEvent(self::CSI_LETTER[$final]->value));
+            [$prefix, $modifiers] = $this->legacyKeyParameters($params);
+            if ($prefix === 1) {
+                $events[] = Event::keyDown(new KeyDownEvent(
+                    self::CSI_LETTER[$final]->value,
+                    modifiers: $modifiers,
+                ));
+            }
 
             return;
         }
 
-        // xterm modifyFunctionKeys: CSI <n> P/Q/R/S where P/Q/R/S are SS3 keys.
-        if ($params !== '' && isset(self::SS3[$final])) {
-            $events[] = Event::keyDown(new KeyDownEvent(self::SS3[$final]->value));
+        // xterm/Kitty F1, F2 and F4 use CSI 1[;modifier] P/Q/S. CSI R is
+        // deliberately excluded: it is a cursor-position report, not F3.
+        if ($params !== '' && $final !== 'R' && isset(self::SS3[$final])) {
+            [$prefix, $modifiers] = $this->legacyKeyParameters($params);
+            if ($prefix === 1) {
+                $events[] = Event::keyDown(new KeyDownEvent(
+                    self::SS3[$final]->value,
+                    modifiers: $modifiers,
+                ));
+            }
 
             return;
         }
 
-        // Kitty progressive-enhancement and other unrecognised CSI sequences:
-        // emit a synthetic KeyDown with keyCode=0 so callers can detect unknown
-        // sequences rather than having them silently vanish.
-        $events[] = Event::keyDown(new KeyDownEvent(0));
+        // Device replies and unsupported CSI extensions are intentionally ignored.
+        // Converting protocol traffic into a synthetic key can activate whichever
+        // control happens to treat keyCode=0 as meaningful.
+    }
+
+    /** @return array{?int, int} [key parameter, decoded modifier bitmask] */
+    private function legacyKeyParameters(string $params): array
+    {
+        if (preg_match('/^(\d+)(?:;(\d+))?$/D', $params, $matches) !== 1) {
+            return [null, 0];
+        }
+
+        $encodedModifiers = isset($matches[2]) ? (int) $matches[2] : 1;
+        if ($encodedModifiers < 1 || $encodedModifiers > 256) {
+            return [null, 0];
+        }
+
+        return [(int) $matches[1], $encodedModifiers - 1];
+    }
+
+    /** @param list<Event> $events */
+    private function emitKittyKey(string $params, array &$events): void
+    {
+        $fields = explode(';', $params);
+        if (count($fields) > 3 || $fields[0] === '') {
+            return;
+        }
+
+        $keyParts = explode(':', $fields[0]);
+        if (count($keyParts) > 3
+            || ! $this->decimalFields($keyParts, allowEmpty: true)
+            || $keyParts[0] === ''
+        ) {
+            return;
+        }
+        $codepoint = (int) $keyParts[0];
+
+        $modifierParts = isset($fields[1]) && $fields[1] !== '' ? explode(':', $fields[1]) : ['1'];
+        if (! $this->decimalFields($modifierParts, allowEmpty: false) || count($modifierParts) > 2) {
+            return;
+        }
+        $encodedModifiers = (int) $modifierParts[0];
+        $eventType = isset($modifierParts[1]) ? (int) $modifierParts[1] : 1;
+        if ($encodedModifiers < 1 || $encodedModifiers > 256 || ! in_array($eventType, [1, 2, 3], true)) {
+            return;
+        }
+        if ($eventType === 3) {
+            return; // KeyDownEvent cannot represent releases; safe fallback is to ignore them.
+        }
+        $modifiers = $encodedModifiers - 1;
+
+        $text = '';
+        if (isset($fields[2]) && $fields[2] !== '') {
+            $textParts = explode(':', $fields[2]);
+            if (! $this->decimalFields($textParts, allowEmpty: false)) {
+                return;
+            }
+            foreach ($textParts as $textCodepoint) {
+                $character = $this->unicodeCharacter((int) $textCodepoint);
+                if ($character === null || preg_match('/[\p{Cc}\p{Cs}]/u', $character) === 1) {
+                    return;
+                }
+                $text .= $character;
+            }
+        }
+
+        $special = match ($codepoint) {
+            9 => Key::Tab,
+            13 => Key::Enter,
+            27 => Key::Esc,
+            127 => Key::Backspace,
+            default => null,
+        };
+        if ($special !== null) {
+            $events[] = Event::keyDown(new KeyDownEvent($special->value, modifiers: $modifiers));
+
+            return;
+        }
+
+        // Unknown private-use key codes describe functional keys the current public
+        // Key enum cannot express. Ignore them instead of inventing a printable key.
+        if ($codepoint >= 0xE000 && $codepoint <= 0xF8FF) {
+            return;
+        }
+
+        if ($text === '') {
+            $selectedCodepoint = $codepoint;
+            if (($modifiers & KeyModifier::Shift) !== 0 && isset($keyParts[1]) && $keyParts[1] !== '') {
+                $selectedCodepoint = (int) $keyParts[1];
+            }
+            $text = $this->unicodeCharacter($selectedCodepoint) ?? '';
+            if ($text !== '' && preg_match('/[\p{Cc}\p{Cs}]/u', $text) === 1) {
+                $text = '';
+            }
+        }
+
+        if ($codepoint === 0 && $text === '') {
+            return;
+        }
+
+        $events[] = Event::keyDown(new KeyDownEvent(
+            $codepoint >= 0x20 && $codepoint <= 0x7E ? $codepoint : 0,
+            $text,
+            $modifiers,
+        ));
+    }
+
+    /** @param list<string> $fields */
+    private function decimalFields(array $fields, bool $allowEmpty): bool
+    {
+        foreach ($fields as $field) {
+            if ($field === '' && $allowEmpty) {
+                continue;
+            }
+            if ($field === '' || strlen($field) > 7 || ! ctype_digit($field)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function unicodeCharacter(int $codepoint): ?string
+    {
+        if ($codepoint < 0 || $codepoint > 0x10FFFF || ($codepoint >= 0xD800 && $codepoint <= 0xDFFF)) {
+            return null;
+        }
+
+        return mb_chr($codepoint, 'UTF-8');
+    }
+
+    /** Consume OSC/DCS/SOS/PM/APC through BEL (OSC only) or the ESC \\ ST terminator. */
+    private function decodeControlString(string $bytes, int $i, int $len, bool $allowBel): int
+    {
+        for ($j = $i + 2; $j < $len; $j++) {
+            if ($allowBel && $bytes[$j] === "\x07") {
+                return $j - $i + 1;
+            }
+            if ($bytes[$j] === "\e") {
+                if ($j + 1 >= $len) {
+                    return 0;
+                }
+                if ($bytes[$j + 1] === '\\') {
+                    return $j - $i + 2;
+                }
+            }
+        }
+
+        return 0;
     }
 
     /**

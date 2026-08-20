@@ -81,3 +81,13 @@ test('rows are emitted top-to-bottom with independent moves', function (): void 
         . "\e[2;1H" . "\e[0;37m" . 'b' // row 1
     );
 });
+
+test('present rejects mismatched buffer dimensions instead of silently clipping', function (): void {
+    $presenter = new DiffPresenter();
+
+    expect(fn () => $presenter->present(
+        new Buffer(2, 1),
+        new Buffer(3, 1),
+        new AnsiEncoder(),
+    ))->toThrow(InvalidArgumentException::class, 'same dimensions');
+});

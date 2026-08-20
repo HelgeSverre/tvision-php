@@ -69,3 +69,22 @@ test('editing an event preserves recurrence limits and untouched multiline notes
         ->and($updated->repeat)->toBe(RepeatRule::Weekly)
         ->and($updated->recurrenceUntil)->toEqual($until);
 });
+
+test('editing metadata preserves second precision in event times', function (): void {
+    $timezone = new DateTimeZone('UTC');
+    $event = new CalendarEvent(
+        uid: 'second-precision',
+        title: 'Precise event',
+        start: new DateTimeImmutable('2026-08-20 09:00:45', $timezone),
+        end: new DateTimeImmutable('2026-08-20 10:15:30', $timezone),
+    );
+    $draft = EventDraft::fromEvent($event);
+    $draft->title = 'Updated precise event';
+
+    $updated = $draft->toEvent($timezone);
+
+    expect($draft->startTime)->toBe('09:00:45')
+        ->and($draft->endTime)->toBe('10:15:30')
+        ->and($updated->start->format('H:i:s'))->toBe('09:00:45')
+        ->and($updated->end->format('H:i:s'))->toBe('10:15:30');
+});

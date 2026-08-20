@@ -45,3 +45,14 @@ test('init and shutdown are observable and shutdown is idempotent', function ():
     $d->shutdown(); // idempotent, no error
     expect($d->isInitialised())->toBeFalse();
 });
+
+test('headless dimensions and poll timeouts reject invalid values', function (): void {
+    $driver = new HeadlessDriver();
+
+    expect(fn () => new HeadlessDriver(-1, 20))
+        ->toThrow(InvalidArgumentException::class, 'non-negative')
+        ->and(fn () => $driver->resizeTo(20, -1))
+        ->toThrow(InvalidArgumentException::class, 'non-negative')
+        ->and(fn () => $driver->pollInput(-1))
+        ->toThrow(InvalidArgumentException::class, 'non-negative');
+});

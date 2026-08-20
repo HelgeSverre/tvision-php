@@ -1,0 +1,49 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/** Whether this PHP process can collect the coverage data required by Pest TIA. */
+function coverageIsAvailable(): bool
+{
+    if (extension_loaded('pcov') && filter_var(ini_get('pcov.enabled'), FILTER_VALIDATE_BOOL)) {
+        return true;
+    }
+
+    if (! extension_loaded('xdebug')) {
+        return false;
+    }
+
+    if (function_exists('xdebug_info')) {
+        $modes = xdebug_info('mode');
+        if (is_array($modes)) {
+            return in_array('coverage', $modes, true);
+        }
+    }
+
+    $configuredModes = (string) (getenv('XDEBUG_MODE') ?: ini_get('xdebug.mode'));
+
+    return in_array('coverage', array_map('trim', explode(',', $configuredModes)), true);
+}
+
+$pest = realpath(__DIR__ . '/../vendor/bin/pest');
+if ($pest === false) {
+    fwrite(STDERR, "Pest is not installed; run composer install first.\n");
+    exit(2);
+}
+
+$arguments = array_slice($argv, 1);
+if (coverageIsAvailable()) {
+    $arguments = ['--parallel', '--tia', '--filtered', ...$arguments];
+    fwrite(STDERR, "Pest TIA enabled (coverage driver detected).\n");
+} else {
+    fwrite(STDERR, "Pest TIA needs enabled PCOV or Xdebug coverage; running the full suite instead.\n");
+}
+
+$command = implode(' ', array_map(
+    escapeshellarg(...),
+    [PHP_BINARY, $pest, ...$arguments],
+));
+passthru($command, $status);
+
+exit($status);

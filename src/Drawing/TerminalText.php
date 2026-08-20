@@ -13,6 +13,9 @@ final class TerminalText
         if ($text === '') {
             return [];
         }
+        if (self::isPrintableAscii($text)) {
+            return str_split($text);
+        }
 
         $result = preg_match_all('/\X/u', $text, $matches);
         if ($result === false) {
@@ -24,11 +27,19 @@ final class TerminalText
 
     public static function length(string $text): int
     {
+        if (self::isPrintableAscii($text)) {
+            return strlen($text);
+        }
+
         return count(self::graphemes($text));
     }
 
     public static function slice(string $text, int $offset, ?int $length = null): string
     {
+        if (self::isPrintableAscii($text)) {
+            return $length === null ? substr($text, $offset) : substr($text, $offset, $length);
+        }
+
         return implode('', array_slice(self::graphemes($text), $offset, $length));
     }
 
@@ -38,6 +49,12 @@ final class TerminalText
      */
     public static function cellGlyph(string $value): string
     {
+        if (strlen($value) === 1) {
+            $ord = ord($value);
+
+            return $ord >= 0x20 && $ord <= 0x7E ? $value : '?';
+        }
+
         $graphemes = self::graphemes($value);
         if (count($graphemes) !== 1) {
             return '?';
@@ -54,5 +71,10 @@ final class TerminalText
         }
 
         return $glyph;
+    }
+
+    private static function isPrintableAscii(string $text): bool
+    {
+        return preg_match('/^[\x20-\x7E]*$/D', $text) === 1;
     }
 }

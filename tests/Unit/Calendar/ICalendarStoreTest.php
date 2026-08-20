@@ -137,10 +137,13 @@ test('iCalendar parsing rejects recurrence semantics the demo cannot preserve', 
 test('nested alarm properties do not overwrite event properties', function (): void {
     $store = new ICalendarStore(new DateTimeZone('UTC'));
     $ics = "BEGIN:VCALENDAR\r\n"
+        . "X-WR-CALNAME:Provider calendar\r\n"
         . "BEGIN:VEVENT\r\n"
         . "UID:with-alarm\r\n"
         . "DTSTART:20260820T090000Z\r\n"
         . "DESCRIPTION:Event notes\r\n"
+        . "ATTENDEE:mailto:person@example.test\r\n"
+        . "CATEGORIES:Work,Important\r\n"
         . "BEGIN:VALARM\r\n"
         . "DESCRIPTION:Alarm notes\r\n"
         . "END:VALARM\r\n"
@@ -148,9 +151,57 @@ test('nested alarm properties do not overwrite event properties', function (): v
         . "END:VCALENDAR\r\n";
 
     $events = $store->parse($ics);
+    $serialized = $store->serialize($events);
 
     expect($events)->toHaveCount(1)
-        ->and($events[0]->notes)->toBe('Event notes');
+        ->and($events[0]->notes)->toBe('Event notes')
+        ->and($serialized)->toContain('X-WR-CALNAME:Provider calendar')
+        ->and($serialized)->toContain('ATTENDEE:mailto:person@example.test')
+        ->and($serialized)->toContain("BEGIN:VALARM\r\n")
+        ->and($serialized)->toContain('DESCRIPTION:Alarm notes')
+        ->and($serialized)->toContain('CATEGORIES:Work,Important');
+});
+
+test('all-day recurrence UNTIL values retain their DATE type', function (): void {
+    $timezone = new DateTimeZone('UTC');
+    $store = new ICalendarStore($timezone);
+    $event = new CalendarEvent(
+        uid: 'all-day-series',
+        title: 'Daily focus',
+        start: new DateTimeImmutable('2026-08-20', $timezone),
+        end: new DateTimeImmutable('2026-08-21', $timezone),
+        allDay: true,
+        repeat: RepeatRule::Daily,
+        recurrenceUntil: new DateTimeImmutable('2026-08-30', $timezone),
+    );
+
+    $serialized = $store->serialize([$event]);
+    $roundTrip = $store->parse($serialized);
+    $mismatched = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:mismatch\r\n"
+        . "DTSTART;VALUE=DATE:20260820\r\nRRULE:FREQ=DAILY;UNTIL=20260830T000000Z\r\n"
+        . "END:VEVENT\r\nEND:VCALENDAR\r\n";
+
+    expect($serialized)->toContain('RRULE:FREQ=DAILY;UNTIL=20260830')
+        ->and($serialized)->not->toContain('UNTIL=20260830T000000Z')
+        ->and($roundTrip[0]->recurrenceUntil?->format('Y-m-d'))->toBe('2026-08-30')
+        ->and(fn (): array => $store->parse($mismatched))
+        ->toThrow(UnexpectedValueException::class, 'same value type');
+});
+
+test('all-day UNTIL serialization does not timezone-shift its floating date', function (): void {
+    $eventTimezone = new DateTimeZone('America/Los_Angeles');
+    $store = new ICalendarStore($eventTimezone);
+    $event = new CalendarEvent(
+        uid: 'floating-until',
+        title: 'Floating date',
+        start: new DateTimeImmutable('2026-08-20', $eventTimezone),
+        end: new DateTimeImmutable('2026-08-21', $eventTimezone),
+        allDay: true,
+        repeat: RepeatRule::Daily,
+        recurrenceUntil: new DateTimeImmutable('2026-08-30 00:00:00', new DateTimeZone('UTC')),
+    );
+
+    expect($store->serialize([$event]))->toContain('UNTIL=20260830');
 });
 
 test('iCalendar parsing validates component structure and unique event properties', function (): void {

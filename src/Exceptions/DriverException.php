@@ -16,4 +16,14 @@ final class DriverException extends TurboVisionException
     {
         return new self('The "stty" command is unavailable; cannot enter raw mode.');
     }
+
+    public static function writeFailed(?\Throwable $previous = null): self
+    {
+        return new self('Failed to write terminal output.', 0, $previous);
+    }
+
+    public static function readFailed(?\Throwable $previous = null): self
+    {
+        return new self('Failed to read terminal input.', 0, $previous);
+    }
 }

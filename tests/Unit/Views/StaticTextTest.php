@@ -7,6 +7,7 @@ use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Terminal\Screen;
 use HelgeSverre\TurboVision\Views\Group;
 use HelgeSverre\TurboVision\Views\StaticText;
+use HelgeSverre\TurboVision\Views\TextAlignment;
 
 /** Root group exposing a Screen so StaticText can composite somewhere assertable. */
 final class StaticTextRoot extends Group
@@ -67,6 +68,23 @@ test('word wrapping retains every chunk of a word wider than the view', function
     ]);
 });
 
+test('preserves explicit and blank lines while wrapping each line', function (): void {
+    $screen = new Screen(new HeadlessDriver(10, 4));
+    $screen->init();
+    $root = new StaticTextRoot($screen);
+    $text = StaticText::centered(Rect::of(0, 0, 9, 4), "Hello\n\nwide words");
+    $root->insert($text);
+
+    $text->draw();
+
+    expect($screen->back()->rows())->toBe([
+        '  Hello   ',
+        '          ',
+        '  wide    ',
+        '  words   ',
+    ]);
+});
+
 test('a leading \003 control char centers the line', function (): void {
     $screen = new Screen(new HeadlessDriver(10, 1));
     $screen->init();
@@ -79,4 +97,34 @@ test('a leading \003 control char centers the line', function (): void {
 
     // "Hi" is 2 wide in a 9-wide view -> left pad (9-2)/2 = 3 spaces
     expect($screen->back()->rows()[0])->toBe('   Hi     ');
+});
+
+test('supports typed alignment and a centered factory', function (): void {
+    $screen = new Screen(new HeadlessDriver(10, 3));
+    $screen->init();
+    $root = new StaticTextRoot($screen);
+
+    $centered = new StaticText(
+        Rect::of(0, 0, 9, 1),
+        'Hi',
+        alignment: TextAlignment::Center,
+    );
+    $factory = StaticText::centered(Rect::of(0, 1, 9, 2), 'Hi');
+    $right = new StaticText(
+        Rect::of(0, 2, 9, 3),
+        'Hi',
+        alignment: TextAlignment::Right,
+    );
+    $root->insert($centered);
+    $root->insert($factory);
+    $root->insert($right);
+
+    $root->draw();
+
+    expect($factory)->toBeInstanceOf(StaticText::class)
+        ->and($screen->back()->rows())->toBe([
+            '   Hi     ',
+            '   Hi     ',
+            '       Hi ',
+        ]);
 });

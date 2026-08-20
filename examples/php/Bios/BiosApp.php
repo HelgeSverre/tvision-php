@@ -16,7 +16,7 @@ use HelgeSverre\TurboVision\Views\Desktop;
 /**
  * Full-screen BIOS Setup Utility application.
  *
- * Overrides layout() to produce a black, menu-bar-free desktop that is fully
+ * Overrides layout() to produce a menu-bar-free desktop that is fully
  * covered by the BiosScreen view. No menu bar; no status line — the BiosScreen
  * renders its own key legend.
  */
@@ -73,13 +73,12 @@ final class BiosApp extends Application
         $rows = $this->screenObj->rows();
         $this->setBounds(Rect::of(0, 0, $cols, $rows));
 
-        $this->children     = [];
-        $this->currentView  = null;
+        $this->clearSubviews();
         $this->desktop      = null;
         $this->menuBar      = null;
         $this->statusLine   = null;
 
-        // Full-screen black desktop (backdrop only; never visible under BiosScreen)
+        // Full-screen backdrop (never visible under BiosScreen)
         $this->desktop = $this->initDeskTop(Rect::of(0, 0, $cols, $rows));
         $this->insert($this->desktop);
 

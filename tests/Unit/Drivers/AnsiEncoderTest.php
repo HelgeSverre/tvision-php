@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use HelgeSverre\TurboVision\Drawing\Attribute;
+use HelgeSverre\TurboVision\Drawing\Color;
 use HelgeSverre\TurboVision\Drivers\AnsiEncoder;
 
 test('moveCursor emits a 1-based CUP sequence', function (): void {
@@ -10,6 +12,22 @@ test('moveCursor emits a 1-based CUP sequence', function (): void {
     expect($enc->moveCursor(0, 0))->toBe("\e[1;1H")
         ->and($enc->moveCursor(4, 2))->toBe("\e[3;5H")   // col 4 -> 5, row 2 -> 3
         ->and($enc->moveCursor(79, 23))->toBe("\e[24;80H");
+});
+
+test('moveCursor rejects coordinates outside the screen model', function (): void {
+    $encoder = new AnsiEncoder();
+
+    expect(fn () => $encoder->moveCursor(-1, 0))
+        ->toThrow(InvalidArgumentException::class, 'non-negative')
+        ->and(fn () => $encoder->moveCursor(0, -1))
+        ->toThrow(InvalidArgumentException::class, 'non-negative');
+});
+
+test('moveCursor never emits float notation at the integer boundary', function (): void {
+    $encoder = new AnsiEncoder();
+
+    expect($encoder->moveCursor(PHP_INT_MAX, PHP_INT_MAX))
+        ->toBe("\e[" . PHP_INT_MAX . ';' . PHP_INT_MAX . 'H');
 });
 
 test('style mirrors Attribute::fromByte(byte)->toSgr()', function (): void {
@@ -24,6 +42,13 @@ test('style mirrors Attribute::fromByte(byte)->toSgr()', function (): void {
 test('encoder can request literal ANSI black for classic rendering', function (): void {
     expect((new AnsiEncoder(useDefaultBackgroundForBlack: false))->style(0x07))
         ->toBe("\e[0;37;40m");
+});
+
+test('style renders an extended bright background cell value', function (): void {
+    $attribute = new Attribute(Color::White, Color::DarkGray);
+
+    expect((new AnsiEncoder())->style($attribute->toCellValue()))
+        ->toBe("\e[0;97;100m");
 });
 
 test('run combines move + style + text in order', function (): void {
@@ -53,4 +78,11 @@ test('synchronized-output markers use DEC 2026 (atomic frames on modern terminal
 
     expect($enc->beginSyncUpdate())->toBe("\e[?2026h")
         ->and($enc->endSyncUpdate())->toBe("\e[?2026l");
+});
+
+test('Kitty keyboard helpers use stack-safe push and pop sequences', function (): void {
+    $encoder = new AnsiEncoder();
+
+    expect($encoder->pushKittyKeyboard())->toBe("\e[>1u")
+        ->and($encoder->popKittyKeyboard())->toBe("\e[<u");
 });

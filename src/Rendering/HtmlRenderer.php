@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Rendering;
 
+use HelgeSverre\TurboVision\Drawing\Attribute;
 use HelgeSverre\TurboVision\Drawing\Buffer;
 
 /**
@@ -28,24 +29,27 @@ final class HtmlRenderer
     public function render(Buffer $buffer): string
     {
         $lines = '';
+        $cells = $buffer->cells();
 
         for ($y = 0; $y < $buffer->height; $y++) {
             $line = '';
+            $rowOffset = $y * $buffer->width;
             $x = 0;
             while ($x < $buffer->width) {
-                $attr = $buffer->at($x, $y)->attr;
+                $attr = $cells[$rowOffset + $x]->attr;
                 $run = '';
                 // Coalesce consecutive cells that share an attribute into one span.
-                while ($x < $buffer->width && $buffer->at($x, $y)->attr === $attr) {
-                    $run .= htmlspecialchars($buffer->at($x, $y)->char, ENT_QUOTES, 'UTF-8');
+                while ($x < $buffer->width && $cells[$rowOffset + $x]->attr === $attr) {
+                    $run .= htmlspecialchars($cells[$rowOffset + $x]->char, ENT_QUOTES, 'UTF-8');
                     $x++;
                 }
+                $attribute = Attribute::fromCellValue($attr);
                 $line .= sprintf(
                     '<span style="color:%s;background:%s">%s</span>',
-                    self::CGA[$attr & 0x0F],
-                    $this->useDefaultBackgroundForBlack && (($attr >> 4) & 0x07) === 0
+                    self::CGA[$attribute->fg->value],
+                    $this->useDefaultBackgroundForBlack && $attribute->bg->value === 0
                         ? 'transparent'
-                        : self::CGA[($attr >> 4) & 0x07],
+                        : self::CGA[$attribute->bg->value],
                     $run,
                 );
             }

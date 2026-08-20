@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Geometry;
 
+use HelgeSverre\TurboVision\Support\IntMath;
+
 /**
  * An immutable rectangle. `a` is the top-left (inclusive) corner, `b` is the
  * bottom-right (exclusive) corner. Faithful to Turbo Vision's TRect.
@@ -22,12 +24,12 @@ final readonly class Rect
 
     public function width(): int
     {
-        return $this->b->x - $this->a->x;
+        return IntMath::subtract($this->b->x, $this->a->x);
     }
 
     public function height(): int
     {
-        return $this->b->y - $this->a->y;
+        return IntMath::subtract($this->b->y, $this->a->y);
     }
 
     public function isEmpty(): bool
@@ -44,16 +46,16 @@ final readonly class Rect
     public function move(int $dx, int $dy): self
     {
         return new self(
-            new Point($this->a->x + $dx, $this->a->y + $dy),
-            new Point($this->b->x + $dx, $this->b->y + $dy),
+            new Point(IntMath::add($this->a->x, $dx), IntMath::add($this->a->y, $dy)),
+            new Point(IntMath::add($this->b->x, $dx), IntMath::add($this->b->y, $dy)),
         );
     }
 
     public function grow(int $dx, int $dy): self
     {
         return new self(
-            new Point($this->a->x - $dx, $this->a->y - $dy),
-            new Point($this->b->x + $dx, $this->b->y + $dy),
+            new Point(IntMath::subtract($this->a->x, $dx), IntMath::subtract($this->a->y, $dy)),
+            new Point(IntMath::add($this->b->x, $dx), IntMath::add($this->b->y, $dy)),
         );
     }
 

@@ -3,14 +3,19 @@
 ## Runnable PHP examples
 
 - `php/tutorial/Guide01.php` through `Guide10.php` progressively exercise the port.
-- `php/bios.php` is a full-screen BIOS setup interface.
+- `php/workbench.php` is the default end-to-end framework showcase with working
+  pull-down menus, windows, lists, scrollers, dashboard actions, and modal surfaces.
+- `php/bios.php` is a Phoenix-era BIOS setup interface with the iconic cyan, blue,
+  and light-gray palette.
+- `php/opencode.php` is an offline, source-guided recreation of OpenCode's home,
+  transcript, prompt composer, model picker, tool activity, permission, and error states.
 - `php/calendar.php` is a macOS-inspired month calendar with an agenda sidebar,
   complete event editing, recurrence, and RFC 5545 `.ics` persistence.
 - `php/studio.php` is a visual TUI builder with direct manipulation, an inspector,
   layers, undo/redo, JSON projects, live preview, and runnable PHP export.
 - `php/html-render.php` demonstrates the headless HTML renderer.
 
-Run `composer demo:calendar` or `composer demo:studio`; their detailed controls live
+Run `composer demo` for the Workbench, or `composer demo:calendar` / `composer demo:studio`; their detailed controls live
 in [`php/Calendar/README.md`](php/Calendar/README.md) and
 [`php/Studio/README.md`](php/Studio/README.md).
 

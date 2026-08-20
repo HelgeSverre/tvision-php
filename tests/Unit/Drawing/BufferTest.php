@@ -38,3 +38,30 @@ test('fill paints a clipped rectangle', function (): void {
 
     expect($b->rows())->toBe(['    ', ' ## ', ' ## ']);
 });
+
+test('buffer dimensions cannot be negative', function (): void {
+    expect(fn () => new Buffer(-1, 2))
+        ->toThrow(InvalidArgumentException::class, 'non-negative')
+        ->and(fn () => new Buffer(2, -1))
+        ->toThrow(InvalidArgumentException::class, 'non-negative');
+});
+
+test('copy creates an isolated copy-on-write snapshot', function (): void {
+    $original = new Buffer(2, 1);
+    $original->put(0, 0, new Cell('A'));
+    $copy = $original->copy();
+
+    $original->put(0, 0, new Cell('B'));
+    $cells = $copy->cells();
+    $cells[1] = new Cell('X');
+
+    expect($original->rows())->toBe(['B '])
+        ->and($copy->rows())->toBe(['A ']);
+});
+
+test('buffer dimensions reject process-exhausting cell counts before allocation', function (): void {
+    expect(fn () => new Buffer(PHP_INT_MAX, 2))
+        ->toThrow(InvalidArgumentException::class, 'safe cell limit')
+        ->and(fn () => new Buffer(1001, 1000))
+        ->toThrow(InvalidArgumentException::class, 'safe cell limit');
+});

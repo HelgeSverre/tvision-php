@@ -85,6 +85,26 @@ test('removing a foreign view does not detach it from its real owner', function 
         ->and($owner->subviews())->toContain($view);
 });
 
+test('a root group queues putEvent events for its modal pump', function (): void {
+    $screen = new Screen(new HeadlessDriver(10, 5));
+    $screen->init();
+    $group = new RootGroup($screen);
+    $group->putEvent(Event::command(Cmd::FirstUser));
+
+    expect($group->pumpEvent()?->isCommand(Cmd::FirstUser))->toBeTrue();
+});
+
+test('a root group preserves every event decoded by one screen poll', function (): void {
+    $driver = new HeadlessDriver(10, 5);
+    $screen = new Screen($driver);
+    $screen->init();
+    $group = new RootGroup($screen);
+    $driver->feedInput('ab');
+
+    expect($group->pumpEvent()?->asKey()?->char)->toBe('a')
+        ->and($group->pumpEvent()?->asKey()?->char)->toBe('b');
+});
+
 test('a positional event routes to the subview under the mouse', function (): void {
     $g = new Group(Rect::of(0, 0, 20, 10));
     $left = new RecordingView(Rect::of(0, 0, 5, 10));
@@ -128,6 +148,62 @@ test('a focused event routes to current first', function (): void {
     $g->handleEvent($ev);
 
     expect($b->seen)->toBe([EventType::KeyDown]);
+});
+
+test('focused routing honors pre-process, current, and post-process phases', function (): void {
+    $g = new Group(Rect::of(0, 0, 10, 10));
+    $current = new RecordingView(Rect::of(0, 0, 10, 2));
+    $ordinary = new RecordingView(Rect::of(0, 2, 10, 4));
+    $pre = new RecordingView(Rect::of(0, 4, 10, 6));
+    $post = new RecordingView(Rect::of(0, 6, 10, 8));
+    $current->options |= State::Selectable;
+    $pre->options |= State::PreProcess;
+    $post->options |= State::PostProcess;
+    $g->insert($current);
+    $g->insert($ordinary);
+    $g->insert($pre);
+    $g->insert($post);
+
+    $event = Event::command(Cmd::FirstUser);
+    $g->handleEvent($event);
+
+    expect($pre->seen)->toBe([EventType::Command])
+        ->and($current->seen)->toBe([EventType::Command])
+        ->and($post->seen)->toBe([EventType::Command])
+        ->and($ordinary->seen)->toBe([]);
+});
+
+test('a pre-process handler can consume an event before the current view', function (): void {
+    $g = new Group(Rect::of(0, 0, 10, 10));
+    $current = new RecordingView(Rect::of(0, 0, 10, 2));
+    $pre = new RecordingView(Rect::of(0, 2, 10, 4));
+    $current->options |= State::Selectable;
+    $pre->options |= State::PreProcess;
+    $pre->consumeCommand = Cmd::FirstUser;
+    $g->insert($current);
+    $g->insert($pre);
+
+    $g->handleEvent(Event::command(Cmd::FirstUser));
+
+    expect($pre->seen)->toBe([EventType::Command])
+        ->and($current->seen)->toBe([]);
+});
+
+test('hidden and disabled views are excluded from focused routing', function (): void {
+    $g = new Group(Rect::of(0, 0, 10, 10));
+    $hiddenCurrent = new RecordingView(Rect::of(0, 0, 10, 2));
+    $disabledPre = new RecordingView(Rect::of(0, 2, 10, 4));
+    $hiddenCurrent->options |= State::Selectable;
+    $disabledPre->options |= State::PreProcess;
+    $g->insert($hiddenCurrent);
+    $g->insert($disabledPre);
+    $hiddenCurrent->setState(State::Visible, false);
+    $disabledPre->setState(State::Disabled, true);
+
+    $g->handleEvent(Event::keyDown(new KeyDownEvent(Key::Enter->value)));
+
+    expect($hiddenCurrent->seen)->toBe([])
+        ->and($disabledPre->seen)->toBe([]);
 });
 
 test('a broadcast event fans out to every subview', function (): void {

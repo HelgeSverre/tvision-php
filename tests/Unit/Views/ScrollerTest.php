@@ -28,6 +28,16 @@ final class ProbeScroller extends Scroller
     }
 }
 
+final class CountingScroller extends Scroller
+{
+    public int $drawCalls = 0;
+
+    public function draw(): void
+    {
+        $this->drawCalls++;
+    }
+}
+
 /** A Group rooted at a real Screen so child writes hit the back buffer. */
 final class ScRootGroup extends Group
 {
@@ -58,6 +68,19 @@ test('setLimit stores the limit and parameterises the vertical bar', function ()
     expect($s->limit)->toEqual(new Point(40, 100))
         ->and($vBar->minVal)->toBe(0)
         ->and($vBar->maxVal)->toBe(95);   // y - size.y = 100 - 5
+});
+
+test('setLimit normalizes logical dimensions and redraws changed content', function (): void {
+    $screen = new Screen(new HeadlessDriver(10, 5));
+    $screen->init();
+    $group = new ScRootGroup($screen);
+    $scroller = new CountingScroller(Rect::of(0, 0, 10, 5));
+    $group->insert($scroller);
+
+    $scroller->setLimit(-1, 20);
+
+    expect($scroller->limit)->toEqual(new Point(0, 20))
+        ->and($scroller->drawCalls)->toBe(1);
 });
 
 test('a cmScrollBarChanged broadcast from the vertical bar updates delta and redraws', function (): void {

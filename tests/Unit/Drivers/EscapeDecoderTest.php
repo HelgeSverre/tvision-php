@@ -5,6 +5,7 @@ declare(strict_types=1);
 use HelgeSverre\TurboVision\Drivers\EscapeDecoder;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
+use HelgeSverre\TurboVision\Events\KeyModifier;
 
 /**
  * Decode $bytes and return the single resulting KeyDownEvent (fails the test if the
@@ -156,15 +157,32 @@ test('an incomplete CSI is held as remainder until completed', function (): void
         ->and($second->remainder)->toBe('');
 });
 
-test('an unrecognised CSI final byte emits a synthetic keyCode=0 event instead of silent discard', function (): void {
-    // \e[13;2u = Kitty progressive-enhancement Shift+Enter — final byte 'u' is not in
-    // any dispatch table, so the decoder emits a keyCode=0 KeyDown sentinel rather
-    // than silently consuming the sequence.
+test('Kitty keyboard sequences preserve the key and modifiers', function (): void {
     $result = (new EscapeDecoder())->decode("\e[13;2u");
 
     expect($result->events)->toHaveCount(1)
         ->and($result->remainder)->toBe('')
-        ->and($result->events[0]->asKey()?->keyCode)->toBe(0);
+        ->and($result->events[0]->asKey()?->is(Key::Enter))->toBeTrue()
+        ->and($result->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Shift);
+});
+
+test('terminal control strings and cursor reports never leak into keyboard input', function (): void {
+    $decoder = new EscapeDecoder();
+
+    expect($decoder->decode("\e]11;rgb:ffff/ffff/ffff\x07")->events)->toBe([])
+        ->and($decoder->decode("\eP1\$r0m\e\\")->events)->toBe([])
+        ->and($decoder->decode("\e[12;40R")->events)->toBe([]);
+});
+
+test('a fragmented terminal control string is retained until its terminator arrives', function (): void {
+    $decoder = new EscapeDecoder();
+    $first = $decoder->decode("\e]52;c;payload\e");
+    $second = $decoder->decode($first->remainder . "\\x");
+
+    expect($first->events)->toBe([])
+        ->and($first->remainder)->toBe("\e]52;c;payload\e")
+        ->and($second->events)->toHaveCount(1)
+        ->and($second->events[0]->asKey()?->char)->toBe('x');
 });
 
 test('flushPending turns a stranded ESC into Key::Esc', function (): void {
@@ -181,4 +199,12 @@ test('flushPending turns a stranded ESC into Key::Esc', function (): void {
 
     expect($decoder->flushPending(''))->toBeNull()
         ->and($decoder->flushPending("\e["))->toBeNull();
+});
+
+test('flushPendingEvents preserves consecutive bare ESC presses', function (): void {
+    $events = (new EscapeDecoder())->flushPendingEvents("\e\e");
+
+    expect($events)->toHaveCount(2)
+        ->and($events[0]->asKey()?->is(Key::Esc))->toBeTrue()
+        ->and($events[1]->asKey()?->is(Key::Esc))->toBeTrue();
 });

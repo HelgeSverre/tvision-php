@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace HelgeSverre\TurboVision\Drawing;
 
 use HelgeSverre\TurboVision\Geometry\Rect;
+use InvalidArgumentException;
 
 /** A width x height grid of Cells, stored row-major. The screen back/front buffer. */
 final class Buffer
 {
-    /** @var Cell[] length width*height, row-major */
+    /** Guard against terminal dimensions turning into a process-killing allocation. */
+    public const int MAX_CELLS = 1_000_000;
+
+    /** @var array<int, Cell> length width*height, row-major */
     private array $cells;
 
     public function __construct(
@@ -17,7 +21,14 @@ final class Buffer
         public readonly int $height,
         ?Cell $fill = null,
     ) {
-        $count = max(0, $this->width * $this->height);
+        if ($this->width < 0 || $this->height < 0) {
+            throw new InvalidArgumentException('Buffer dimensions must be non-negative.');
+        }
+        if ($this->width !== 0 && $this->height > intdiv(self::MAX_CELLS, $this->width)) {
+            throw new InvalidArgumentException('Buffer dimensions exceed the safe cell limit.');
+        }
+
+        $count = $this->width * $this->height;
         $this->cells = array_fill(0, $count, $fill ?? new Cell());
     }
 
@@ -37,6 +48,23 @@ final class Buffer
         }
 
         $this->cells[$y * $this->width + $x] = $cell;
+    }
+
+    /**
+     * Return the row-major cells. PHP arrays are copy-on-write, so callers can scan
+     * the snapshot without exposing this buffer to mutation.
+     *
+     * @return array<int, Cell>
+     */
+    public function cells(): array
+    {
+        return $this->cells;
+    }
+
+    /** Cheap copy-on-write snapshot; Cell instances are immutable. */
+    public function copy(): self
+    {
+        return clone $this;
     }
 
     public function fill(Rect $rect, Cell $cell): void

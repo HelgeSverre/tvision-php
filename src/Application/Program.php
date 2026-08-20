@@ -113,11 +113,13 @@ class Program extends Group
     {
         $cols = $this->screenObj->cols();
         $rows = $this->screenObj->rows();
+        $menuBottom = min(1, $rows);
+        $statusTop = max($menuBottom, $rows - 1);
         $this->setBounds(Rect::of(0, 0, $cols, $rows));
 
-        $this->desktop?->changeBounds(Rect::of(0, 1, $cols, $rows - 1));
-        $this->menuBar?->changeBounds(Rect::of(0, 0, $cols, 1));
-        $this->statusLine?->changeBounds(Rect::of(0, $rows - 1, $cols, $rows));
+        $this->desktop?->changeBounds(Rect::of(0, $menuBottom, $cols, $statusTop));
+        $this->menuBar?->changeBounds(Rect::of(0, 0, $cols, $menuBottom));
+        $this->statusLine?->changeBounds(Rect::of(0, max(0, $rows - 1), $cols, $rows));
     }
 
     /** Test helper: trigger one resize cycle as the run() loop would. */
@@ -134,8 +136,14 @@ class Program extends Group
     /** Boot the screen and build the child views without entering the loop (for tests). */
     public function bootForTest(): void
     {
-        $this->screenObj->init();
-        $this->layout();
+        try {
+            $this->screenObj->init();
+            $this->layout();
+        } catch (\Throwable $exception) {
+            $this->screenObj->shutdown();
+
+            throw $exception;
+        }
     }
 
     /** Test helper: draw the tree and flush once (mirrors run()'s redraw). */
@@ -163,12 +171,16 @@ class Program extends Group
             $this->redraw();
 
             while ($this->endState === 0) {
+                $event = $this->getEvent();
+
+                // pollEvents() is where Screen observes SIGWINCH. Reflow before
+                // dispatching the event returned by that same poll so mouse hit
+                // testing and view geometry never use the previous terminal size.
                 if ($this->screenObj->wasResized()) {
                     $this->reflowDesktop();
                     $this->dirty = true;
                 }
 
-                $event = $this->getEvent();
                 if (! $event->isNothing()) {
                     $this->handleEvent($event);
                     $this->dirty = true;
@@ -195,24 +207,27 @@ class Program extends Group
     {
         $cols = $this->screenObj->cols();
         $rows = $this->screenObj->rows();
+        $menuBottom = min(1, $rows);
+        $statusTop = max($menuBottom, $rows - 1);
         $this->setBounds(Rect::of(0, 0, $cols, $rows));
 
         // Reset children, then rebuild in Z-order: desktop, menu bar, status line.
         $this->clearSubviews();
 
-        $deskRect = Rect::of(0, 1, $cols, $rows - 1);
+        $deskRect = Rect::of(0, $menuBottom, $cols, $statusTop);
         $this->desktop = $this->initDeskTop($deskRect);
         if ($this->desktop !== null) {
             $this->insert($this->desktop);
+            $this->setCurrent($this->desktop);
         }
 
-        $menuRect = Rect::of(0, 0, $cols, 1);
+        $menuRect = Rect::of(0, 0, $cols, $menuBottom);
         $this->menuBar = $this->initMenuBar($menuRect);
         if ($this->menuBar !== null) {
             $this->insert($this->menuBar);
         }
 
-        $statusRect = Rect::of(0, $rows - 1, $cols, $rows);
+        $statusRect = Rect::of(0, max(0, $rows - 1), $cols, $rows);
         $this->statusLine = $this->initStatusLine($statusRect);
         if ($this->statusLine !== null) {
             $this->insert($this->statusLine);

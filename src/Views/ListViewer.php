@@ -12,6 +12,7 @@ use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Support\IntMath;
 
 /**
  * Abstract scrollable list (faithful to TListViewer). Subclasses supply getText().
@@ -38,16 +39,17 @@ abstract class ListViewer extends View
         protected ?ScrollBar $vScrollBar = null,
     ) {
         parent::__construct($bounds);
+        $this->numCols = $this->effectiveColumnCount();
         $this->options |= State::Selectable | State::FirstClick;
 
         if ($this->vScrollBar !== null) {
-            if ($numCols === 1) {
+            if ($this->numCols === 1) {
                 $this->vScrollBar->setStep($bounds->height() - 1, 1);
             } else {
-                $this->vScrollBar->setStep($bounds->height() * $numCols, $bounds->height());
+                $this->vScrollBar->setStep($this->pageSize(), $bounds->height());
             }
         }
-        $this->hScrollBar?->setStep(intdiv($bounds->width(), max(1, $numCols)), 1);
+        $this->hScrollBar?->setStep(intdiv($bounds->width(), $this->numCols), 1);
     }
 
     /** Provide the text for an item, truncated to $maxLen graphemes. */
@@ -65,6 +67,7 @@ abstract class ListViewer extends View
 
     public function setRange(int $range): void
     {
+        $range = max(0, $range);
         $this->range = $range;
         if ($this->focused >= $range) {
             $this->focused = $range - 1 >= 0 ? $range - 1 : 0;
@@ -91,14 +94,17 @@ abstract class ListViewer extends View
             $this->drawView();
         }
 
-        $height = $this->bounds->height();
+        $height = max(1, $this->bounds->height());
+        $numCols = $this->effectiveColumnCount();
+        $pageSize = $height * $numCols;
         if ($item < $this->topItem) {
-            $this->topItem = $this->numCols === 1 ? $item : $item - $item % $height;
-        } elseif ($item >= $this->topItem + $height * $this->numCols) {
-            if ($this->numCols === 1) {
-                $this->topItem = $item - $height + 1;
+            $this->topItem = $numCols === 1 ? $item : $item - $item % $height;
+        } elseif ($item >= IntMath::add($this->topItem, $pageSize)) {
+            if ($numCols === 1) {
+                $this->topItem = IntMath::add($item, 1 - $height);
             } else {
-                $this->topItem = $item - $item % $height - ($height * ($this->numCols - 1));
+                $columnOffset = $height * ($numCols - 1);
+                $this->topItem = IntMath::add($item - $item % $height, -$columnOffset);
             }
         }
     }
@@ -131,12 +137,13 @@ abstract class ListViewer extends View
         $indent = $this->hScrollBar !== null ? $this->hScrollBar->value : 0;
         $width = $this->bounds->width();
         $height = $this->bounds->height();
-        $colWidth = intdiv($width, $this->numCols) + 1;
+        $numCols = $this->effectiveColumnCount();
+        $colWidth = intdiv($width, $numCols) + 1;
 
         for ($i = 0; $i < $height; $i++) {
             $b = new DrawBuffer($width);
-            for ($j = 0; $j < $this->numCols; $j++) {
-                $item = $j * $height + $i + $this->topItem;
+            for ($j = 0; $j < $numCols; $j++) {
+                $item = IntMath::add($this->topItem, $j * $height + $i);
                 $curCol = $j * $colWidth;
 
                 if ($selectedActive && $this->focused === $item && $this->range > 0) {
@@ -190,9 +197,14 @@ abstract class ListViewer extends View
         if ($mouse === null) {
             return;
         }
-        $colWidth = intdiv($this->bounds->width(), $this->numCols) + 1;
+        $numCols = $this->effectiveColumnCount();
+        $colWidth = intdiv($this->bounds->width(), $numCols) + 1;
         $local = $this->makeLocal($mouse->where);
-        $newItem = $local->y + ($this->bounds->height() * intdiv($local->x, $colWidth)) + $this->topItem;
+        $column = max(0, min($numCols - 1, intdiv($local->x, $colWidth)));
+        $newItem = IntMath::add(
+            IntMath::add($this->topItem, $this->bounds->height() * $column),
+            $local->y,
+        );
         $this->focusItemNum($newItem);
         $this->drawView();
         if ($mouse->doubleClick && $this->range > $newItem) {
@@ -215,16 +227,18 @@ abstract class ListViewer extends View
             return;
         }
 
-        $height = $this->bounds->height();
+        $height = max(1, $this->bounds->height());
+        $numCols = $this->effectiveColumnCount();
+        $pageSize = $height * $numCols;
         $newItem = match ($key->keyCode) {
-            Key::Up->value => $this->focused - 1,
-            Key::Down->value => $this->focused + 1,
-            Key::PageUp->value => $this->focused - $height * $this->numCols,
-            Key::PageDown->value => $this->focused + $height * $this->numCols,
+            Key::Up->value => IntMath::add($this->focused, -1),
+            Key::Down->value => IntMath::add($this->focused, 1),
+            Key::PageUp->value => IntMath::add($this->focused, -$pageSize),
+            Key::PageDown->value => IntMath::add($this->focused, $pageSize),
             Key::Home->value => $this->topItem,
-            Key::End->value => $this->topItem + ($height * $this->numCols) - 1,
-            Key::Right->value => $this->numCols > 1 ? $this->focused + $height : null,
-            Key::Left->value => $this->numCols > 1 ? $this->focused - $height : null,
+            Key::End->value => IntMath::add($this->topItem, $pageSize - 1),
+            Key::Right->value => $numCols > 1 ? IntMath::add($this->focused, $height) : null,
+            Key::Left->value => $numCols > 1 ? IntMath::add($this->focused, -$height) : null,
             default => null,
         };
 
@@ -236,4 +250,23 @@ abstract class ListViewer extends View
         $this->drawView();
         $this->clearEvent($event);
     }
+
+    /** Columns that can affect this view, also bounded so height*columns stays integral. */
+    private function effectiveColumnCount(): int
+    {
+        $height = max(1, $this->bounds->height());
+        $maxByPageSize = max(1, intdiv(PHP_INT_MAX, $height));
+
+        return min(
+            max(1, $this->numCols),
+            max(1, $this->bounds->width()),
+            $maxByPageSize,
+        );
+    }
+
+    private function pageSize(): int
+    {
+        return max(1, $this->bounds->height()) * $this->effectiveColumnCount();
+    }
+
 }

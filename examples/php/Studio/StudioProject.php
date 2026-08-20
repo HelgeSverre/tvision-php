@@ -24,6 +24,7 @@ final class StudioProject
         private int $height,
         array $components = [],
         private int $nextId = 1,
+        private string $themeName = 'Graphite',
     ) {
         if ($width < 20 || $height < 8 || $width > self::MAX_WIDTH || $height > self::MAX_HEIGHT) {
             throw new InvalidArgumentException('Studio canvases must be between 20 × 8 and 200 × 80.');
@@ -33,6 +34,9 @@ final class StudioProject
         }
         if ($nextId < 1 || $nextId > StudioComponent::MAX_ID + 1) {
             throw new InvalidArgumentException('Invalid next Studio component ID.');
+        }
+        if (StudioTheme::named($themeName) === null) {
+            throw new InvalidArgumentException('Invalid Studio project theme.');
         }
         $this->name = self::cleanName($name);
         $this->nextId = $nextId;
@@ -82,6 +86,19 @@ final class StudioProject
     public function height(): int
     {
         return $this->height;
+    }
+
+    public function themeName(): string
+    {
+        return $this->themeName;
+    }
+
+    public function setThemeName(string $themeName): void
+    {
+        if (StudioTheme::named($themeName) === null) {
+            throw new InvalidArgumentException('Invalid Studio project theme.');
+        }
+        $this->themeName = $themeName;
     }
 
     /** @return list<StudioComponent> */
@@ -238,7 +255,7 @@ final class StudioProject
         }
     }
 
-    /** @return array{version:int,name:string,width:int,height:int,nextId:int,components:list<array{id:int,type:string,x:int,y:int,width:int,height:int,text:string}>} */
+    /** @return array{version:int,name:string,width:int,height:int,theme:string,nextId:int,components:list<array{id:int,type:string,x:int,y:int,width:int,height:int,text:string}>} */
     public function toArray(): array
     {
         return [
@@ -246,6 +263,7 @@ final class StudioProject
             'name' => $this->name,
             'width' => $this->width,
             'height' => $this->height,
+            'theme' => $this->themeName,
             'nextId' => $this->nextId,
             'components' => array_map(
                 static fn (StudioComponent $component): array => $component->toArray(),
@@ -265,6 +283,7 @@ final class StudioProject
             || ! is_array($data['components'])
             || ! array_is_list($data['components'])
             || ! is_int($data['nextId'])
+            || (array_key_exists('theme', $data) && ! is_string($data['theme']))
         ) {
             throw new InvalidArgumentException('Invalid Studio project data.');
         }
@@ -290,6 +309,7 @@ final class StudioProject
             $data['height'],
             $components,
             $data['nextId'],
+            $data['theme'] ?? 'Graphite',
         );
     }
 

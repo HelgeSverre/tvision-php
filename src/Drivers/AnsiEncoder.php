@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace HelgeSverre\TurboVision\Drivers;
 
 use HelgeSverre\TurboVision\Drawing\Attribute;
+use HelgeSverre\TurboVision\Support\IntMath;
+use InvalidArgumentException;
 
 /**
  * Pure (no-I/O) translator from drawing intent to ANSI/VT byte strings.
@@ -17,13 +19,17 @@ final class AnsiEncoder
     /** Cursor Position (CUP): move to 0-based ($x, $y). */
     public function moveCursor(int $x, int $y): string
     {
-        return "\e[" . ($y + 1) . ';' . ($x + 1) . 'H';
+        if ($x < 0 || $y < 0) {
+            throw new InvalidArgumentException('Cursor coordinates must be non-negative.');
+        }
+
+        return "\e[" . IntMath::add($y, 1) . ';' . IntMath::add($x, 1) . 'H';
     }
 
-    /** SGR sequence for a packed Turbo Vision attribute byte. */
+    /** SGR sequence for a classic attribute byte or extended cell value. */
     public function style(int $attrByte): string
     {
-        return Attribute::fromByte($attrByte)->toSgr($this->useDefaultBackgroundForBlack);
+        return Attribute::fromCellValue($attrByte)->toSgr($this->useDefaultBackgroundForBlack);
     }
 
     /** Move + style + literal text — the renderer's per-run workhorse. */
@@ -79,9 +85,8 @@ final class AnsiEncoder
 
     /**
      * Begin a synchronized update (DEC private mode 2026). Modern terminals
-     * (Ghostty, kitty, WezTerm, recent xterm) buffer everything until the matching
-     * endSyncUpdate() and present the frame atomically — no tearing or flicker.
-     * Terminals that don't support it ignore the sequence harmlessly.
+     * Supporting terminals buffer everything until the matching endSyncUpdate()
+     * and present the frame atomically — no tearing or flicker.
      */
     public function beginSyncUpdate(): string
     {
@@ -91,5 +96,17 @@ final class AnsiEncoder
     public function endSyncUpdate(): string
     {
         return "\e[?2026l";
+    }
+
+    /** Push Kitty's disambiguated-keyboard mode on terminals that advertise it. */
+    public function pushKittyKeyboard(): string
+    {
+        return "\e[>1u";
+    }
+
+    /** Restore the keyboard protocol state active before pushKittyKeyboard(). */
+    public function popKittyKeyboard(): string
+    {
+        return "\e[<u";
     }
 }

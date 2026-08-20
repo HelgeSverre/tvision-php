@@ -6,6 +6,7 @@ namespace HelgeSverre\TurboVision\Views;
 
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
+use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
@@ -150,7 +151,7 @@ abstract class ListViewer extends View
                 $b->moveChar($curCol, ' ', $color & 0xFF, $colWidth);
                 if ($item < $this->range) {
                     $text = $this->getText($item, $colWidth + $indent);
-                    $text = mb_substr($text, $indent, max(0, $colWidth - 1));
+                    $text = TerminalText::slice($text, $indent, max(0, $colWidth - 1));
                     $b->moveStr($curCol + 1, $text, $color & 0xFF);
                 }
             }

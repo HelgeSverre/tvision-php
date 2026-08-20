@@ -342,3 +342,20 @@ test('complete 4-byte UTF-8 emoji decodes correctly after fix', function (): voi
     expect($key?->char)->toBe("\u{1F44D}");
     expect($key?->keyCode)->toBe(0);
 });
+
+test('UTF-8 decoding consumes exactly the continuation bytes belonging to one scalar', function (): void {
+    $result = regressionDecode('c2a980');
+
+    expect($result->events)->toHaveCount(2)
+        ->and($result->events[0]->asKey()?->char)->toBe('©')
+        ->and($result->events[1]->asKey()?->char)->toBe("\x80")
+        ->and($result->remainder)->toBe('');
+});
+
+test('an invalid UTF-8 continuation does not consume the following ASCII key', function (): void {
+    $result = regressionDecode('c241');
+
+    expect($result->events)->toHaveCount(2)
+        ->and($result->events[0]->asKey()?->char)->toBe("\xC2")
+        ->and($result->events[1]->asKey()?->char)->toBe('A');
+});

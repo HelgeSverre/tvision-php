@@ -50,6 +50,9 @@ final class StudioProjectStore
         if ($json === false) {
             throw new RuntimeException("Could not read Studio project from {$path}.");
         }
+        if (strlen($json) > self::MAX_FILE_BYTES) {
+            throw new RuntimeException("Studio project is larger than 2 MB: {$path}.");
+        }
 
         try {
             $data = json_decode($json, true, flags: JSON_THROW_ON_ERROR);

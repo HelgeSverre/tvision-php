@@ -57,6 +57,34 @@ test('insert adds subviews and sets their owner', function (): void {
         ->and($child->owner)->toBe($g);
 });
 
+test('ownership operations reject cycles, duplicate ownership, and foreign focus', function (): void {
+    $parent = new Group(Rect::of(0, 0, 10, 10));
+    $child = new Group(Rect::of(0, 0, 5, 5));
+    $foreign = new View(Rect::of(0, 0, 1, 1));
+    $parent->insert($child);
+
+    expect(fn () => $parent->insert($parent))
+        ->toThrow(InvalidArgumentException::class, 'cannot own itself')
+        ->and(fn () => $child->insert($parent))
+        ->toThrow(InvalidArgumentException::class, 'ownership cycle')
+        ->and(fn () => $parent->insert($child))
+        ->toThrow(InvalidArgumentException::class, 'must be unowned')
+        ->and(fn () => $parent->setCurrent($foreign))
+        ->toThrow(InvalidArgumentException::class, 'must belong');
+});
+
+test('removing a foreign view does not detach it from its real owner', function (): void {
+    $owner = new Group(Rect::of(0, 0, 10, 10));
+    $other = new Group(Rect::of(0, 0, 10, 10));
+    $view = new View(Rect::of(0, 0, 1, 1));
+    $owner->insert($view);
+
+    $other->remove($view);
+
+    expect($view->owner)->toBe($owner)
+        ->and($owner->subviews())->toContain($view);
+});
+
 test('a positional event routes to the subview under the mouse', function (): void {
     $g = new Group(Rect::of(0, 0, 20, 10));
     $left = new RecordingView(Rect::of(0, 0, 5, 10));
@@ -173,4 +201,24 @@ test('execView pumps a modal view until it ends modal, returning the command', f
 
     expect($result)->toBe(Cmd::Ok)
         ->and($g->subviews())->not->toContain($modal); // removed after modal ends
+});
+
+test('execView restores modal ownership and state when a handler throws', function (): void {
+    $modal = new class(Rect::of(0, 0, 4, 2)) extends View {
+        public function handleEvent(Event $event): void
+        {
+            throw new RuntimeException('modal failed');
+        }
+    };
+    $driver = new HeadlessDriver(10, 5);
+    $screen = new Screen($driver);
+    $screen->init();
+    $group = new RootGroup($screen);
+    $driver->feedInput("\r");
+
+    expect(fn (): int => $group->execView($modal))
+        ->toThrow(RuntimeException::class, 'modal failed')
+        ->and($modal->owner)->toBeNull()
+        ->and($modal->getState(State::Modal))->toBeFalse()
+        ->and($group->subviews())->not->toContain($modal);
 });

@@ -25,3 +25,8 @@ test('equals() is value-based', function (): void {
         ->and((new Cell('X', 0x1F))->equals(new Cell('X', 0x07)))->toBeFalse()
         ->and((new Cell('X', 0x1F))->equals(new Cell('Y', 0x1F)))->toBeFalse();
 });
+
+test('cells enforce the single-column rendering invariant', function (): void {
+    expect((new Cell('🚀'))->char)->toBe('?')
+        ->and((new Cell("e\u{0301}"))->char)->toBe("e\u{0301}");
+});

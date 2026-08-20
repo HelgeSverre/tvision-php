@@ -6,6 +6,7 @@ namespace HelgeSverre\TurboVision\Views;
 
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
+use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
@@ -80,8 +81,8 @@ class Frame extends View
             $title = $owner->frameTitle();
             if ($title !== '') {
                 $maxTitle = max(0, $w - 10);
-                $len = min(mb_strlen($title), $maxTitle);
-                $title = mb_substr($title, 0, $len);
+                $len = min(TerminalText::length($title), $maxTitle);
+                $title = TerminalText::slice($title, 0, $len);
                 $i = intdiv($w - $len, 2);
                 $top->moveChar($i - 1, ' ', $titleAttr, 1);
                 $top->moveStr($i, $title, $titleAttr);

@@ -79,6 +79,33 @@ test('calendar error status uses the destructive theme role', function (): void 
     expect($app->screen()?->back()->at(1, 33)->attr)->toBe(0x0C);
 });
 
+test('a malformed existing calendar cannot be overwritten by fallback demo data', function (): void {
+    $path = sys_get_temp_dir() . '/tvision-calendar-invalid-' . bin2hex(random_bytes(6)) . '.ics';
+    $original = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:broken\r\nDTSTART:nope\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    file_put_contents($path, $original);
+    $driver = new HeadlessDriver(120, 34);
+    $timezone = new DateTimeZone('UTC');
+    $app = new CalendarApp(
+        new Screen($driver),
+        $path,
+        $timezone,
+        new DateTimeImmutable('2026-08-20', $timezone),
+    );
+
+    try {
+        $app->bootForTest();
+        $app->handleEvent(Event::keyDown(new KeyDownEvent(ord('s'), 's')));
+
+        expect(file_get_contents($path))->toBe($original)
+            ->and($app->calendarView()->statusMessage())->toContain('Saving is disabled');
+    } finally {
+        $driver->shutdown();
+        if (is_file($path)) {
+            unlink($path);
+        }
+    }
+});
+
 test('calendar accepts a custom semantic theme', function (): void {
     [$app] = calendarAppForTest(new CalendarTheme(canvas: 0x0E));
     $app->drawAndFlushForTest();

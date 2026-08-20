@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HelgeSverre\TurboVision\Menus;
 
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
+use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Geometry\Rect;
@@ -153,6 +154,6 @@ final class MenuBar extends MenuView
     /** Length of a ~hotkey~-marked label with the tildes removed. */
     private function visibleLength(string $name): int
     {
-        return mb_strlen(str_replace('~', '', $name));
+        return TerminalText::length(str_replace('~', '', $name));
     }
 }

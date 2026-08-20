@@ -156,8 +156,9 @@ class Program extends Group
 
     public function run(): int
     {
-        $this->screenObj->init();
         try {
+            $this->endState = 0;
+            $this->screenObj->init();
             $this->layout();
             $this->redraw();
 
@@ -197,8 +198,7 @@ class Program extends Group
         $this->setBounds(Rect::of(0, 0, $cols, $rows));
 
         // Reset children, then rebuild in Z-order: desktop, menu bar, status line.
-        $this->children = [];
-        $this->currentView = null;
+        $this->clearSubviews();
 
         $deskRect = Rect::of(0, 1, $cols, $rows - 1);
         $this->desktop = $this->initDeskTop($deskRect);

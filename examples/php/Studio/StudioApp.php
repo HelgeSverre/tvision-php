@@ -58,8 +58,7 @@ class StudioApp extends Application
     {
         $bounds = Rect::of(0, 0, $this->screenObj->cols(), $this->screenObj->rows());
         $this->setBounds($bounds);
-        $this->children = [];
-        $this->currentView = null;
+        $this->clearSubviews();
         $this->desktop = null;
         $this->menuBar = null;
         $this->statusLine = null;
@@ -88,6 +87,7 @@ class StudioApp extends Application
             $this->projectPath,
             $this->exportPath,
             ! $loaded,
+            $loadError,
         );
         $view->showStatus($message, $loadError);
         $this->studioView = $view;

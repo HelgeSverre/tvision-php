@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use HelgeSverre\TurboVision\Examples\Calendar\CalendarEvent;
 use HelgeSverre\TurboVision\Examples\Calendar\EventDraft;
+use HelgeSverre\TurboVision\Examples\Calendar\EventField;
+use HelgeSverre\TurboVision\Examples\Calendar\RepeatRule;
 
 test('event drafts support timed events spanning multiple dates', function (): void {
     $timezone = new DateTimeZone('Europe/Oslo');
@@ -43,4 +45,27 @@ test('draft validation rejects events ending before they start', function (): vo
 
     expect(fn (): CalendarEvent => $draft->toEvent($timezone))
         ->toThrow(InvalidArgumentException::class, 'end time');
+});
+
+test('editing an event preserves recurrence limits and untouched multiline notes', function (): void {
+    $timezone = new DateTimeZone('UTC');
+    $until = new DateTimeImmutable('2026-09-30 23:59', $timezone);
+    $event = new CalendarEvent(
+        uid: 'finite-series',
+        title: 'Planning',
+        start: new DateTimeImmutable('2026-08-20 09:00', $timezone),
+        end: new DateTimeImmutable('2026-08-20 10:00', $timezone),
+        notes: "First line\nSecond line",
+        repeat: RepeatRule::Weekly,
+        recurrenceUntil: $until,
+    );
+    $draft = EventDraft::fromEvent($event);
+    $draft->title = 'Updated planning';
+
+    $updated = $draft->toEvent($timezone);
+
+    expect($draft->value(EventField::Notes))->toBe('First line Second line')
+        ->and($updated->notes)->toBe($event->notes)
+        ->and($updated->repeat)->toBe(RepeatRule::Weekly)
+        ->and($updated->recurrenceUntil)->toEqual($until);
 });

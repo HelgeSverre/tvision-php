@@ -58,3 +58,16 @@ test('changeBounds replaces bounds', function (): void {
 
     expect($v->getBounds())->toEqual(Rect::of(1, 1, 9, 9));
 });
+
+test('dragView shrinks an oversized view so it remains inside its limits', function (): void {
+    $view = new View(Rect::of(0, 0, 20, 20));
+
+    $view->dragView(
+        Rect::of(-5, -5, 25, 25),
+        Rect::of(0, 0, 10, 8),
+        new Point(1, 1),
+        new Point(100, 100),
+    );
+
+    expect($view->getBounds())->toEqual(Rect::of(0, 0, 10, 8));
+});

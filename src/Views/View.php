@@ -7,6 +7,7 @@ namespace HelgeSverre\TurboVision\Views;
 use HelgeSverre\TurboVision\Drawing\Cell;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
+use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
@@ -16,8 +17,7 @@ use HelgeSverre\TurboVision\Terminal\Screen;
  * The base of every visible object (faithful to Turbo Vision's TView). Mutable.
  * Holds bounds + sf/of/gf flag words + an owner. The write primitives composite
  * a DrawBuffer (or char/string) into the ROOT Screen's back buffer at this view's
- * absolute origin, clipped to its own extent (M1 keeps clipping to the view extent;
- * full ancestor clipping arrives in M2).
+ * absolute origin, clipped to its own extent and every ancestor's bounds.
  */
 class View
 {
@@ -117,9 +117,8 @@ class View
     }
 
     /**
-     * The exposed drawing rectangle in local coordinates. M2 returns the full extent
-     * (ancestor-overlap clipping arrives with the buffered-group work in a later
-     * milestone); subviews use grow(-1,-1) on this to fit inside a frame.
+     * The drawing rectangle in local coordinates. Screen writes are additionally
+     * intersected with every ancestor at composition time.
      */
     public function getClipRect(): Rect
     {
@@ -172,8 +171,8 @@ class View
      */
     public function dragView(Rect $newBounds, Rect $limits, Point $min, Point $max): void
     {
-        $w = max($min->x, min($max->x, $newBounds->width()));
-        $h = max($min->y, min($max->y, $newBounds->height()));
+        $w = min(max(0, $limits->width()), max($min->x, min($max->x, $newBounds->width())));
+        $h = min(max(0, $limits->height()), max($min->y, min($max->y, $newBounds->height())));
 
         $ax = $newBounds->a->x;
         $ay = $newBounds->a->y;
@@ -315,7 +314,7 @@ class View
     /**
      * Blit a horizontal strip of a DrawBuffer into the root back buffer. $x/$y are
      * local; $w cells of one row starting at the buffer's column 0 are written.
-     * Clipped to the view extent.
+     * Clipped to the view and its ancestor extents.
      */
     public function writeBuf(int $x, int $y, int $w, int $h, DrawBuffer $source): void
     {
@@ -343,7 +342,7 @@ class View
 
     public function writeStr(int $x, int $y, string $str, int $attr): void
     {
-        $len = mb_strlen($str);
+        $len = TerminalText::length($str);
         $b = new DrawBuffer(max(1, $len));
         $b->moveStr(0, $str, $attr);
         $this->writeRowCells($x, $y, $len, $b->cells());
@@ -351,7 +350,7 @@ class View
 
     /**
      * Composite the first $count source cells at local ($localX,$localY), clipped to
-     * the view extent.
+     * the view extent, every ancestor extent, and the screen.
      *
      * @param Cell[] $cells
      */
@@ -367,6 +366,28 @@ class View
 
         $origin = $this->absoluteOrigin();
         $back = $screen->back();
+        $clip = Rect::of(
+            $origin->x,
+            $origin->y,
+            $origin->x + $this->bounds->width(),
+            $origin->y + $this->bounds->height(),
+        );
+        $ancestor = $this->owner;
+        while ($ancestor !== null) {
+            $ancestorOrigin = $ancestor->absoluteOrigin();
+            $clip = $clip->intersect(Rect::of(
+                $ancestorOrigin->x,
+                $ancestorOrigin->y,
+                $ancestorOrigin->x + $ancestor->bounds->width(),
+                $ancestorOrigin->y + $ancestor->bounds->height(),
+            ));
+            $ancestor = $ancestor->owner;
+        }
+        $clip = $clip->intersect(Rect::of(0, 0, $screen->cols(), $screen->rows()));
+        $globalY = $origin->y + $localY;
+        if ($clip->isEmpty() || $globalY < $clip->a->y || $globalY >= $clip->b->y) {
+            return;
+        }
 
         for ($i = 0; $i < $count; $i++) {
             $cx = $localX + $i;
@@ -374,7 +395,11 @@ class View
                 continue; // outside the view extent
             }
             $cell = $cells[$i] ?? new Cell();
-            $back->put($origin->x + $cx, $origin->y + $localY, $cell);
+            $globalX = $origin->x + $cx;
+            if ($globalX < $clip->a->x || $globalX >= $clip->b->x) {
+                continue;
+            }
+            $back->put($globalX, $globalY, $cell);
         }
     }
 }

@@ -22,6 +22,8 @@ final class EventDraft
         public string $calendar,
         public RepeatRule $repeat,
         public string $notes,
+        public ?DateTimeImmutable $recurrenceUntil = null,
+        public ?int $recurrenceCount = null,
     ) {}
 
     public static function create(DateTimeImmutable $day): self
@@ -56,7 +58,9 @@ final class EventDraft
             location: $event->location,
             calendar: $event->calendar,
             repeat: $event->repeat,
-            notes: str_replace(["\r", "\n"], ['', ' '], $event->notes),
+            notes: $event->notes,
+            recurrenceUntil: $event->recurrenceUntil,
+            recurrenceCount: $event->recurrenceCount,
         );
     }
 
@@ -72,7 +76,7 @@ final class EventDraft
             EventField::Location => $this->location,
             EventField::Calendar => $this->calendar,
             EventField::Repeat => $this->repeat->label(),
-            EventField::Notes => $this->notes,
+            EventField::Notes => str_replace(["\r", "\n"], ['', ' '], $this->notes),
         };
     }
 
@@ -123,6 +127,8 @@ final class EventDraft
             notes: trim($this->notes),
             calendar: trim($this->calendar) !== '' ? trim($this->calendar) : 'Personal',
             repeat: $this->repeat,
+            recurrenceUntil: $this->recurrenceUntil,
+            recurrenceCount: $this->recurrenceCount,
         );
     }
 

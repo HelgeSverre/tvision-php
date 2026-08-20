@@ -34,6 +34,8 @@ final class AnsiDriver implements Driver
 
     private bool $initialised = false;
 
+    private ?bool $savedBlocking = null;
+
     /** Original `stty -g` settings, captured at init() to restore on shutdown(). */
     private ?string $savedStty = null;
 
@@ -94,43 +96,50 @@ final class AnsiDriver implements Driver
 
         // Save current settings, then enter raw mode.
         $this->savedStty = trim(($this->stty)('stty -g'));
-        ($this->stty)('stty raw -echo');
-
-        // Non-blocking STDIN so pollInput() never blocks past its timeout.
-        stream_set_blocking($this->stdin, false);
-
-        // Enter alt screen, clear, hide cursor, enable mouse.
-        $this->write(
-            $this->encoder->enterAltScreen()
-            . $this->encoder->clearScreen()
-            . $this->encoder->hideCursor()
-            . $this->encoder->enableMouse($this->trackMouseMotion)
-        );
-
-        // Signals: handle them asynchronously so the terminal is restored even if the
-        // app is blocked, killed, or hung up. Without this a kill/SIGTERM would leave
-        // the terminal in raw mode + alt-screen (a "wedged" terminal).
-        // NOTE: signals are dispatched synchronously (via pcntl_signal_dispatch() in
-        // resized(), called each event-loop poll). We deliberately do NOT enable
-        // async signals: that would let SIGWINCH interrupt a frame write mid-stream
-        // (EINTR), truncating output. The write() loop also tolerates partial writes.
-        if (\function_exists('pcntl_signal')) {
-            pcntl_signal(SIGWINCH, function (): void {
-                $this->resizeFlag = true;
-            });
-            $restore = function (int $signo): never {
-                $this->shutdown();
-                exit(128 + $signo);
-            };
-            pcntl_signal(SIGINT, $restore);   // also covers Ctrl-C when ISIG is on
-            pcntl_signal(SIGTERM, $restore);
-            pcntl_signal(SIGHUP, $restore);
-        }
-
-        // Last-resort teardown for fatal errors / normal exit.
-        register_shutdown_function([$this, 'shutdown']);
-
+        $this->savedBlocking = stream_get_meta_data($this->stdin)['blocked'];
         $this->initialised = true;
+
+        try {
+            ($this->stty)('stty raw -echo');
+
+            // Non-blocking STDIN so pollInput() never blocks past its timeout.
+            stream_set_blocking($this->stdin, false);
+
+            // Enter alt screen, clear, hide cursor, enable mouse.
+            $this->write(
+                $this->encoder->enterAltScreen()
+                . $this->encoder->clearScreen()
+                . $this->encoder->hideCursor()
+                . $this->encoder->enableMouse($this->trackMouseMotion)
+            );
+
+            // Signals: handle them asynchronously so the terminal is restored even if the
+            // app is blocked, killed, or hung up. Without this a kill/SIGTERM would leave
+            // the terminal in raw mode + alt-screen (a "wedged" terminal).
+            // NOTE: signals are dispatched synchronously (via pcntl_signal_dispatch() in
+            // resized(), called each event-loop poll). We deliberately do NOT enable
+            // async signals: that would let SIGWINCH interrupt a frame write mid-stream
+            // (EINTR), truncating output. The write() loop also tolerates partial writes.
+            if (\function_exists('pcntl_signal')) {
+                pcntl_signal(SIGWINCH, function (): void {
+                    $this->resizeFlag = true;
+                });
+                $restore = function (int $signo): never {
+                    $this->shutdown();
+                    exit(128 + $signo);
+                };
+                pcntl_signal(SIGINT, $restore);   // also covers Ctrl-C when ISIG is on
+                pcntl_signal(SIGTERM, $restore);
+                pcntl_signal(SIGHUP, $restore);
+            }
+
+            // Last-resort teardown for fatal errors / normal exit.
+            register_shutdown_function([$this, 'shutdown']);
+        } catch (\Throwable $exception) {
+            $this->shutdown();
+
+            throw $exception;
+        }
     }
 
     public function shutdown(): void
@@ -152,7 +161,12 @@ final class AnsiDriver implements Driver
             ($this->stty)('stty sane');
         }
 
+        if ($this->savedBlocking !== null) {
+            stream_set_blocking($this->stdin, $this->savedBlocking);
+        }
+
         $this->initialised = false;
+        $this->savedBlocking = null;
     }
 
     /** @return array{0:int,1:int} */

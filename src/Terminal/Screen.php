@@ -20,6 +20,8 @@ use HelgeSverre\TurboVision\Rendering\DiffPresenter;
  */
 final class Screen
 {
+    private const int MAX_REMAINDER_BYTES = 4096;
+
     private Buffer $back;
 
     private Buffer $front;
@@ -46,9 +48,18 @@ final class Screen
 
     public function init(): void
     {
-        $this->driver->init();
-        [$cols, $rows] = $this->driver->size();
-        $this->resizeBuffers($cols, $rows);
+        try {
+            $this->driver->init();
+            [$cols, $rows] = $this->driver->size();
+            $this->resizeBuffers($cols, $rows);
+            $this->remainder = '';
+            $this->wasResized = false;
+        } catch (\Throwable $exception) {
+            // Driver::shutdown() is contractually idempotent and must unwind partial init.
+            $this->driver->shutdown();
+
+            throw $exception;
+        }
     }
 
     public function shutdown(): void
@@ -112,19 +123,21 @@ final class Screen
         $bytes = $this->driver->pollInput($timeoutMs);
 
         if ($bytes === '') {
-            // Quiet tick: a stranded ESC in the remainder becomes Key::Esc.
+            // A quiet tick resolves a lone ESC and discards any other incomplete
+            // sequence so it cannot swallow the user's next keystroke forever.
             $pending = $this->decoder->flushPending($this->remainder);
-            if ($pending !== null) {
+            if ($this->remainder !== '') {
                 $this->remainder = '';
-
-                return [$pending];
             }
 
-            return [];
+            return $pending === null ? [] : [$pending];
         }
 
         $result = $this->decoder->decode($this->remainder . $bytes);
         $this->remainder = $result->remainder;
+        if (strlen($this->remainder) > self::MAX_REMAINDER_BYTES) {
+            $this->remainder = '';
+        }
 
         return $result->events;
     }

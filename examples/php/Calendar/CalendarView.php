@@ -73,6 +73,7 @@ final class CalendarView extends View
         private readonly DateTimeZone $timezone,
         ?DateTimeImmutable $today = null,
         ?CalendarTheme $theme = null,
+        private bool $persistenceBlocked = false,
     ) {
         parent::__construct($bounds);
         $this->theme = $theme ?? CalendarTheme::modernDark();
@@ -689,6 +690,12 @@ final class CalendarView extends View
 
     private function deleteSelectedEvent(): void
     {
+        if (! $this->persistenceAvailable()) {
+            $this->confirmDelete = false;
+
+            return;
+        }
+
         $selected = $this->selectedEvent();
         if ($selected !== null) {
             $before = $this->calendar->all();
@@ -1001,6 +1008,9 @@ final class CalendarView extends View
         if ($draft === null) {
             return;
         }
+        if (! $this->persistenceAvailable()) {
+            return;
+        }
 
         try {
             $calendarEvent = $draft->toEvent($this->timezone);
@@ -1027,6 +1037,10 @@ final class CalendarView extends View
 
     private function persist(string $verb): void
     {
+        if (! $this->persistenceAvailable()) {
+            return;
+        }
+
         try {
             $this->store->save($this->path, $this->calendar->all());
             $this->setStatus("{$verb} " . count($this->calendar->all()) . ' events to ' . basename($this->path) . '.');
@@ -1040,11 +1054,27 @@ final class CalendarView extends View
         try {
             $events = $this->store->load($this->path);
             $this->calendar->replace($events);
+            $this->persistenceBlocked = false;
             $this->agendaIndex = 0;
             $this->setStatus('Loaded ' . count($events) . ' events from ' . basename($this->path) . '.');
         } catch (RuntimeException $exception) {
+            $this->persistenceBlocked = true;
             $this->setStatus($exception->getMessage(), true);
         }
+    }
+
+    private function persistenceAvailable(): bool
+    {
+        if (! $this->persistenceBlocked) {
+            return true;
+        }
+
+        $this->setStatus(
+            'Saving is disabled because the existing calendar could not be loaded. Repair it, then reload.',
+            true,
+        );
+
+        return false;
     }
 
     private function setStatus(string $message, bool $error = false): void

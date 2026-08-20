@@ -12,6 +12,7 @@ use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Terminal\Screen;
+use HelgeSverre\TurboVision\Views\Group;
 use HelgeSverre\TurboVision\Views\State;
 use HelgeSverre\TurboVision\Views\View;
 
@@ -93,6 +94,24 @@ test('writeBuf blits a DrawBuffer row, clipped to the view extent', function ():
 
     // Only A,B,C land, at columns 1,2,3 of row 0.
     expect($screen->back()->rows())->toBe([' ABC    ', '        ']);
+});
+
+test('screen writes are clipped to every ancestor extent', function (): void {
+    $screen = new Screen(new HeadlessDriver(10, 3));
+    $screen->init();
+    $root = new RootStub($screen);
+    $parent = new Group(Rect::of(3, 1, 7, 2));
+    $child = new View(Rect::of(-2, 0, 8, 1));
+    $root->insert($parent);
+    $parent->insert($child);
+
+    $child->writeStr(0, 0, 'ABCDEFGHIJ', 0x07);
+
+    expect($screen->back()->rows())->toBe([
+        '          ',
+        '   CDEF   ',
+        '          ',
+    ]);
 });
 
 test('writeLine copies from source column zero when the destination x is non-zero', function (): void {

@@ -51,6 +51,22 @@ test('word-wraps text that exceeds the view width', function (): void {
         ->and($screen->back()->rows()[2])->toBe('three       ');
 });
 
+test('word wrapping retains every chunk of a word wider than the view', function (): void {
+    $screen = new Screen(new HeadlessDriver(8, 3));
+    $screen->init();
+    $root = new StaticTextRoot($screen);
+    $text = new StaticText(Rect::of(0, 0, 4, 3), 'abcdefghij');
+    $root->insert($text);
+
+    $text->draw();
+
+    expect($screen->back()->rows())->toBe([
+        'abcd    ',
+        'efgh    ',
+        'ij      ',
+    ]);
+});
+
 test('a leading \003 control char centers the line', function (): void {
     $screen = new Screen(new HeadlessDriver(10, 1));
     $screen->init();

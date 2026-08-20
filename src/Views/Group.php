@@ -9,6 +9,7 @@ use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
+use InvalidArgumentException;
 
 /**
  * A View owning an ordered Z-ordered subview list (faithful to TGroup). Routes events
@@ -27,6 +28,18 @@ class Group extends View
 
     public function insert(View $view): void
     {
+        if ($view === $this) {
+            throw new InvalidArgumentException('A group cannot own itself.');
+        }
+        for ($ancestor = $this->owner; $ancestor !== null; $ancestor = $ancestor->owner) {
+            if ($ancestor === $view) {
+                throw new InvalidArgumentException('Inserting an ancestor would create an ownership cycle.');
+            }
+        }
+        if ($view->owner !== null || in_array($view, $this->children, true)) {
+            throw new InvalidArgumentException('A view must be unowned before it can be inserted.');
+        }
+
         $view->setOwner($this);
         $this->children[] = $view;
         // ofSelectable is an OPTION flag (lives in $options), not a state flag.
@@ -37,10 +50,12 @@ class Group extends View
 
     public function remove(View $view): void
     {
-        $this->children = array_values(array_filter(
-            $this->children,
-            static fn (View $v): bool => $v !== $view,
-        ));
+        $index = array_search($view, $this->children, true);
+        if ($index === false) {
+            return;
+        }
+
+        array_splice($this->children, $index, 1);
         if ($this->currentView === $view) {
             $view->setState(State::Focused | State::Selected, false);
             $this->currentView = null;
@@ -54,6 +69,17 @@ class Group extends View
         return $this->children;
     }
 
+    /** Detach every child while preserving the ownership invariants. */
+    protected function clearSubviews(): void
+    {
+        foreach ($this->children as $child) {
+            $child->setState(State::Focused | State::Selected, false);
+            $child->setOwner(null);
+        }
+        $this->children = [];
+        $this->currentView = null;
+    }
+
     public function current(): ?View
     {
         return $this->currentView;
@@ -61,6 +87,9 @@ class Group extends View
 
     public function setCurrent(?View $view): void
     {
+        if ($view !== null && ($view->owner !== $this || ! in_array($view, $this->children, true))) {
+            throw new InvalidArgumentException('The current view must belong to this group.');
+        }
         if ($view === $this->currentView) {
             return;
         }
@@ -291,6 +320,9 @@ class Group extends View
     public function execView(View $modal): int
     {
         $saveOwner = $modal->owner;
+        if ($saveOwner !== null && $saveOwner !== $this) {
+            throw new InvalidArgumentException('A modal view must be unowned or owned by the executing group.');
+        }
         $saveEndState = $this->endState;
         $this->endState = 0;
 
@@ -299,25 +331,26 @@ class Group extends View
         }
         $modal->setState(State::Modal, true);
 
-        $modal->drawView();
-
-        while ($this->endState === 0) {
-            $event = $this->pumpEvent();
-            if ($event === null) {
-                continue;
-            }
-            $modal->handleEvent($event);
+        try {
             $modal->drawView();
-        }
 
-        $result = $this->endState;
-        $modal->setState(State::Modal, false);
-        if ($saveOwner === null) {
-            $this->remove($modal);
-        }
-        $this->endState = $saveEndState;
+            while ($this->endState === 0) {
+                $event = $this->pumpEvent();
+                if ($event === null) {
+                    continue;
+                }
+                $modal->handleEvent($event);
+                $modal->drawView();
+            }
 
-        return $result;
+            return $this->endState;
+        } finally {
+            $modal->setState(State::Modal, false);
+            if ($saveOwner === null) {
+                $this->remove($modal);
+            }
+            $this->endState = $saveEndState;
+        }
     }
 
     /** Enqueue an event for the modal/main loop; delegates up to the root Program. */

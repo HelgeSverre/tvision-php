@@ -6,6 +6,7 @@ namespace HelgeSverre\TurboVision\Views;
 
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
+use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Geometry\Rect;
 
 /**
@@ -49,7 +50,7 @@ class StaticText extends View
                 $line = substr($line, 1);
             }
 
-            $len = mb_strlen($line);
+            $len = TerminalText::length($line);
             $x = $centered ? intdiv(max(0, $width - $len), 2) : 0;
 
             $b = new DrawBuffer($width);
@@ -88,11 +89,15 @@ class StaticText extends View
                 continue;
             }
             $candidate = $current === '' ? $word : $current . ' ' . $word;
-            if (mb_strlen($candidate) <= $width) {
+            if (TerminalText::length($candidate) <= $width) {
                 $current = $candidate;
             } else {
                 if ($current !== '') {
                     $lines[] = $centerPrefix . $current;
+                }
+                while (TerminalText::length($word) > $width) {
+                    $lines[] = $centerPrefix . TerminalText::slice($word, 0, $width);
+                    $word = TerminalText::slice($word, $width);
                 }
                 $current = $word;
             }

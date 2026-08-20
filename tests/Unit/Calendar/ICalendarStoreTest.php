@@ -94,3 +94,77 @@ test('iCalendar store saves atomically and loads the resulting file', function (
         }
     }
 });
+
+test('iCalendar parsing fails closed for malformed calendars and events', function (): void {
+    $store = new ICalendarStore(new DateTimeZone('UTC'));
+
+    $cases = [
+        ['garbage', 'envelope'],
+        [
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:bad\r\nDTSTART:nope\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+            'Invalid VEVENT #1',
+        ],
+        [
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:bad\r\nDTSTART:20260820T090000Z\r\nEND:VCALENDAR\r\n",
+            'Unterminated VEVENT',
+        ],
+        [
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:20260820T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+            'missing UID',
+        ],
+    ];
+
+    foreach ($cases as [$ics, $message]) {
+        expect(fn (): array => $store->parse($ics))
+            ->toThrow(UnexpectedValueException::class, $message);
+    }
+});
+
+test('iCalendar parsing rejects recurrence semantics the demo cannot preserve', function (): void {
+    $store = new ICalendarStore(new DateTimeZone('UTC'));
+    $ics = "BEGIN:VCALENDAR\r\n"
+        . "BEGIN:VEVENT\r\n"
+        . "UID:complex-series\r\n"
+        . "DTSTART:20260820T090000Z\r\n"
+        . "RRULE:FREQ=WEEKLY;BYDAY=MO,WE\r\n"
+        . "END:VEVENT\r\n"
+        . "END:VCALENDAR\r\n";
+
+    expect(fn (): array => $store->parse($ics))
+        ->toThrow(UnexpectedValueException::class, 'Unsupported recurrence rule part: BYDAY');
+});
+
+test('nested alarm properties do not overwrite event properties', function (): void {
+    $store = new ICalendarStore(new DateTimeZone('UTC'));
+    $ics = "BEGIN:VCALENDAR\r\n"
+        . "BEGIN:VEVENT\r\n"
+        . "UID:with-alarm\r\n"
+        . "DTSTART:20260820T090000Z\r\n"
+        . "DESCRIPTION:Event notes\r\n"
+        . "BEGIN:VALARM\r\n"
+        . "DESCRIPTION:Alarm notes\r\n"
+        . "END:VALARM\r\n"
+        . "END:VEVENT\r\n"
+        . "END:VCALENDAR\r\n";
+
+    $events = $store->parse($ics);
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]->notes)->toBe('Event notes');
+});
+
+test('iCalendar parsing validates component structure and unique event properties', function (): void {
+    $store = new ICalendarStore(new DateTimeZone('UTC'));
+    $nestedEvent = "BEGIN:VCALENDAR\r\n"
+        . "BEGIN:VTIMEZONE\r\n"
+        . "BEGIN:VEVENT\r\nUID:nested\r\nDTSTART:20260820T090000Z\r\nEND:VEVENT\r\n"
+        . "END:VTIMEZONE\r\nEND:VCALENDAR\r\n";
+    $duplicateStart = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:duplicate\r\n"
+        . "DTSTART:20260820T090000Z\r\nDTSTART:20260821T090000Z\r\n"
+        . "END:VEVENT\r\nEND:VCALENDAR\r\n";
+
+    expect(fn (): array => $store->parse($nestedEvent))
+        ->toThrow(UnexpectedValueException::class, 'direct child')
+        ->and(fn (): array => $store->parse($duplicateStart))
+        ->toThrow(UnexpectedValueException::class, 'Duplicate VEVENT property: DTSTART');
+});

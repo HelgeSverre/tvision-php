@@ -6,6 +6,7 @@ namespace HelgeSverre\TurboVision\Menus;
 
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
+use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\MessageEvent;
@@ -145,6 +146,6 @@ final class StatusLine extends MenuView
 
     private function visibleLength(string $text): int
     {
-        return mb_strlen(str_replace('~', '', $text));
+        return TerminalText::length(str_replace('~', '', $text));
     }
 }

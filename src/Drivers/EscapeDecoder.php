@@ -139,14 +139,23 @@ final class EscapeDecoder
                     return new DecodeResult($events, substr($bytes, $i));
                 }
 
-                // Gather the continuation bytes (they must be 0x80-0xBF).
-                $j = $i + 1;
-                while ($j < $len && (ord($bytes[$j]) & 0xC0) === 0x80) {
-                    $j++;
+                $valid = true;
+                for ($offset = 1; $offset <= $expected; $offset++) {
+                    if ((ord($bytes[$i + $offset]) & 0xC0) !== 0x80) {
+                        $valid = false;
+                        break;
+                    }
                 }
-                $grapheme = substr($bytes, $i, $j - $i);
+                $grapheme = substr($bytes, $i, $expected + 1);
+                if (! $valid || ! mb_check_encoding($grapheme, 'UTF-8')) {
+                    // Consume only the invalid lead so following bytes remain decodable.
+                    $events[] = Event::keyDown(new KeyDownEvent(0, $byte));
+                    $i++;
+
+                    continue;
+                }
                 $events[] = Event::keyDown(new KeyDownEvent(0, $grapheme));
-                $i        = $j;
+                $i += $expected + 1;
 
                 continue;
             }
@@ -178,13 +187,13 @@ final class EscapeDecoder
      */
     private function utf8ContinuationCount(int $ord): int
     {
-        if (($ord & 0xE0) === 0xC0) {
+        if ($ord >= 0xC2 && $ord <= 0xDF) {
             return 1; // 2-byte sequence
         }
-        if (($ord & 0xF0) === 0xE0) {
+        if ($ord >= 0xE0 && $ord <= 0xEF) {
             return 2; // 3-byte sequence
         }
-        if (($ord & 0xF8) === 0xF0) {
+        if ($ord >= 0xF0 && $ord <= 0xF4) {
             return 3; // 4-byte sequence
         }
 
@@ -389,7 +398,13 @@ final class EscapeDecoder
     private function emitMouse(string $body, string $final, array &$events): void
     {
         $parts = explode(';', $body);
-        if (count($parts) !== 3) {
+        if (count($parts) !== 3
+            || ! ctype_digit($parts[0])
+            || ! ctype_digit($parts[1])
+            || ! ctype_digit($parts[2])
+            || (int) $parts[1] < 1
+            || (int) $parts[2] < 1
+        ) {
             return; // malformed -> drop
         }
 

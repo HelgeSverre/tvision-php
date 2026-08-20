@@ -7,7 +7,6 @@ namespace HelgeSverre\TurboVision\Examples\Calendar;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
-use Exception;
 use RuntimeException;
 use UnexpectedValueException;
 
@@ -19,6 +18,8 @@ use UnexpectedValueException;
  */
 final class ICalendarStore
 {
+    private const int MAX_FILE_BYTES = 2_000_000;
+
     public function __construct(
         private readonly DateTimeZone $timezone,
     ) {}
@@ -30,9 +31,17 @@ final class ICalendarStore
             return [];
         }
 
-        $contents = file_get_contents($path);
+        $size = @filesize($path);
+        if ($size !== false && $size > self::MAX_FILE_BYTES) {
+            throw new RuntimeException("Calendar file is larger than 2 MB: {$path}");
+        }
+
+        $contents = @file_get_contents($path);
         if ($contents === false) {
             throw new RuntimeException("Unable to read calendar file: {$path}");
+        }
+        if (strlen($contents) > self::MAX_FILE_BYTES) {
+            throw new RuntimeException("Calendar file is larger than 2 MB: {$path}");
         }
 
         return $this->parse($contents);
@@ -46,12 +55,20 @@ final class ICalendarStore
             throw new RuntimeException("Unable to create calendar directory: {$directory}");
         }
 
-        $temporary = $path . '.tmp';
-        $bytes = file_put_contents($temporary, $this->serialize($events), LOCK_EX);
-        if ($bytes === false || ! rename($temporary, $path)) {
-            @unlink($temporary);
+        $temporary = tempnam($directory, '.calendar-');
+        if ($temporary === false) {
+            throw new RuntimeException("Unable to create a temporary calendar file in: {$directory}");
+        }
 
-            throw new RuntimeException("Unable to save calendar file: {$path}");
+        try {
+            $bytes = file_put_contents($temporary, $this->serialize($events), LOCK_EX);
+            if ($bytes === false || ! rename($temporary, $path)) {
+                throw new RuntimeException("Unable to save calendar file: {$path}");
+            }
+        } finally {
+            if (is_file($temporary)) {
+                @unlink($temporary);
+            }
         }
     }
 
@@ -59,36 +76,103 @@ final class ICalendarStore
     public function parse(string $contents): array
     {
         $lines = $this->unfold($contents);
+        if ($lines !== []) {
+            $lines[0] = ltrim($lines[0], "\xEF\xBB\xBF");
+        }
+        if (strtoupper($lines[0] ?? '') !== 'BEGIN:VCALENDAR'
+            || strtoupper($lines[array_key_last($lines)] ?? '') !== 'END:VCALENDAR'
+        ) {
+            throw new UnexpectedValueException('Invalid iCalendar envelope.');
+        }
+
         $events = [];
         $insideEvent = false;
         $eventLines = [];
+        $eventNumber = 0;
+        $uids = [];
+        $componentStack = [];
 
-        foreach ($lines as $line) {
-            $upper = strtoupper($line);
-            if ($upper === 'BEGIN:VEVENT') {
-                $insideEvent = true;
-                $eventLines = [];
-
-                continue;
-            }
-            if ($upper === 'END:VEVENT') {
-                if ($insideEvent) {
-                    $event = $this->parseEvent($eventLines);
-                    if ($event !== null) {
-                        $events[] = $event;
-                    }
+        foreach (array_slice($lines, 1, -1) as $line) {
+            if ($insideEvent) {
+                $upper = strtoupper($line);
+                if ($upper === 'BEGIN:VEVENT') {
+                    throw new UnexpectedValueException('Nested VEVENT components are not supported.');
                 }
+                if ($upper !== 'END:VEVENT') {
+                    $eventLines[] = $line;
+
+                    continue;
+                }
+
+                $eventNumber++;
+                $event = $this->parseEventNumber($eventLines, $eventNumber);
+                if (isset($uids[$event->uid])) {
+                    throw new UnexpectedValueException("Duplicate iCalendar UID: {$event->uid}");
+                }
+                $uids[$event->uid] = true;
+                $events[] = $event;
                 $insideEvent = false;
                 $eventLines = [];
 
                 continue;
             }
-            if ($insideEvent) {
-                $eventLines[] = $line;
+
+            $content = $this->parseContentLine($line);
+            if ($content === null) {
+                throw new UnexpectedValueException("Malformed iCalendar content line: {$line}");
             }
+            $component = strtoupper($content['value']);
+            if ($content['name'] === 'BEGIN') {
+                if ($component === 'VCALENDAR') {
+                    throw new UnexpectedValueException('Nested VCALENDAR components are not supported.');
+                }
+                if ($component === 'VEVENT') {
+                    if ($componentStack !== []) {
+                        throw new UnexpectedValueException('VEVENT must be a direct child of VCALENDAR.');
+                    }
+                    $insideEvent = true;
+                    $eventLines = [];
+                } else {
+                    $componentStack[] = $component;
+                }
+
+                continue;
+            }
+            if ($content['name'] === 'END') {
+                if ($component === 'VEVENT') {
+                    throw new UnexpectedValueException('Unexpected END:VEVENT.');
+                }
+                if ($component === 'VCALENDAR') {
+                    throw new UnexpectedValueException('Unexpected END:VCALENDAR.');
+                }
+                $expected = array_pop($componentStack);
+                if ($expected === null || $expected !== $component) {
+                    throw new UnexpectedValueException("Mismatched iCalendar component end: {$content['value']}");
+                }
+            }
+        }
+        if ($insideEvent) {
+            throw new UnexpectedValueException('Unterminated VEVENT component.');
+        }
+        if ($componentStack !== []) {
+            throw new UnexpectedValueException('Unterminated iCalendar component.');
         }
 
         return $events;
+    }
+
+    /** @param list<string> $lines */
+    private function parseEventNumber(array $lines, int $number): CalendarEvent
+    {
+        try {
+            return $this->parseEvent($lines);
+        } catch (\Throwable $exception) {
+            throw new UnexpectedValueException(
+                "Invalid VEVENT #{$number}: {$exception->getMessage()}",
+                0,
+                $exception,
+            );
+        }
     }
 
     /** @param list<CalendarEvent> $events */
@@ -167,7 +251,7 @@ final class ICalendarStore
     }
 
     /** @param list<string> $lines */
-    private function parseEvent(array $lines): ?CalendarEvent
+    private function parseEvent(array $lines): CalendarEvent
     {
         $uid = '';
         $title = '(Untitled Event)';
@@ -176,57 +260,107 @@ final class ICalendarStore
         $calendar = 'Imported';
         $start = null;
         $end = null;
+        $endAllDay = false;
         $duration = null;
         $allDay = false;
         $repeat = RepeatRule::Never;
         $recurrenceUntil = null;
         $recurrenceCount = null;
+        $nestedComponents = [];
+        $seen = [];
 
-        try {
-            foreach ($lines as $line) {
-                $content = $this->parseContentLine($line);
-                if ($content === null) {
-                    continue;
-                }
-
-                switch ($content['name']) {
-                    case 'UID':
-                        $uid = $this->unescapeText($content['value']);
-                        break;
-                    case 'SUMMARY':
-                        $title = $this->unescapeText($content['value']);
-                        break;
-                    case 'LOCATION':
-                        $location = $this->unescapeText($content['value']);
-                        break;
-                    case 'DESCRIPTION':
-                        $notes = $this->unescapeText($content['value']);
-                        break;
-                    case 'CATEGORIES':
-                        $calendar = $this->unescapeText($this->firstListValue($content['value']));
-                        break;
-                    case 'DTSTART':
-                        [$start, $allDay] = $this->parseDateValue($content['value'], $content['params']);
-                        break;
-                    case 'DTEND':
-                        [$end] = $this->parseDateValue($content['value'], $content['params']);
-                        break;
-                    case 'DURATION':
-                        $duration = new DateInterval($content['value']);
-                        break;
-                    case 'RRULE':
-                        [$repeat, $recurrenceUntil, $recurrenceCount] = $this->parseRecurrence($content['value']);
-                        break;
-                }
+        foreach ($lines as $line) {
+            $content = $this->parseContentLine($line);
+            if ($content === null) {
+                throw new UnexpectedValueException("Malformed iCalendar content line: {$line}");
             }
-        } catch (Exception) {
-            return null;
+
+            if ($content['name'] === 'BEGIN') {
+                $nestedComponents[] = strtoupper($content['value']);
+
+                continue;
+            }
+            if ($content['name'] === 'END') {
+                $component = strtoupper($content['value']);
+                $expected = array_pop($nestedComponents);
+                if ($expected === null || $expected !== $component) {
+                    throw new UnexpectedValueException("Unexpected nested component end: {$content['value']}");
+                }
+
+                continue;
+            }
+            if ($nestedComponents !== []) {
+                continue;
+            }
+
+            if (in_array($content['name'], [
+                'UID',
+                'SUMMARY',
+                'LOCATION',
+                'DESCRIPTION',
+                'CATEGORIES',
+                'DTSTART',
+                'DTEND',
+                'DURATION',
+                'RRULE',
+            ], true)) {
+                if (isset($seen[$content['name']])) {
+                    throw new UnexpectedValueException("Duplicate VEVENT property: {$content['name']}");
+                }
+                $seen[$content['name']] = true;
+            }
+
+            switch ($content['name']) {
+                case 'UID':
+                    $uid = $this->unescapeText($content['value']);
+                    break;
+                case 'SUMMARY':
+                    $title = $this->unescapeText($content['value']);
+                    break;
+                case 'LOCATION':
+                    $location = $this->unescapeText($content['value']);
+                    break;
+                case 'DESCRIPTION':
+                    $notes = $this->unescapeText($content['value']);
+                    break;
+                case 'CATEGORIES':
+                    $calendar = $this->unescapeText($this->firstListValue($content['value']));
+                    break;
+                case 'DTSTART':
+                    [$start, $allDay] = $this->parseDateValue($content['value'], $content['params']);
+                    break;
+                case 'DTEND':
+                    [$end, $endAllDay] = $this->parseDateValue($content['value'], $content['params']);
+                    break;
+                case 'DURATION':
+                    $duration = new DateInterval($content['value']);
+                    break;
+                case 'RRULE':
+                    [$repeat, $recurrenceUntil, $recurrenceCount] = $this->parseRecurrence($content['value']);
+                    break;
+                case 'EXDATE':
+                case 'RDATE':
+                case 'RECURRENCE-ID':
+                case 'EXRULE':
+                    throw new UnexpectedValueException("Unsupported recurrence property: {$content['name']}");
+            }
         }
 
-        if ($start === null) {
-            return null;
+        if ($nestedComponents !== []) {
+            throw new UnexpectedValueException('Unterminated nested iCalendar component.');
         }
-        $uid = $uid !== '' ? $uid : CalendarEvent::newUid();
+        if ($start === null) {
+            throw new UnexpectedValueException('VEVENT is missing DTSTART.');
+        }
+        if ($uid === '') {
+            throw new UnexpectedValueException('VEVENT is missing UID.');
+        }
+        if ($end !== null && $duration !== null) {
+            throw new UnexpectedValueException('VEVENT must not contain both DTEND and DURATION.');
+        }
+        if ($end !== null && $allDay !== $endAllDay) {
+            throw new UnexpectedValueException('DTSTART and DTEND must use the same value type.');
+        }
         if ($end === null && $duration !== null) {
             $end = $start->add($duration);
         }
@@ -314,8 +448,8 @@ final class ICalendarStore
 
         try {
             return new DateTimeZone($name);
-        } catch (Exception) {
-            return $this->timezone;
+        } catch (\Throwable $exception) {
+            throw new UnexpectedValueException("Unsupported iCalendar timezone: {$name}", 0, $exception);
         }
     }
 
@@ -325,19 +459,37 @@ final class ICalendarStore
         $parts = [];
         foreach (explode(';', $value) as $part) {
             $equals = strpos($part, '=');
-            if ($equals !== false) {
-                $parts[strtoupper(substr($part, 0, $equals))] = substr($part, $equals + 1);
+            if ($equals === false) {
+                throw new UnexpectedValueException("Invalid recurrence rule part: {$part}");
             }
+            $name = strtoupper(substr($part, 0, $equals));
+            if (! in_array($name, ['FREQ', 'UNTIL', 'COUNT'], true)) {
+                throw new UnexpectedValueException("Unsupported recurrence rule part: {$name}");
+            }
+            if (array_key_exists($name, $parts)) {
+                throw new UnexpectedValueException("Duplicate recurrence rule part: {$name}");
+            }
+            $parts[$name] = substr($part, $equals + 1);
         }
 
-        $repeat = RepeatRule::tryFrom(strtoupper($parts['FREQ'] ?? '')) ?? RepeatRule::Never;
+        $repeat = RepeatRule::tryFrom(strtoupper($parts['FREQ'] ?? ''));
+        if ($repeat === null || $repeat === RepeatRule::Never) {
+            throw new UnexpectedValueException('Unsupported or missing recurrence frequency.');
+        }
+        if (isset($parts['UNTIL'], $parts['COUNT'])) {
+            throw new UnexpectedValueException('A recurrence rule cannot contain both UNTIL and COUNT.');
+        }
         $until = null;
         if (($parts['UNTIL'] ?? '') !== '') {
             [$until] = $this->parseDateValue($parts['UNTIL'], []);
         }
-        $count = isset($parts['COUNT']) && ctype_digit($parts['COUNT'])
-            ? max(1, (int) $parts['COUNT'])
-            : null;
+        $count = null;
+        if (isset($parts['COUNT'])) {
+            if (! ctype_digit($parts['COUNT']) || (int) $parts['COUNT'] < 1) {
+                throw new UnexpectedValueException('Recurrence COUNT must be a positive integer.');
+            }
+            $count = (int) $parts['COUNT'];
+        }
 
         return [$repeat, $until, $count];
     }

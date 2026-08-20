@@ -95,6 +95,7 @@ final class StudioView extends View
         private readonly string $projectPath,
         private readonly string $exportPath,
         bool $initiallyDirty = false,
+        private bool $persistenceBlocked = false,
     ) {
         parent::__construct($bounds);
         $this->options |= State::Selectable | State::FirstClick;
@@ -727,6 +728,10 @@ final class StudioView extends View
 
     private function saveProject(): void
     {
+        if (! $this->persistenceAvailable()) {
+            return;
+        }
+
         try {
             $this->store->save($this->projectPath, $this->project);
             $this->dirty = false;
@@ -746,14 +751,30 @@ final class StudioView extends View
         }
         try {
             $this->project = $this->store->load($this->projectPath);
+            $this->persistenceBlocked = false;
             $this->history->clear();
             $this->selectedId = $this->project->components()[0]->id ?? null;
             $this->dirty = false;
             $this->log('Loaded ' . basename($this->projectPath) . '.');
             $this->setStatus('Project loaded from ' . $this->projectPath . '.');
         } catch (RuntimeException $exception) {
+            $this->persistenceBlocked = true;
             $this->setStatus($exception->getMessage(), true);
         }
+    }
+
+    private function persistenceAvailable(): bool
+    {
+        if (! $this->persistenceBlocked) {
+            return true;
+        }
+
+        $this->setStatus(
+            'Saving is disabled because the existing project could not be loaded. Repair it, then reload.',
+            true,
+        );
+
+        return false;
     }
 
     private function exportPhp(): void

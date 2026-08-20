@@ -66,8 +66,7 @@ class CalendarApp extends Application
         $rows = $this->screenObj->rows();
         $bounds = Rect::of(0, 0, $cols, $rows);
         $this->setBounds($bounds);
-        $this->children = [];
-        $this->currentView = null;
+        $this->clearSubviews();
         $this->desktop = null;
         $this->menuBar = null;
         $this->statusLine = null;
@@ -100,6 +99,7 @@ class CalendarApp extends Application
             timezone: $this->timezone,
             today: $this->today,
             theme: $this->theme,
+            persistenceBlocked: $loadError,
         );
         $view->showStatus($loadMessage, $loadError);
         $this->calendarView = $view;

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use HelgeSverre\TurboVision\Drawing\Cell;
+use HelgeSverre\TurboVision\Drivers\Driver;
 use HelgeSverre\TurboVision\Drivers\HeadlessDriver;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Geometry\Point;
@@ -22,6 +23,15 @@ test('init sizes the back buffer from the driver and delegates lifecycle', funct
 
     $screen->shutdown();
     expect($driver->isInitialised())->toBeFalse();
+});
+
+test('init shuts down a driver when sizing fails after driver initialization', function (): void {
+    $driver = new FailingSizeDriver();
+    $screen = new Screen($driver);
+
+    expect(fn () => $screen->init())->toThrow(RuntimeException::class, 'size failed')
+        ->and($driver->initialised)->toBeFalse()
+        ->and($driver->shutdownCalls)->toBe(1);
 });
 
 test('flush writes the diff then makes the next flush a no-op', function (): void {
@@ -107,6 +117,37 @@ test('a stranded ESC becomes Key::Esc when the next poll is empty', function ():
         ->and($events[0]->asKey()?->is(Key::Esc))->toBeTrue();
 });
 
+test('an incomplete escape sequence expires instead of swallowing the next key', function (): void {
+    $driver = new HeadlessDriver(5, 1);
+    $screen = new Screen($driver);
+    $screen->init();
+
+    $driver->feedInput("\e[");
+    expect($screen->pollEvents(0))->toBe([])
+        ->and($screen->pollEvents(0))->toBe([]);
+
+    $driver->feedInput('q');
+    $events = $screen->pollEvents(0);
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]->asKey()?->char)->toBe('q');
+});
+
+test('oversized incomplete input is discarded at the decoder boundary', function (): void {
+    $driver = new HeadlessDriver(5, 1);
+    $screen = new Screen($driver);
+    $screen->init();
+
+    $driver->feedInput("\e[" . str_repeat('1', 5000));
+    expect($screen->pollEvents(0))->toBe([]);
+
+    $driver->feedInput('q');
+    $events = $screen->pollEvents(0);
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]->asKey()?->char)->toBe('q');
+});
+
 test('a driver resize reflows the buffers and sets wasResized', function (): void {
     $driver = new HeadlessDriver(5, 2);
     $screen = new Screen($driver);
@@ -161,3 +202,38 @@ test('end-to-end: draw a bordered box, flush, assert the rendered glyphs', funct
         ->and($ansi)->toContain('+-+')     // top border coalesced into one run
         ->and($ansi)->toContain('|');      // a side glyph present
 });
+
+final class FailingSizeDriver implements Driver
+{
+    public bool $initialised = false;
+
+    public int $shutdownCalls = 0;
+
+    public function init(): void
+    {
+        $this->initialised = true;
+    }
+
+    public function shutdown(): void
+    {
+        $this->initialised = false;
+        $this->shutdownCalls++;
+    }
+
+    public function size(): array
+    {
+        throw new RuntimeException('size failed');
+    }
+
+    public function write(string $bytes): void {}
+
+    public function pollInput(int $timeoutMs): string
+    {
+        return '';
+    }
+
+    public function resized(): bool
+    {
+        return false;
+    }
+}

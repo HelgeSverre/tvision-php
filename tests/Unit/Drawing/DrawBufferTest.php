@@ -35,6 +35,17 @@ test('moveStr writes a multibyte string at an offset, clipped to width', functio
     expect(dbChars($b))->toBe(' ábXX');
 });
 
+test('moveStr keeps grapheme clusters in one cell and replaces wide glyphs safely', function (): void {
+    $b = new DrawBuffer(5);
+    $b->moveStr(0, "Ae\u{0301}🚀B", 0x07);
+
+    expect($b->cells()[0]->char)->toBe('A')
+        ->and($b->cells()[1]->char)->toBe("e\u{0301}")
+        ->and($b->cells()[2]->char)->toBe('?')
+        ->and($b->cells()[3]->char)->toBe('B')
+        ->and($b->cells()[4]->char)->toBe(' ');
+});
+
 test('moveChar repeats a character N times', function (): void {
     $b = new DrawBuffer(6);
     $b->moveChar(1, '#', 0x07, 3);

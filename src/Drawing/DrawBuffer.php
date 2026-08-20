@@ -37,7 +37,7 @@ final class DrawBuffer
 
     public function moveStr(int $x, string $str, int $attr): void
     {
-        foreach (mb_str_split($str) as $ch) {
+        foreach (TerminalText::graphemes($str) as $ch) {
             if ($x >= 0 && $x < $this->width) {
                 $this->cells[$x] = new Cell($ch, $attr);
             }
@@ -54,7 +54,7 @@ final class DrawBuffer
     {
         $attr = $normalAttr;
 
-        foreach (mb_str_split($str) as $ch) {
+        foreach (TerminalText::graphemes($str) as $ch) {
             if ($ch === '~') {
                 $attr = $attr === $normalAttr ? $highlightAttr : $normalAttr;
                 continue;

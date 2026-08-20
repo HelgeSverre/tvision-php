@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HelgeSverre\TurboVision\Examples\Calendar;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 final class CalendarEvent
 {
@@ -22,12 +23,19 @@ final class CalendarEvent
         public ?int $recurrenceCount = null,
     ) {
         if ($this->end <= $this->start) {
-            $this->end = $this->allDay
-                ? $this->start->modify('+1 day')
-                : $this->start->modify('+1 hour');
+            throw new InvalidArgumentException('Event end must be after event start.');
+        }
+        if ($this->allDay
+            && ($this->start->format('His.u') !== '000000.000000'
+                || $this->end->format('His.u') !== '000000.000000')
+        ) {
+            throw new InvalidArgumentException('All-day event boundaries must be at midnight.');
         }
         if ($this->recurrenceCount !== null && $this->recurrenceCount < 1) {
-            $this->recurrenceCount = null;
+            throw new InvalidArgumentException('Recurrence count must be a positive integer.');
+        }
+        if ($this->recurrenceCount !== null && $this->recurrenceUntil !== null) {
+            throw new InvalidArgumentException('Recurrence cannot have both a count and an end date.');
         }
     }
 
@@ -46,48 +54,136 @@ final class CalendarEvent
             return $this->start < $dayEnd && $this->end > $dayStart;
         }
 
+        $cutoff = $dayEnd->modify('-1 second');
+        if ($this->recurrenceUntil !== null) {
+            $until = $this->recurrenceUntil->setTimezone($timezone);
+            if ($until < $cutoff) {
+                $cutoff = $until;
+            }
+        }
+
+        $occurrenceStart = $this->latestOccurrenceAtOrBefore($cutoff);
+        if ($occurrenceStart === null) {
+            return false;
+        }
+
+        if ($this->recurrenceCount !== null) {
+            $occurrenceNumber = $this->occurrenceNumber($occurrenceStart);
+            if ($occurrenceNumber > $this->recurrenceCount) {
+                $occurrenceStart = $this->occurrenceForNumber($this->recurrenceCount);
+            }
+        }
+
+        $occurrenceEnd = $occurrenceStart->add($this->start->diff($this->end));
+
+        return $occurrenceStart < $dayEnd && $occurrenceEnd > $dayStart;
+    }
+
+    private function latestOccurrenceAtOrBefore(DateTimeImmutable $cutoff): ?DateTimeImmutable
+    {
+        if ($cutoff < $this->start) {
+            return null;
+        }
+
+        $hour = (int) $this->start->format('H');
+        $minute = (int) $this->start->format('i');
+        $second = (int) $this->start->format('s');
+        $firstDay = $this->start->setTime(0, 0);
+        $cutoffDay = $cutoff->setTime(0, 0);
+
+        if ($this->repeat === RepeatRule::Daily || $this->repeat === RepeatRule::Weekly) {
+            $days = (int) $firstDay->diff($cutoffDay)->format('%a');
+            $step = $this->repeat === RepeatRule::Daily ? 1 : 7;
+            $candidate = $cutoffDay->modify('-' . ($days % $step) . ' days')->setTime($hour, $minute, $second);
+            if ($candidate > $cutoff) {
+                $candidate = $candidate->modify("-{$step} days");
+            }
+
+            return $candidate >= $this->start ? $candidate : null;
+        }
+
+        if ($this->repeat === RepeatRule::Monthly) {
+            $day = (int) $this->start->format('j');
+            $month = $cutoff->modify('first day of this month');
+            while ($month >= $firstDay->modify('first day of this month')) {
+                $year = (int) $month->format('Y');
+                $monthNumber = (int) $month->format('n');
+                if (checkdate($monthNumber, $day, $year)) {
+                    $candidate = $month->setDate($year, $monthNumber, $day)->setTime($hour, $minute, $second);
+                    if ($candidate <= $cutoff && $candidate >= $this->start) {
+                        return $candidate;
+                    }
+                }
+                $month = $month->modify('-1 month');
+            }
+
+            return null;
+        }
+
+        $monthNumber = (int) $this->start->format('n');
+        $day = (int) $this->start->format('j');
+        $year = (int) $cutoff->format('Y');
+        $firstYear = (int) $this->start->format('Y');
+        while ($year >= $firstYear) {
+            if (checkdate($monthNumber, $day, $year)) {
+                $candidate = $cutoff->setDate($year, $monthNumber, $day)->setTime($hour, $minute, $second);
+                if ($candidate <= $cutoff && $candidate >= $this->start) {
+                    return $candidate;
+                }
+            }
+            $year--;
+        }
+
+        return null;
+    }
+
+    private function occurrenceNumber(DateTimeImmutable $occurrence): int
+    {
         $first = $this->start->setTime(0, 0);
-        if ($dayStart < $first) {
-            return false;
-        }
-        $occurrenceStart = $dayStart->setTime(
-            (int) $this->start->format('H'),
-            (int) $this->start->format('i'),
-            (int) $this->start->format('s'),
-        );
-        if ($this->recurrenceUntil !== null
-            && $occurrenceStart > $this->recurrenceUntil->setTimezone($timezone)
-        ) {
-            return false;
-        }
+        $occurrenceDay = $occurrence->setTime(0, 0);
+        $days = (int) $first->diff($occurrenceDay)->format('%a');
+        $months = ((int) $occurrenceDay->format('Y') - (int) $first->format('Y')) * 12
+            + (int) $occurrenceDay->format('n') - (int) $first->format('n');
+        $years = (int) $occurrenceDay->format('Y') - (int) $first->format('Y');
 
-        $days = (int) $first->diff($dayStart)->format('%a');
-        $months = ((int) $dayStart->format('Y') - (int) $first->format('Y')) * 12
-            + (int) $dayStart->format('n') - (int) $first->format('n');
-        $years = (int) $dayStart->format('Y') - (int) $first->format('Y');
-
-        $matches = match ($this->repeat) {
-            RepeatRule::Daily => true,
-            RepeatRule::Weekly => $days % 7 === 0,
-            RepeatRule::Monthly => $dayStart->format('j') === $first->format('j'),
-            RepeatRule::Yearly => $dayStart->format('m-d') === $first->format('m-d'),
-        };
-        if (! $matches) {
-            return false;
-        }
-
-        if ($this->recurrenceCount === null) {
-            return true;
-        }
-
-        $occurrence = match ($this->repeat) {
+        return match ($this->repeat) {
             RepeatRule::Daily => $days + 1,
             RepeatRule::Weekly => intdiv($days, 7) + 1,
             RepeatRule::Monthly => $this->monthlyOccurrence($first, $months),
             RepeatRule::Yearly => $this->yearlyOccurrence($first, $years),
+            RepeatRule::Never => 1,
         };
+    }
 
-        return $occurrence <= $this->recurrenceCount;
+    private function occurrenceForNumber(int $number): DateTimeImmutable
+    {
+        if ($this->repeat === RepeatRule::Daily) {
+            return $this->start->modify('+' . ($number - 1) . ' days');
+        }
+        if ($this->repeat === RepeatRule::Weekly) {
+            return $this->start->modify('+' . (($number - 1) * 7) . ' days');
+        }
+
+        $month = $this->start->modify('first day of this month');
+        $monthNumber = (int) $this->start->format('n');
+        $day = (int) $this->start->format('j');
+        $year = (int) $this->start->format('Y');
+        $seen = 0;
+        while (true) {
+            if ($this->repeat === RepeatRule::Monthly) {
+                $monthNumber = (int) $month->format('n');
+                $year = (int) $month->format('Y');
+            }
+            if (checkdate($monthNumber, $day, $year) && ++$seen === $number) {
+                return $this->start->setDate($year, $monthNumber, $day);
+            }
+
+            if ($this->repeat === RepeatRule::Monthly) {
+                $month = $month->modify('+1 month');
+            } else {
+                $year++;
+            }
+        }
     }
 
     private function monthlyOccurrence(DateTimeImmutable $first, int $months): int

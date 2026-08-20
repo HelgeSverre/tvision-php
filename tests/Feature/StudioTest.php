@@ -59,6 +59,32 @@ test('studio renders a polished toolbox, design canvas, inspector, layers, and a
         ->and($explicitBackgroundCells)->toBe(0);
 });
 
+test('a malformed existing project cannot be overwritten by the starter fallback', function (): void {
+    $suffix = bin2hex(random_bytes(6));
+    $projectPath = sys_get_temp_dir() . '/tvision-studio-invalid-' . $suffix . '.json';
+    $exportPath = sys_get_temp_dir() . '/tvision-studio-invalid-' . $suffix . '.php';
+    $original = '{"version":1,"components":"broken"}';
+    file_put_contents($projectPath, $original);
+    $driver = new HeadlessDriver(120, 34);
+    $app = new StudioApp(new Screen($driver), $projectPath, $exportPath);
+
+    try {
+        $app->bootForTest();
+        $app->handleEvent(Event::keyDown(new KeyDownEvent(0x13)));
+
+        expect(file_get_contents($projectPath))->toBe($original)
+            ->and($app->studioView()->statusMessage())->toContain('Saving is disabled');
+    } finally {
+        $driver->shutdown();
+        if (is_file($projectPath)) {
+            unlink($projectPath);
+        }
+        if (is_file($exportPath)) {
+            unlink($exportPath);
+        }
+    }
+});
+
 test('toolbox double-click adds a component and undo redo restore the design', function (): void {
     [$app] = studioAppForTest();
     $view = $app->studioView();

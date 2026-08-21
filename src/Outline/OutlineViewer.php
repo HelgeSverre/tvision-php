@@ -329,9 +329,18 @@ abstract class OutlineViewer extends Scroller
         $newFocus = $this->focused;
         $height = max(1, $this->bounds->height());
         $handled = true;
-        if (($key->modifiers & KeyModifier::Ctrl) !== 0 && $key->keyCode === Key::PageUp->value) {
+        // Accept both identities: real terminals deliver the folded combined code
+        // (Key::CtrlPageUp/CtrlPageDown via EscapeDecoder::legacyKeyCode), while
+        // hand-built events carry the base code plus a Ctrl modifier bit.
+        if (
+            ($key->modifiers & KeyModifier::Ctrl) !== 0 && $key->keyCode === Key::PageUp->value
+            || $key->keyCode === Key::CtrlPageUp->value
+        ) {
             $newFocus = 0;
-        } elseif (($key->modifiers & KeyModifier::Ctrl) !== 0 && $key->keyCode === Key::PageDown->value) {
+        } elseif (
+            ($key->modifiers & KeyModifier::Ctrl) !== 0 && $key->keyCode === Key::PageDown->value
+            || $key->keyCode === Key::CtrlPageDown->value
+        ) {
             $newFocus = max(0, $this->limit->y - 1);
         } else {
             switch ($key->keyCode) {

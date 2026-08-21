@@ -202,3 +202,23 @@ test('outline rejects cyclic and reused public node graphs rather than recursing
     expect(fn (): Outline => new Outline(Rect::of(0, 0, 20, 4), null, null, $root))
         ->toThrow(LogicException::class, 'sibling list');
 });
+
+test('folded legacy Ctrl+PageUp/PageDown key codes jump to the outline ends', function (): void {
+    $root = new Node('0');
+    $tail = $root;
+    for ($i = 1; $i < 10; $i++) {
+        $tail->childList = new Node((string) $i);
+        $tail = $tail->childList;
+    }
+    [$group] = outlineRoot();
+    $outline = new Outline(Rect::of(0, 0, 20, 3), null, null, $root);
+    $group->insert($outline);
+
+    // Real terminals fold the modifier into the combined legacy code
+    // (EscapeDecoder::legacyKeyCode), so this is what actually arrives.
+    $outline->handleEvent(Event::keyDown(new KeyDownEvent(Key::CtrlPageDown->value)));
+    expect($outline->focused)->toBe(9);
+
+    $outline->handleEvent(Event::keyDown(new KeyDownEvent(Key::CtrlPageUp->value)));
+    expect($outline->focused)->toBe(0);
+});

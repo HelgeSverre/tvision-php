@@ -151,14 +151,30 @@ final class Screen
     public function flush(): void
     {
         $ansi = $this->presenter->present($this->front, $this->back, $this->encoder);
+
+        $presentedCursor = $this->presentedCursor;
+        $cursorVisible = $this->cursorVisible;
         $cursorAnsi = $this->cursorSequence();
         if ($ansi === '' && $cursorAnsi === '') {
             return;
         }
 
-        $this->driver->write($this->capabilities->synchronizedUpdates
+        $frame = $this->capabilities->synchronizedUpdates
             ? $this->encoder->beginSyncUpdate() . $ansi . $cursorAnsi . $this->encoder->endSyncUpdate()
-            : $ansi . $cursorAnsi);
+            : $ansi . $cursorAnsi;
+        try {
+            $this->driver->write($frame);
+        } catch (\Throwable $exception) {
+            // The terminal never received this frame: un-commit the
+            // cursor-presented state so a later retry still emits move/show
+            // sequences instead of assuming the hardware agrees.
+            $this->presentedCursor = $presentedCursor;
+            $this->cursorVisible = $cursorVisible;
+            $this->cursorNeedsReconcile = true;
+
+            throw $exception;
+        }
+
         $this->front = $this->back->copy();
     }
 
@@ -262,16 +278,22 @@ final class Screen
 
     private function resizeBuffers(int $cols, int $rows, bool $invalidateFront = false): void
     {
-        if ($cols < 0
-            || $rows < 0
-            || ($cols !== 0 && $rows > intdiv(Buffer::MAX_CELLS, $cols))
-        ) {
+        if ($cols < 0 || $rows < 0) {
             throw new InvalidArgumentException('Terminal dimensions are outside the safe screen-buffer limit.');
         }
 
-        $this->back = new Buffer($cols, $rows);
+        // Buffer's constructor owns the MAX_CELLS invariant; build both buffers
+        // before committing either so a rejected size mutates nothing.
         $frontFill = $invalidateFront ? new Cell("\0", -1) : null;
-        $this->front = new Buffer($cols, $rows, $frontFill);
+        try {
+            $back = new Buffer($cols, $rows);
+            $front = new Buffer($cols, $rows, $frontFill);
+        } catch (InvalidArgumentException $exception) {
+            throw new InvalidArgumentException('Terminal dimensions are outside the safe screen-buffer limit.', previous: $exception);
+        }
+
+        $this->back = $back;
+        $this->front = $front;
         if ($this->cursor !== null
             && ($this->cursor->x < 0 || $this->cursor->y < 0 || $this->cursor->x >= $cols || $this->cursor->y >= $rows)
         ) {

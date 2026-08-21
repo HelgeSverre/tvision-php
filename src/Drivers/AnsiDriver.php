@@ -17,8 +17,6 @@ use HelgeSverre\TurboVision\Terminal\TerminalCapabilities;
  * Raw-mode entry/exit, live stream_select polling, SIGWINCH delivery, and alt-screen
  * visuals are inherently terminal-coupled and are exercised by bin/render-demo, not
  * by fragile unit mocks. pcntl/posix improve integration but have safe fallbacks.
- *
- * @phpstan-type SttyRunner Closure(string):string
  */
 final class AnsiDriver implements Driver, ProvidesTerminalCapabilities
 {
@@ -27,6 +25,19 @@ final class AnsiDriver implements Driver, ProvidesTerminalCapabilities
     private const int WRITE_STALL_DELAY_MICROSECONDS = 1_000;
 
     private const float RESIZE_POLL_SECONDS = 0.25;
+
+    /**
+     * A driver on the process's own standard streams.
+     *
+     * @param (Closure(string):string)|null $sttyRunner injectable for tests
+     */
+    public static function forStdio(
+        bool $trackMouseMotion = false,
+        ?TerminalCapabilities $capabilities = null,
+        ?Closure $sttyRunner = null,
+    ): self {
+        return new self(null, null, $sttyRunner, $trackMouseMotion, $capabilities);
+    }
 
     private readonly AnsiEncoder $encoder;
 
@@ -154,6 +165,16 @@ final class AnsiDriver implements Driver, ProvidesTerminalCapabilities
         try {
             ($this->stty)('stty raw -echo');
 
+            // Verify raw mode actually engaged: a restricted shell, full fork
+            // table, or racing terminal close can swallow the stty call, leaving
+            // the terminal cooked and echoing while the framework believes it
+            // owns the screen. Raw mode always changes at least the echo bit,
+            // so an unchanged serialization means the transition failed.
+            $current = trim(($this->stty)('stty -g'));
+            if ($current === '' || $current === $this->savedStty) {
+                throw DriverException::sttyUnavailable();
+            }
+
             // Non-blocking STDIN so pollInput() never blocks past its timeout.
             stream_set_blocking($this->stdin, false);
 
@@ -275,7 +296,6 @@ final class AnsiDriver implements Driver, ProvidesTerminalCapabilities
         $length = strlen($bytes);
         $offset = 0;
         $stalls = 0;
-
         while ($offset < $length) {
             $writeWarning = null;
             set_error_handler(static function (int $severity, string $message) use (&$writeWarning): bool {
@@ -298,21 +318,17 @@ final class AnsiDriver implements Driver, ProvidesTerminalCapabilities
                     throw DriverException::writeFailed($previous);
                 }
 
-                if (self::operationWasInterrupted($writeWarning)) {
-                    if ($this->signalsAvailable) {
-                        pcntl_signal_dispatch();
-                    }
-                    usleep(self::WRITE_STALL_DELAY_MICROSECONDS);
-
-                    continue;
-                }
-
+                // Whether the fwrite was interrupted by a signal (EINTR) or the
+                // stream was transiently unwritable, dispatch pending signals
+                // (so SIGWINCH handlers run promptly) and retry after a short
+                // backoff. operationWasInterrupted() distinguishes the cases
+                // for diagnostics only; both recover identically here.
                 if ($this->signalsAvailable) {
                     pcntl_signal_dispatch();
                 }
                 usleep(self::WRITE_STALL_DELAY_MICROSECONDS);
 
-                continue; // transiently unwritable: retry the remainder
+                continue;
             }
             $stalls = 0;
             $offset += $written;

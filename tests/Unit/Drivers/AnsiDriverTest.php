@@ -276,3 +276,10 @@ final class InterruptedWriteStream
         return strlen($data);
     }
 }
+
+it('forStdio builds a driver wired to the process streams', function (): void {
+    $driver = AnsiDriver::forStdio(trackMouseMotion: true);
+
+    expect($driver)->toBeInstanceOf(AnsiDriver::class)
+        ->and($driver->size())->toBeArray();
+});

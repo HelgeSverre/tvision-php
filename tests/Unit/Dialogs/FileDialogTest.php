@@ -44,3 +44,38 @@ it('refreshes rather than closes when a wildcard is entered', function (): void 
         rmdir($root);
     }
 });
+
+use HelgeSverre\TurboVision\Collections\SearchRec;
+use HelgeSverre\TurboVision\Dialogs\FileInputLine;
+use HelgeSverre\TurboVision\Dialogs\FileInfoPane;
+use HelgeSverre\TurboVision\Dialogs\FileList;
+use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Views\Group;
+
+it('mirrors focused file-list rows into the input line and info pane via group routing', function (): void {
+    $root = sys_get_temp_dir() . '/tvision-file-dialog-' . bin2hex(random_bytes(4));
+    mkdir($root . '/alpha-dir', 0777, true);
+    file_put_contents($root . '/alpha.ics', 'BEGIN:VCALENDAR');
+
+    try {
+        $group = new Group(Rect::of(0, 0, 60, 20));
+        $list = new FileList(Rect::of(0, 0, 30, 8));
+        $input = new FileInputLine(Rect::of(0, 9, 30, 10), 80);
+        $pane = new FileInfoPane(Rect::of(31, 0, 59, 3));
+        $group->insert($list);
+        $group->insert($input);
+        $group->insert($pane);
+
+        // Row order: '..', 'alpha-dir', 'alpha.ics'. Focusing the file row must
+        // broadcast through the Group to both consumers.
+        $list->readDirectory($root, '*');
+        $list->focusItem(2);
+
+        expect($input->text())->toBe('alpha.ics')
+            ->and($pane->file()?->name)->toBe('alpha.ics');
+    } finally {
+        unlink($root . '/alpha.ics');
+        rmdir($root . '/alpha-dir');
+        rmdir($root);
+    }
+});

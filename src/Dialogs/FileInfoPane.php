@@ -9,6 +9,7 @@ use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Views\View;
@@ -21,6 +22,9 @@ final class FileInfoPane extends View
     public function __construct(Rect $bounds)
     {
         parent::__construct($bounds);
+        // The pane exists to mirror FileList focus broadcasts; without the mask
+        // bit Group routing never delivers them to it.
+        $this->eventMask |= EventMask::Broadcast;
     }
 
     public function getPalette(): Palette

@@ -6,6 +6,7 @@ namespace HelgeSverre\TurboVision\Dialogs;
 
 use HelgeSverre\TurboVision\Collections\SearchRec;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Views\State;
@@ -16,6 +17,9 @@ class FileInputLine extends InputLine
     public function __construct(Rect $bounds, int $maxLen)
     {
         parent::__construct($bounds, $maxLen);
+        // Focus mirroring rides on FileList broadcasts; opt into the mask so
+        // Group routing delivers them.
+        $this->eventMask |= EventMask::Broadcast;
     }
 
     public function handleEvent(Event $event): void

@@ -131,3 +131,24 @@ test('a leaf factory cannot accept child nodes silently', function (): void {
     expect(fn () => $resource->build(demoViewResourceFactories()))
         ->toThrow(ResourceException::class, 'cannot own children');
 });
+
+it('rejects hand-built nodes that could not survive their own round-trip', function (): void {
+    $rect = HelgeSverre\TurboVision\Geometry\Rect::of(0, 0, 10, 5);
+
+    expect(fn () => new HelgeSverre\TurboVision\Resources\ViewResourceNode('x', $rect, ['cb' => fn (): string => 'nope']))
+        ->toThrow(\InvalidArgumentException::class, 'JSON-compatible');
+
+    $validChild = new HelgeSverre\TurboVision\Resources\ViewResourceNode('child', $rect);
+    /** @var array<mixed> $badChildren */
+    $badChildren = [$validChild, 'not-a-node'];
+    // Deliberate docblock violation: the runtime constructor guard is the thing under test.
+    // @phpstan-ignore argument.type
+    $build = fn (): HelgeSverre\TurboVision\Resources\ViewResourceNode => new HelgeSverre\TurboVision\Resources\ViewResourceNode('x', $rect, [], $badChildren);
+    expect($build)->toThrow(\InvalidArgumentException::class, 'child');
+
+    // A valid hand-built tree now round-trips through the declarative format.
+    $node = new HelgeSverre\TurboVision\Resources\ViewResourceNode('panel', $rect, ['title' => 'ok'], [$validChild]);
+    $restored = HelgeSverre\TurboVision\Resources\ViewResourceNode::fromArray($node->toArray());
+    expect($restored->property('title'))->toBe('ok')
+        ->and($restored->children)->toHaveCount(1);
+});

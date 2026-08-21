@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Help;
 
+use HelgeSverre\TurboVision\Support\AtomicFileWriter;
 /**
  * Portable, UTF-8 help-file store. Files are JSON prefixed by `TVPHPHELP 1\n` so they
  * are unmistakably not the legacy Borland H32 binary stream. The schema is deliberately

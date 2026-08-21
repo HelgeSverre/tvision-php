@@ -174,7 +174,16 @@ final class StreamCodec
                 throw new PersistenceException("'" . self::MARKER . "' is reserved in persisted data arrays.");
             }
             $encoded = [];
+            $isList = array_is_list($value);
             foreach ($value as $key => $item) {
+                // A non-list map with integer keys has no lossless JSON form:
+                // json_encode turns it into an object with string keys, and
+                // json_decode hands back strings. Reject at the write.
+                if (! $isList && ! is_string($key)) {
+                    throw new PersistenceException(
+                        "Persisted map keys must be strings; integer key {$key} would lose its identity in JSON.",
+                    );
+                }
                 $encoded[$key] = $this->encodeValue($item, $depth + 1);
             }
 

@@ -119,6 +119,7 @@ function persistenceTestCodec(): StreamCodec
     $registry->registerClass(PersistenceTestCycle::STREAM_TYPE, PersistenceTestCycle::class);
     $registry->registerClass(PersistenceTestUnsafe::STREAM_TYPE, PersistenceTestUnsafe::class);
     $registry->registerClass(PersistenceTestReservedMarker::STREAM_TYPE, PersistenceTestReservedMarker::class);
+    $registry->registerClass(StreamCodecNumericKeyFixture::STREAM_TYPE, StreamCodecNumericKeyFixture::class);
 
     return new StreamCodec($registry);
 }
@@ -183,3 +184,28 @@ test('streamable registry rejects duplicate and mismatched registrations', funct
     expect(fn (): StreamableRegistry => $registry->registerClass('wrong', PersistenceTestLeaf::class))
         ->toThrow(InvalidArgumentException::class, 'does not match');
 });
+
+it('rejects numeric-string array keys at encode time instead of failing the read', function (): void {
+    $codec = persistenceTestCodec();
+
+    expect(fn () => $codec->encode(new StreamCodecNumericKeyFixture))
+        ->toThrow(HelgeSverre\TurboVision\Persistence\PersistenceException::class, 'lose its identity');
+});
+
+final class StreamCodecNumericKeyFixture implements Streamable
+{
+    use StreamableType;
+
+    public const string STREAM_TYPE = 'test.numeric-key';
+
+    public function streamData(): array
+    {
+        // A nested int-keyed map would silently decode as a JSON list.
+        return ['items' => [7 => 'x']];
+    }
+
+    public static function fromStreamData(array $data): static
+    {
+        return new self();
+    }
+}

@@ -7,6 +7,7 @@ namespace HelgeSverre\TurboVision\Resources;
 use HelgeSverre\TurboVision\Persistence\PersistenceException;
 use HelgeSverre\TurboVision\Persistence\StreamCodec;
 use HelgeSverre\TurboVision\Persistence\Streamable;
+use HelgeSverre\TurboVision\Support\AtomicFileWriter;
 use JsonException;
 
 /**
@@ -24,8 +25,6 @@ final class ResourceFile
     private const int VERSION = 1;
 
     private const int MAX_BYTES = 8_000_000;
-
-    private const int WRITE_CHUNK_BYTES = 8192;
 
     /** @var array<string, array<string, mixed>> */
     private array $resources;
@@ -218,49 +217,12 @@ final class ResourceFile
         if (strlen($contents) > self::MAX_BYTES) {
             throw new ResourceException("Resource file exceeds the " . self::MAX_BYTES . '-byte limit.');
         }
-        $temporary = tempnam($directory, '.tvision-resource-');
-        if ($temporary === false) {
-            throw new ResourceException("Could not create a temporary resource file in: {$directory}");
-        }
-        $stream = null;
-        try {
-            $stream = @fopen($temporary, 'wb');
-            if ($stream === false) {
-                $stream = null;
-                throw new ResourceException("Could not open the temporary resource file: {$temporary}");
-            }
 
-            $offset = 0;
-            $length = strlen($contents);
-            while ($offset < $length) {
-                $chunk = substr($contents, $offset, self::WRITE_CHUNK_BYTES);
-                $chunkOffset = 0;
-                $chunkLength = strlen($chunk);
-                while ($chunkOffset < $chunkLength) {
-                    $written = @fwrite($stream, substr($chunk, $chunkOffset));
-                    if ($written === false || $written === 0) {
-                        throw new ResourceException("Could not completely write the temporary resource file: {$temporary}");
-                    }
-                    $chunkOffset += $written;
-                    $offset += $written;
-                }
-            }
-            if (! @fflush($stream) || (function_exists('fsync') && ! @fsync($stream))) {
-                throw new ResourceException("Could not flush the temporary resource file: {$temporary}");
-            }
-            $closed = @fclose($stream);
-            $stream = null;
-            if (! $closed || ! @rename($temporary, $this->path)) {
-                throw new ResourceException("Could not atomically write resource file: {$this->path}");
-            }
-        } finally {
-            if (is_resource($stream)) {
-                @fclose($stream);
-            }
-            if (is_file($temporary)) {
-                @unlink($temporary);
-            }
-        }
+        AtomicFileWriter::write(
+            $this->path,
+            $contents,
+            failure: static fn (string $message): ResourceException => new ResourceException($message),
+        );
     }
 
     /** @return array<string, array<string, mixed>> */

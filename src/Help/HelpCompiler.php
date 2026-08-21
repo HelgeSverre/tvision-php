@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HelgeSverre\TurboVision\Help;
 
 use HelgeSverre\TurboVision\Drawing\TerminalText;
+use HelgeSverre\TurboVision\Support\AtomicFileWriter;
 
 /** Compiles the documented `.topic Name[=number]` TVHC source subset into TVPHPHELP. */
 final class HelpCompiler
@@ -31,57 +32,64 @@ final class HelpCompiler
         }
         $lines = preg_split('/\R/u', $source) ?: [];
         $definitions = [];
+        /** @var array<int,string> $usedContexts context => owning topic name */
+        $usedContexts = [];
         $nextContext = 2;
-        foreach ($lines as $line) {
-            if (preg_match('/^\.topic\s+(.+)$/i', trim($line), $matches) !== 1) {
-                continue;
-            }
-            foreach (preg_split('/\s*,\s*/', $matches[1]) ?: [] as $definition) {
-                if (preg_match('/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*=\s*(\d+))?$/', trim($definition), $parts) !== 1) {
-                    throw new \UnexpectedValueException("Invalid .topic declaration '{$definition}'.");
-                }
-                $context = isset($parts[2]) ? (int) $parts[2] : $nextContext;
-                if (isset($definitions[$parts[1]])) {
-                    throw new \UnexpectedValueException("Duplicate help topic '{$parts[1]}'.");
-                }
-                $definitions[$parts[1]] = $context;
-                $nextContext = max($nextContext, $context + 1);
-            }
-        }
 
-        $file = new HelpFile();
-        /** @var list<string> $currentNames */
-        $currentNames = [];
+        // Collect each .topic section in one pass so every declaration is
+        // validated exactly once, while topic bodies still see the complete
+        // symbol table (forward cross-references are legal TVHC).
+        /** @var list<array{contexts: array<string,int>, body: list<string>}> $sections */
+        $sections = [];
+        /** @var array<string,int>|null $currentContexts */
+        $currentContexts = null;
         /** @var list<string> $body */
         $body = [];
-        $flush = function () use (&$file, &$currentNames, &$body, &$definitions): void {
-            if ($currentNames === []) {
-                return;
-            }
-            $topic = $this->buildTopic($body, $definitions);
-            foreach ($currentNames as $name) {
-                $file->putTopic($definitions[$name], $topic);
-            }
-            $currentNames = [];
-            $body = [];
-        };
         foreach ($lines as $line) {
             if (preg_match('/^\.topic\s+(.+)$/i', trim($line), $matches) === 1) {
-                $flush();
-                $currentNames = [];
-                foreach (preg_split('/\s*,\s*/', $matches[1]) ?: [] as $definition) {
-                    if (preg_match('/^([A-Za-z_][A-Za-z0-9_]*)/', trim($definition), $parts) !== 1) {
-                        throw new \LogicException('A validated topic declaration could not be parsed.');
-                    }
-                    $currentNames[] = $parts[1];
+                if ($currentContexts !== null) {
+                    $sections[] = ['contexts' => $currentContexts, 'body' => $body];
                 }
+                /** @var array<string,int> $currentContexts */
+                $currentContexts = [];
+                $body = [];
+                foreach (preg_split('/\s*,\s*/', $matches[1]) ?: [] as $definition) {
+                    if (preg_match('/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*=\s*(\d+))?$/', trim($definition), $parts) !== 1) {
+                        throw new \UnexpectedValueException("Invalid .topic declaration '{$definition}'.");
+                    }
+                    $name = $parts[1];
+                    if (isset($definitions[$name])) {
+                        throw new \UnexpectedValueException("Duplicate help topic '{$name}'.");
+                    }
+                    $context = isset($parts[2]) ? (int) $parts[2] : $nextContext;
+                    if (isset($usedContexts[$context])) {
+                        throw new \UnexpectedValueException(
+                            "Help context {$context} is already assigned to topic '{$usedContexts[$context]}'.",
+                        );
+                    }
+                    $usedContexts[$context] = $name;
+                    $definitions[$name] = $context;
+                    $nextContext = max($nextContext, $context + 1);
+                    $currentContexts[$name] = $context;
+                }
+
                 continue;
             }
-            if ($currentNames !== []) {
+            if ($currentContexts !== null) {
                 $body[] = $line;
             }
         }
-        $flush();
+        if ($currentContexts !== null) {
+            $sections[] = ['contexts' => $currentContexts, 'body' => $body];
+        }
+
+        $file = new HelpFile();
+        foreach ($sections as ['contexts' => $contexts, 'body' => $sectionBody]) {
+            $topic = $this->buildTopic($sectionBody, $definitions);
+            foreach ($contexts as $context) {
+                $file->putTopic($context, $topic);
+            }
+        }
 
         return ['file' => $file, 'symbols' => $definitions];
     }

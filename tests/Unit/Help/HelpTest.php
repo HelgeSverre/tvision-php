@@ -7,7 +7,7 @@ use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Help\CrossRef;
-use HelgeSverre\TurboVision\Help\AtomicFileWriter;
+use HelgeSverre\TurboVision\Support\AtomicFileWriter;
 use HelgeSverre\TurboVision\Help\HelpCompiler;
 use HelgeSverre\TurboVision\Help\HelpFile;
 use HelgeSverre\TurboVision\Help\HelpParagraph;
@@ -124,4 +124,19 @@ test('atomic writer replaces complete artifacts and leaves an existing directory
     unlink($target);
     rmdir($directoryTarget);
     rmdir($directory);
+});
+
+it('rejects duplicate explicit help contexts instead of silently overwriting topics', function (): void {
+    expect(fn (): array => (new HelpCompiler())->parse(".topic Alpha=3\nalpha body\n.topic Beta=3\nbeta body\n"))
+        ->toThrow(\UnexpectedValueException::class, 'already assigned to topic');
+});
+
+it('still resolves forward cross-references across topics after the single-pass rework', function (): void {
+    $result = (new HelpCompiler())->parse(".topic First\nsee {Later:Second}\n.topic Second\nlater body\n");
+    // 'First' auto-assigns context 2; 'Second' becomes context 3 even though
+    // it is referenced before it is declared.
+    $first = $result['file']->getTopic(2);
+    expect($first->paragraphs()[0]->text)->toBe('see Later')
+        ->and($first->crossRefs()[0]->ref)->toBe(3)
+        ->and($result['file']->getTopic(3)->paragraphs()[0]->text)->toBe('later body');
 });

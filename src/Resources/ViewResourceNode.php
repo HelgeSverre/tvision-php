@@ -23,6 +23,22 @@ final readonly class ViewResourceNode
         if (trim($type) === '' || strlen($type) > 128) {
             throw new \InvalidArgumentException('A view resource node type must be a non-empty string of at most 128 bytes.');
         }
+        // The same contract the load path enforces, applied at construction so a
+        // hand-built tree cannot smuggle in closures/resources (or lose numeric
+        // property keys) and then fail its own round-trip. The checks look dead
+        // to static analysis because the docblock types promise compliance; they
+        // run for dynamically-constructed trees, which is exactly the hole.
+        foreach ($properties as $key => $value) {
+            if (! is_string($key)) { // @phpstan-ignore-line runtime guard for untyped callers
+                throw new \InvalidArgumentException('View resource property names must be strings.');
+            }
+            self::assertConstructorPropertyValue($value, 0);
+        }
+        foreach ($children as $child) {
+            if (! $child instanceof self) { // @phpstan-ignore-line runtime guard for untyped callers
+                throw new \InvalidArgumentException('A view resource child must be a ' . self::class . ' instance.');
+            }
+        }
     }
 
     public function property(string $name, mixed $default = null): mixed
@@ -158,6 +174,16 @@ final readonly class ViewResourceNode
         }
         foreach ($value as $key => $item) {
             self::assertDeclarativeValue($item, $depth + 1);
+        }
+    }
+
+    /** Constructor-domain mirror of the load path's declarative-value contract. */
+    private static function assertConstructorPropertyValue(mixed $value, int $depth): void
+    {
+        try {
+            self::assertDeclarativeValue($value, $depth);
+        } catch (PersistenceException $exception) {
+            throw new \InvalidArgumentException($exception->getMessage(), previous: $exception);
         }
     }
 }

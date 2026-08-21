@@ -48,6 +48,9 @@ class Editor extends View
 
     public int $selEnd = 0;
 
+    /** Desired column for vertical motion; -1 when unset (horizontal/edit resets it). */
+    private int $goalColumn = -1;
+
     public bool $modified = false;
 
     public bool $overwrite = false;
@@ -690,11 +693,29 @@ class Editor extends View
         return true;
     }
 
+    /**
+     * Move horizontally and forget any vertical goal column: horizontal motion
+     * redefines the column the cursor actually sits in.
+     */
+    protected function moveHorizontal(int $pointer, bool $extend = false): bool
+    {
+        $this->goalColumn = -1;
+
+        return $this->moveCursor($pointer, $extend);
+    }
+
+    /**
+     * Move vertically while preserving the goal column across shorter lines:
+     * passing a ragged paragraph never permanently drags the cursor left.
+     */
     protected function moveVertically(int $lines, bool $extend = false): bool
     {
         $pos = $this->positionOf($this->curPtr);
+        if ($this->goalColumn < 0) {
+            $this->goalColumn = $pos->x;
+        }
 
-        return $this->moveCursor($this->pointerAt($pos->y + $lines, $pos->x), $extend);
+        return $this->moveCursor($this->pointerAt($pos->y + $lines, $this->goalColumn), $extend);
     }
 
     protected function trackCursor(bool $center = false): void
@@ -725,10 +746,10 @@ class Editor extends View
         $code = $key->keyCode;
         $extend = ($key->modifiers & KeyModifier::Shift) !== 0;
         $handled = match ($code) {
-            Key::Left->value => $this->moveCursor($this->curPtr - 1, $extend),
-            Key::Right->value => $this->moveCursor($this->curPtr + 1, $extend),
-            Key::Home->value => $this->moveCursor($this->lineStart($this->curPtr), $extend),
-            Key::End->value => $this->moveCursor($this->lineEnd($this->curPtr), $extend),
+            Key::Left->value => $this->moveHorizontal($this->curPtr - 1, $extend),
+            Key::Right->value => $this->moveHorizontal($this->curPtr + 1, $extend),
+            Key::Home->value => $this->moveHorizontal($this->lineStart($this->curPtr), $extend),
+            Key::End->value => $this->moveHorizontal($this->lineEnd($this->curPtr), $extend),
             Key::Up->value => $this->moveVertically(-1, $extend),
             Key::Down->value => $this->moveVertically(1, $extend),
             Key::PageUp->value => $this->moveVertically(-max(1, $this->bounds->height()), $extend),
@@ -737,10 +758,10 @@ class Editor extends View
             Key::Delete->value => $this->deleteForward(),
             Key::Insert->value => $this->toggleInsMode(),
             Key::Enter->value => $this->newLine(),
-            Key::CtrlLeft->value => $this->moveCursor($this->previousWord($this->curPtr), $extend),
-            Key::CtrlRight->value => $this->moveCursor($this->nextWord($this->curPtr), $extend),
-            Key::CtrlHome->value => $this->moveCursor(0, $extend),
-            Key::CtrlEnd->value => $this->moveCursor($this->length(), $extend),
+            Key::CtrlLeft->value => $this->moveHorizontal($this->previousWord($this->curPtr), $extend),
+            Key::CtrlRight->value => $this->moveHorizontal($this->nextWord($this->curPtr), $extend),
+            Key::CtrlHome->value => $this->moveHorizontal(0, $extend),
+            Key::CtrlEnd->value => $this->moveHorizontal($this->length(), $extend),
             Key::CtrlBackspace->value => $this->deleteTo($this->previousWord($this->curPtr)),
             Key::CtrlDelete->value => $this->deleteTo($this->nextWord($this->curPtr)),
             Key::CtrlInsert->value => $this->copy(),
@@ -850,6 +871,7 @@ class Editor extends View
 
     private function afterMutation(): void
     {
+        $this->goalColumn = -1;
         $this->trackCursor();
         $this->syncChrome();
         $this->drawView();

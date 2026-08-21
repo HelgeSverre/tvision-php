@@ -143,3 +143,33 @@ test('memo has string form data and leaves tab for dialog traversal', function (
         ->and($memo->dataSize())->toBe(5)
         ->and($event->isNothing())->toBeFalse();
 });
+
+it('preserves the goal column when moving vertically across shorter lines', function (): void {
+    $editor = new Editor(Rect::of(0, 0, 40, 10), text: "long-line-here\nab\nanother-long-line");
+
+    // Cursor to the start, then the end of line 0 (column 14).
+    $editor->handleEvent(Event::key(Key::CtrlHome));
+    $editor->handleEvent(Event::key(Key::End));
+    expect($editor->positionOf($editor->curPtr)->x)->toBe(14);
+
+    $editor->handleEvent(Event::key(Key::Down));
+    expect($editor->positionOf($editor->curPtr)->x)->toBe(2);
+
+    // The classic bug: coming from the short line, the column must recover to 14.
+    $editor->handleEvent(Event::key(Key::Down));
+    expect($editor->positionOf($editor->curPtr)->x)->toBe(14);
+
+    // Horizontal motion redefines the goal column...
+    $editor->handleEvent(Event::key(Key::Home));
+    for ($i = 0; $i < 4; $i++) {
+        $editor->handleEvent(Event::key(Key::Right));
+    }
+
+    // ...even though the next vertical hop clamps to the short line...
+    $editor->handleEvent(Event::key(Key::Up));
+    expect($editor->positionOf($editor->curPtr)->x)->toBe(2);
+
+    // ...the new goal survives the clamp and restores on the way back down.
+    $editor->handleEvent(Event::key(Key::Down));
+    expect($editor->positionOf($editor->curPtr)->x)->toBe(4);
+});

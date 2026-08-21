@@ -240,3 +240,37 @@ test('flushPendingEvents preserves consecutive bare ESC presses', function (): v
         ->and($events[0]->isNothing())->toBeTrue()
         ->and($events[1]->asKey()?->is(Key::Esc))->toBeTrue();
 });
+
+test('a held double-Esc before an incomplete inner sequence flushes both presses', function (): void {
+    $decoder = new EscapeDecoder();
+
+    $result = $decoder->decode("\e\e[");
+    expect($result->events)->toBe([])
+        ->and($result->remainder)->toBe("\e\e[");
+
+    $events = $decoder->flushPendingEvents($result->remainder);
+
+    expect(count($events))->toBe(2)
+        ->and($events[0]->asKey()?->is(Key::Esc))->toBeTrue()
+        ->and($events[1]->asKey()?->is(Key::Esc))->toBeTrue();
+});
+
+test('a lone incomplete CSI still drops at flush time', function (): void {
+    $decoder = new EscapeDecoder();
+
+    expect($decoder->flushPendingEvents("\e["))->toBe([]);
+});
+
+test('double-click detection uses the injected clock', function (): void {
+    $now = 1000.0;
+    $decoder = new EscapeDecoder(clock: function () use (&$now): float {
+        return $now;
+    });
+
+    $down1 = "\e[<0;10;10M";
+    $decoder->decode($down1);
+    $now += 0.1; // inside the double-click window
+    $events = $decoder->decode("\e[<0;10;10M")->events;
+
+    expect($events[0]->asMouse()?->doubleClick)->toBeTrue();
+});

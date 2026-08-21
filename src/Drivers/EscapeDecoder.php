@@ -11,6 +11,7 @@ use HelgeSverre\TurboVision\Events\KeyDownEvent;
 use HelgeSverre\TurboVision\Events\KeyModifier;
 use HelgeSverre\TurboVision\Events\MouseEvent;
 use HelgeSverre\TurboVision\Geometry\Point;
+use Closure;
 
 /**
  * Pure, incremental decoder: raw terminal bytes -> DecodeResult (events + remainder).
@@ -22,11 +23,77 @@ final class EscapeDecoder
 {
     private const float DOUBLE_CLICK_SECONDS = 0.5;
 
+    /** Base key -> Shift-combined legacy identity, keyed by enum-case name. */
+    private const array SHIFT_COMBINED = [
+        'Tab' => Key::ShiftTab,
+        'Insert' => Key::ShiftInsert,
+        'Delete' => Key::ShiftDelete,
+        'F1' => Key::ShiftF1,
+        'F2' => Key::ShiftF2,
+        'F3' => Key::ShiftF3,
+        'F4' => Key::ShiftF4,
+        'F5' => Key::ShiftF5,
+        'F6' => Key::ShiftF6,
+        'F7' => Key::ShiftF7,
+        'F8' => Key::ShiftF8,
+        'F9' => Key::ShiftF9,
+        'F10' => Key::ShiftF10,
+    ];
+
+    /** Base key -> Ctrl-combined legacy identity, keyed by enum-case name. */
+    private const array CTRL_COMBINED = [
+        'Enter' => Key::CtrlEnter,
+        'Backspace' => Key::CtrlBackspace,
+        'Insert' => Key::CtrlInsert,
+        'Delete' => Key::CtrlDelete,
+        'Left' => Key::CtrlLeft,
+        'Right' => Key::CtrlRight,
+        'End' => Key::CtrlEnd,
+        'PageDown' => Key::CtrlPageDown,
+        'Home' => Key::CtrlHome,
+        'PageUp' => Key::CtrlPageUp,
+        'F1' => Key::CtrlF1,
+        'F2' => Key::CtrlF2,
+        'F3' => Key::CtrlF3,
+        'F4' => Key::CtrlF4,
+        'F5' => Key::CtrlF5,
+        'F6' => Key::CtrlF6,
+        'F7' => Key::CtrlF7,
+        'F8' => Key::CtrlF8,
+        'F9' => Key::CtrlF9,
+        'F10' => Key::CtrlF10,
+    ];
+
+    /** Base key -> Alt-combined legacy identity, keyed by enum-case name. */
+    private const array ALT_COMBINED = [
+        'F1' => Key::AltF1,
+        'F2' => Key::AltF2,
+        'F3' => Key::AltF3,
+        'F4' => Key::AltF4,
+        'F5' => Key::AltF5,
+        'F6' => Key::AltF6,
+        'F7' => Key::AltF7,
+        'F8' => Key::AltF8,
+        'F9' => Key::AltF9,
+        'F10' => Key::AltF10,
+    ];
+
+    /** @var Closure():float Monotonic seconds; injectable for deterministic double-click tests. */
+    private readonly Closure $clock;
+
     private float $lastClickAt = 0.0;
 
     private ?Point $lastClickPoint = null;
 
     private int $lastClickButton = 0;
+
+    /**
+     * @param (Closure():float)|null $clock Monotonic seconds; defaults to hrtime.
+     */
+    public function __construct(?\Closure $clock = null)
+    {
+        $this->clock = $clock ?? static fn (): float => hrtime(true) / 1_000_000_000;
+    }
 
     /**
      * CSI final-byte (single char) -> navigation Key.
@@ -202,20 +269,32 @@ final class EscapeDecoder
     }
 
     /**
-     * Turn an ambiguous run of bare ESC bytes into key presses after the caller's
-     * inter-fragment timeout. Keeping the whole run pending makes decoding invariant
-     * to read boundaries without losing rapid consecutive Esc presses.
+     * Turn an ambiguous remainder into key presses after the caller's
+     * inter-fragment timeout. Keeping input pending makes decoding invariant to
+     * read boundaries without losing rapid consecutive Esc presses:
+     *
+     * - a pure ESC run becomes one Esc press per byte;
+     * - a double-ESC prefix held for wrap disambiguation (e.g. "\e\e[") resolves
+     *   to independent Esc presses, dropping the incomplete inner-sequence tail;
+     * - a single ESC followed by a fragment (e.g. "\e[") is the head of a real
+     *   sequence that never completed and stays dropped.
      *
      * @return list<Event>
      */
     public function flushPendingEvents(string $remainder): array
     {
-        if ($remainder === '' || strspn($remainder, "\e") !== strlen($remainder)) {
+        if ($remainder === '') {
+            return [];
+        }
+
+        $escRun = strspn($remainder, "\e");
+        $isPureRun = $escRun === strlen($remainder);
+        if (! $isPureRun && $escRun < 2) {
             return [];
         }
 
         $events = [];
-        for ($i = 0, $count = strlen($remainder); $i < $count; $i++) {
+        for ($i = 0; $i < $escRun; $i++) {
             $events[] = Event::key(Key::Esc);
         }
 
@@ -614,61 +693,14 @@ final class EscapeDecoder
         // plus full metadata because no historical combined code exists.
         $primary = $modifiers & (KeyModifier::Shift | KeyModifier::Alt | KeyModifier::Ctrl);
 
-        return match ($primary) {
-            KeyModifier::Shift => match ($key) {
-                Key::Tab => Key::ShiftTab->value,
-                Key::Insert => Key::ShiftInsert->value,
-                Key::Delete => Key::ShiftDelete->value,
-                Key::F1 => Key::ShiftF1->value,
-                Key::F2 => Key::ShiftF2->value,
-                Key::F3 => Key::ShiftF3->value,
-                Key::F4 => Key::ShiftF4->value,
-                Key::F5 => Key::ShiftF5->value,
-                Key::F6 => Key::ShiftF6->value,
-                Key::F7 => Key::ShiftF7->value,
-                Key::F8 => Key::ShiftF8->value,
-                Key::F9 => Key::ShiftF9->value,
-                Key::F10 => Key::ShiftF10->value,
-                default => $key->value,
-            },
-            KeyModifier::Ctrl => match ($key) {
-                Key::Enter => Key::CtrlEnter->value,
-                Key::Backspace => Key::CtrlBackspace->value,
-                Key::Insert => Key::CtrlInsert->value,
-                Key::Delete => Key::CtrlDelete->value,
-                Key::Left => Key::CtrlLeft->value,
-                Key::Right => Key::CtrlRight->value,
-                Key::End => Key::CtrlEnd->value,
-                Key::PageDown => Key::CtrlPageDown->value,
-                Key::Home => Key::CtrlHome->value,
-                Key::PageUp => Key::CtrlPageUp->value,
-                Key::F1 => Key::CtrlF1->value,
-                Key::F2 => Key::CtrlF2->value,
-                Key::F3 => Key::CtrlF3->value,
-                Key::F4 => Key::CtrlF4->value,
-                Key::F5 => Key::CtrlF5->value,
-                Key::F6 => Key::CtrlF6->value,
-                Key::F7 => Key::CtrlF7->value,
-                Key::F8 => Key::CtrlF8->value,
-                Key::F9 => Key::CtrlF9->value,
-                Key::F10 => Key::CtrlF10->value,
-                default => $key->value,
-            },
-            KeyModifier::Alt => match ($key) {
-                Key::F1 => Key::AltF1->value,
-                Key::F2 => Key::AltF2->value,
-                Key::F3 => Key::AltF3->value,
-                Key::F4 => Key::AltF4->value,
-                Key::F5 => Key::AltF5->value,
-                Key::F6 => Key::AltF6->value,
-                Key::F7 => Key::AltF7->value,
-                Key::F8 => Key::AltF8->value,
-                Key::F9 => Key::AltF9->value,
-                Key::F10 => Key::AltF10->value,
-                default => $key->value,
-            },
-            default => $key->value,
+        $table = match ($primary) {
+            KeyModifier::Shift => self::SHIFT_COMBINED,
+            KeyModifier::Ctrl => self::CTRL_COMBINED,
+            KeyModifier::Alt => self::ALT_COMBINED,
+            default => [],
         };
+
+        return ($table[$key->name] ?? $key)->value;
     }
 
     /** Consume OSC/DCS/SOS/PM/APC through BEL (OSC only) or the ESC \\ ST terminator. */
@@ -767,7 +799,7 @@ final class EscapeDecoder
         $what        = $press ? EventType::MouseDown : EventType::MouseUp;
         $doubleClick = false;
         if ($press) {
-            $now = microtime(true);
+            $now = ($this->clock)();
             $point = new Point($x, $y);
             $doubleClick = $buttonBit === $this->lastClickButton
                 && $this->lastClickPoint?->equals($point) === true
@@ -813,15 +845,17 @@ final class EscapeDecoder
         };
     }
 
+    /** @var array<string,Key>|null enum-case name -> Key, built once */
+    private static ?array $keysByName = null;
+
     /** Resolve an "Alt<LETTER>" case name to the Key enum, or null. */
     private static function altKey(string $caseName): ?Key
     {
-        foreach (Key::cases() as $case) {
-            if ($case->name === $caseName) {
-                return $case;
-            }
-        }
+        self::$keysByName ??= array_combine(
+            array_map(static fn (Key $case): string => $case->name, Key::cases()),
+            Key::cases(),
+        );
 
-        return null;
+        return self::$keysByName[$caseName] ?? null;
     }
 }

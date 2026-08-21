@@ -68,13 +68,13 @@ final class Screen
         ?TerminalCapabilities $capabilities = null,
     ) {
         $this->encoder = $encoder ?? new AnsiEncoder();
-        $this->decoder = new EscapeDecoder();
+        $this->clock = $clock ?? static fn (): float => hrtime(true) / 1_000_000_000;
+        $this->decoder = new EscapeDecoder($this->clock);
         $this->presenter = new DiffPresenter();
         $this->capabilities = $capabilities
             ?? ($driver instanceof ProvidesTerminalCapabilities
                 ? $driver->terminalCapabilities()
                 : new TerminalCapabilities());
-        $this->clock = $clock ?? static fn (): float => hrtime(true) / 1_000_000_000;
         // Provisional buffers until init() reads the real size.
         $this->back = new Buffer(0, 0);
         $this->front = new Buffer(0, 0);

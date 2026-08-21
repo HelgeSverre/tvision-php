@@ -236,6 +236,26 @@ test('Kitty CSI-u Ctrl-C and Alt-X retain the programs legacy quit paths', funct
         ->and($altProgram->ended())->toBeTrue();
 });
 
+test('every key of a batched poll is preprocessed, not only the first', function (): void {
+    $driver = new HeadlessDriver(20, 5);
+    $program = new QuitProgram(new Screen($driver));
+    $program->bootForTest();
+
+    // One pollInput drains both keys in a single chunk; the decoder yields two
+    // events. The second (Alt-X) must still pass through status-line preprocessing
+    // and be rewritten into Cmd::Quit.
+    $driver->feedInput('a' . "\e" . 'x');
+
+    $first = $program->getEvent();
+    $program->handleEvent($first);
+
+    $second = $program->getEvent();
+    $program->handleEvent($second);
+
+    expect($second->isNothing())->toBeTrue()
+        ->and($program->ended())->toBeTrue();
+});
+
 test('run treats a closed terminal input stream as a graceful shutdown', function (): void {
     $driver = new ThrowingInputDriver(DriverException::inputClosed());
     $program = new QuitProgram(new Screen($driver));
@@ -252,6 +272,15 @@ test('run propagates genuine read failures after restoring the terminal', functi
     expect(fn () => $program->run())
         ->toThrow(DriverException::class, 'Failed to read')
         ->and($driver->initialised)->toBeFalse();
+});
+
+test('a dialog treats a closed input stream as graceful shutdown like run()', function (): void {
+    $driver = new ThrowingInputDriver(DriverException::inputClosed());
+    $program = new QuitProgram(new Screen($driver));
+    $program->bootForTest();
+    $dialog = new Dialog(Rect::of(0, 0, 16, 6), 'Modal');
+
+    expect($program->executeDialog($dialog))->toBe(Cmd::Quit);
 });
 
 test('putEvent enqueues an event that getEvent returns first', function (): void {

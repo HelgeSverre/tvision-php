@@ -151,9 +151,15 @@ class Program extends Group implements CommandTarget
         $this->pending[] = $event;
     }
 
+    /**
+     * Dequeue one event for a modal loop, reflowing/idling/presenting as needed.
+     * Does not dispatch: the caller dispatches the returned event (null means
+     * "nothing to do this tick").
+     */
     public function pumpEvent(): ?Event
     {
         $event = $this->getEvent();
+
         $resized = $this->reflowIfResized();
 
         if ($event->isNothing()) {
@@ -166,11 +172,15 @@ class Program extends Group implements CommandTarget
         return $event->isNothing() ? null : $event;
     }
 
-    /** Keep application-level lifecycle commands alive inside blocking modal loops. */
+    /**
+     * Keep application-level lifecycle commands alive inside blocking modal loops.
+     * Handles Ctrl-C and Quit/Help; returns Cmd::Quit when the enclosing modal
+     * loop should end, null to continue. The handled event is cleared.
+     */
     public function handleModalEvent(Event $event): ?int
     {
         $isCtrlC = $event->what === EventType::KeyDown
-            && $event->asKey()?->keyCode === 0x03;
+            && $event->asKey()?->keyCode === Key::CtrlC->value;
         $command = $event->what === EventType::Command
             ? $event->asMessage()?->command
             : null;
@@ -184,8 +194,10 @@ class Program extends Group implements CommandTarget
     }
 
     /**
-     * Run a modal view over the desktop. Kept View-typed so controls and future
-     * dialog subclasses do not need to inherit a framework-specific dialog base.
+     * Run a modal view over the desktop and return its end-state command. Kept
+     * View-typed so controls and future dialog subclasses do not need to inherit a
+     * framework-specific dialog base. A closed input stream ends the modal with
+     * Cmd::Quit, matching run()'s lifecycle policy.
      */
     public function executeDialog(View $view): int
     {
@@ -264,15 +276,13 @@ class Program extends Group implements CommandTarget
      */
     public function reflowDesktop(): void
     {
-        $cols = $this->screenObj->cols();
-        $rows = $this->screenObj->rows();
-        $menuBottom = min(1, $rows);
-        $statusTop = max($menuBottom, $rows - 1);
-        $this->setBounds(Rect::of(0, 0, $cols, $rows));
+        $this->setBounds(Rect::of(0, 0, $this->screenObj->cols(), $this->screenObj->rows()));
 
-        $this->desktop?->changeBounds(Rect::of(0, $menuBottom, $cols, $statusTop));
-        $this->menuBar?->changeBounds(Rect::of(0, 0, $cols, $menuBottom));
-        $this->statusLine?->changeBounds(Rect::of(0, $statusTop, $cols, $rows));
+        ['desk' => $desk, 'menu' => $menu, 'status' => $status] = $this->bands();
+
+        $this->desktop?->changeBounds($desk);
+        $this->menuBar?->changeBounds($menu);
+        $this->statusLine?->changeBounds($status);
     }
 
     /** Test helper: trigger one resize cycle as the run() loop would. */
@@ -314,6 +324,11 @@ class Program extends Group implements CommandTarget
         return $this->screenObj->back()->rows();
     }
 
+    /**
+     * Run the event loop until Quit. Always returns 0; the termination reason is
+     * available afterwards via ended() / endModalState(). A closed input stream is
+     * a normal lifecycle end; other driver failures propagate after terminal restore.
+     */
     public function run(): int
     {
         try {
@@ -365,34 +380,50 @@ class Program extends Group implements CommandTarget
     /** (Re)build the bounds + child views from the current screen size. */
     protected function layout(): void
     {
-        $cols = $this->screenObj->cols();
-        $rows = $this->screenObj->rows();
-        $menuBottom = min(1, $rows);
-        $statusTop = max($menuBottom, $rows - 1);
-        $this->setBounds(Rect::of(0, 0, $cols, $rows));
+        $this->setBounds(Rect::of(0, 0, $this->screenObj->cols(), $this->screenObj->rows()));
 
         // Reset children, then rebuild in Z-order: desktop, menu bar, status line.
         $this->clearSubviews();
 
-        $deskRect = Rect::of(0, $menuBottom, $cols, $statusTop);
+        ['desk' => $deskRect, 'menu' => $menuRect, 'status' => $statusRect] = $this->bands();
+
         $this->desktop = $this->initDeskTop($deskRect);
         if ($this->desktop !== null) {
             $this->insert($this->desktop);
             $this->setCurrent($this->desktop);
         }
 
-        $menuRect = Rect::of(0, 0, $cols, $menuBottom);
         $this->menuBar = $this->initMenuBar($menuRect);
         if ($this->menuBar !== null) {
             $this->insert($this->menuBar);
         }
 
-        $statusRect = Rect::of(0, $statusTop, $cols, $rows);
         $this->statusLine = $this->initStatusLine($statusRect);
         if ($this->statusLine !== null) {
             $this->insert($this->statusLine);
         }
         $this->lastHelpContext = -1;
+    }
+
+    /**
+     * The three horizontal application bands for the current screen size: desktop,
+     * menu bar, and status line rectangles (in that top-to-bottom order). Shared by
+     * layout() and reflowDesktop() so boot and resize never drift apart.
+     *
+     * @return array{desk: Rect, menu: Rect, status: Rect}
+     */
+    private function bands(): array
+    {
+        $cols = $this->screenObj->cols();
+        $rows = $this->screenObj->rows();
+        $menuBottom = min(1, $rows);
+        $statusTop = max($menuBottom, $rows - 1);
+
+        return [
+            'desk' => Rect::of(0, $menuBottom, $cols, $statusTop),
+            'menu' => Rect::of(0, 0, $cols, $menuBottom),
+            'status' => Rect::of(0, $statusTop, $cols, $rows),
+        ];
     }
 
     protected function redraw(): void
@@ -440,26 +471,21 @@ class Program extends Group implements CommandTarget
     /**
      * The next event: a queued event first, else the next decoded screen event. A
      * keyboard event is preprocessed by the status line (key->command rewrite) and the
-     * menu bar (hotkey consume) before being returned.
+     * menu bar (hotkey consume) before being returned — including events that were
+     * decoded in an earlier batch and held in the pending queue.
      */
     public function getEvent(): Event
     {
-        if ($this->pending !== []) {
-            return array_shift($this->pending);
+        if ($this->pending === []) {
+            foreach ($this->screenObj->pollEvents(20) as $polled) {
+                $this->pending[] = $polled;
+            }
         }
 
-        $events = $this->screenObj->pollEvents(20);
-        if ($events === []) {
-            return Event::nothing();
+        $event = array_shift($this->pending) ?? Event::nothing();
+        if (! $event->isNothing()) {
+            $this->preprocess($event);
         }
-
-        $event = $events[0];
-        // Re-queue any extra events decoded in the same poll.
-        for ($i = 1, $n = count($events); $i < $n; $i++) {
-            $this->pending[] = $events[$i];
-        }
-
-        $this->preprocess($event);
 
         return $event;
     }
@@ -482,9 +508,9 @@ class Program extends Group implements CommandTarget
         }
 
         // Ctrl-C is a universal quit escape hatch. In raw mode the terminal does not
-        // raise SIGINT, so Ctrl-C arrives as the keystroke 0x03; treat it as quit so
+        // raise SIGINT, so Ctrl-C arrives as the keystroke Key::CtrlC; treat it as quit so
         // the app is always escapable (the terminal is restored on shutdown).
-        if ($event->what === EventType::KeyDown && $event->asKey()?->keyCode === 0x03) {
+        if ($event->what === EventType::KeyDown && $event->asKey()?->keyCode === Key::CtrlC->value) {
             $this->endModal(Cmd::Quit);
             $this->clearEvent($event);
 

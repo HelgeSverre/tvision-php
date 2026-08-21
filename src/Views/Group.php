@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Views;
 
+use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Events\EventType;
+use HelgeSverre\TurboVision\Exceptions\InputClosedException;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use InvalidArgumentException;
@@ -717,7 +719,17 @@ class Group extends View
 
             while (true) {
                 while ($this->endState === 0 && (! $modal instanceof self || $modal->endState === 0)) {
-                    $event = $this->pumpEvent();
+                    try {
+                        $event = $this->pumpEvent();
+                    } catch (InputClosedException) {
+                        // A closed PTY/stdin is a normal lifecycle end, not a
+                        // framework failure. End this modal gracefully, matching
+                        // run()'s lifecycle policy.
+                        $this->endState = Cmd::Quit;
+
+                        continue;
+                    }
+
                     if ($event === null) {
                         continue;
                     }

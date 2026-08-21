@@ -14,6 +14,7 @@ use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyModifier;
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Support\Clipboard;
 use HelgeSverre\TurboVision\Validators\Validator;
 use HelgeSverre\TurboVision\Validators\ValidatorTransfer;
 use HelgeSverre\TurboVision\Views\Group;
@@ -33,8 +34,6 @@ class InputLine extends View
     private const string LeftArrow = '‹';
 
     private const string RightArrow = '›';
-
-    private static string $clipboard = '';
 
     private string $value = '';
 
@@ -96,12 +95,12 @@ class InputLine extends View
 
     public static function clipboard(): string
     {
-        return self::$clipboard;
+        return Clipboard::get();
     }
 
     public static function setClipboard(string $text): void
     {
-        self::$clipboard = $text;
+        Clipboard::set($text);
     }
 
     public function draw(): void
@@ -250,7 +249,7 @@ class InputLine extends View
         return match ($command) {
             Cmd::Copy => $this->copySelection(),
             Cmd::Cut => $this->cutSelection(),
-            Cmd::Paste => $this->insertText(self::$clipboard),
+            Cmd::Paste => $this->insertText(Clipboard::get()),
             Cmd::Clear => $this->clearText(),
             default => false,
         };
@@ -258,22 +257,23 @@ class InputLine extends View
 
     private function handleKey(int $keyCode, string $character, int $modifiers): bool
     {
-        // Terminals commonly emit raw ASCII controls for these Ctrl shortcuts.
-        if ($keyCode === 1 || ($modifiers & KeyModifier::Ctrl) !== 0 && strtolower($character) === 'a') {
+        // Terminals commonly emit raw ASCII controls for these Ctrl shortcuts;
+        // the Key::Ctrl* cases carry exactly those ordinals.
+        if ($keyCode === Key::CtrlA->value || ($modifiers & KeyModifier::Ctrl) !== 0 && strtolower($character) === 'a') {
             $this->selectAll();
 
             return true;
         }
-        if ($keyCode === 3 || ($modifiers & KeyModifier::Ctrl) !== 0 && strtolower($character) === 'c') {
+        if ($keyCode === Key::CtrlC->value || ($modifiers & KeyModifier::Ctrl) !== 0 && strtolower($character) === 'c') {
             return $this->copySelection();
         }
-        if ($keyCode === 22 || ($modifiers & KeyModifier::Ctrl) !== 0 && strtolower($character) === 'v') {
-            return $this->insertText(self::$clipboard);
+        if ($keyCode === Key::CtrlV->value || ($modifiers & KeyModifier::Ctrl) !== 0 && strtolower($character) === 'v') {
+            return $this->insertText(Clipboard::get());
         }
-        if ($keyCode === 24 || ($modifiers & KeyModifier::Ctrl) !== 0 && strtolower($character) === 'x') {
+        if ($keyCode === Key::CtrlX->value || ($modifiers & KeyModifier::Ctrl) !== 0 && strtolower($character) === 'x') {
             return $this->cutSelection();
         }
-        if ($keyCode === 25) {
+        if ($keyCode === Key::CtrlY->value) {
             return $this->clearText();
         }
 
@@ -455,7 +455,7 @@ class InputLine extends View
         if (!$this->hasSelection()) {
             return true;
         }
-        self::$clipboard = TerminalText::slice($this->value, $this->selStart, $this->selEnd - $this->selStart);
+        Clipboard::set(TerminalText::slice($this->value, $this->selStart, $this->selEnd - $this->selStart));
 
         return true;
     }
@@ -467,7 +467,7 @@ class InputLine extends View
             if (!$this->deleteSelection()) {
                 return true;
             }
-            self::$clipboard = $cut;
+            Clipboard::set($cut);
             $this->clearSelection();
             $this->ensureCursorVisible();
             $this->drawView();

@@ -12,6 +12,7 @@ use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
+use HelgeSverre\TurboVision\Support\Clipboard;
 use HelgeSverre\TurboVision\Events\KeyModifier;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
@@ -37,8 +38,6 @@ class Editor extends View
 
     /** Bound retained edit payloads so a large document cannot exhaust memory. */
     private const int MAX_UNDO_BYTES = 2_000_000;
-
-    private static string $clipboard = '';
 
     protected EditorBuffer $buffer;
 
@@ -200,12 +199,12 @@ class Editor extends View
 
     public static function clipboard(): string
     {
-        return self::$clipboard;
+        return Clipboard::get();
     }
 
     public static function setClipboard(string $text): void
     {
-        self::$clipboard = $text;
+        Clipboard::set($text);
     }
 
     public function copy(): bool
@@ -213,7 +212,7 @@ class Editor extends View
         if (! $this->hasSelection()) {
             return false;
         }
-        self::$clipboard = $this->selectedText();
+        Clipboard::set($this->selectedText());
 
         return true;
     }
@@ -230,11 +229,11 @@ class Editor extends View
 
     public function paste(): bool
     {
-        if (self::$clipboard === '') {
+        if (Clipboard::get() === '') {
             return false;
         }
 
-        return $this->insertText(self::$clipboard);
+        return $this->insertText(Clipboard::get());
     }
 
     public function insertText(string $text, bool $selectText = false): bool
@@ -747,11 +746,11 @@ class Editor extends View
             Key::CtrlInsert->value => $this->copy(),
             Key::ShiftInsert->value => $this->paste(),
             Key::ShiftDelete->value => $this->cut(),
-            1 => $this->selectAllAction(),
-            3 => $this->copy(),
-            22 => $this->paste(),
-            24 => $this->cut(),
-            26 => $this->undo(),
+            Key::CtrlA->value => $this->selectAllAction(),
+            Key::CtrlC->value => $this->copy(),
+            Key::CtrlV->value => $this->paste(),
+            Key::CtrlX->value => $this->cut(),
+            Key::CtrlZ->value => $this->undo(),
             default => $this->insertPrintable($key),
         };
         if ($handled) {

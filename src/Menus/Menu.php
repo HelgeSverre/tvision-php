@@ -15,14 +15,7 @@ final class Menu
     {
         $items = [];
         foreach ($subMenus as $sub) {
-            $items[] = new MenuItem(
-                name: $sub->name,
-                command: 0,
-                key: $sub->key,
-                help: '',
-                subMenu: $sub->menu(),
-                helpCtx: $sub->helpCtx,
-            );
+            $items[] = $sub->toMenuItem();
         }
 
         return new self($items);

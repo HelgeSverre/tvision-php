@@ -19,4 +19,18 @@ abstract class MenuView extends View
     {
         return Palette::fromBytes("\x02\x03\x04\x05\x06\x07");
     }
+
+    /** Whether a menu entry is actionable: separators never, submenus only with items, commands via the enable chain. */
+    public function itemEnabled(MenuItem $item): bool
+    {
+        if ($item->name === '') {
+            return false;
+        }
+
+        if ($item->subMenu !== null) {
+            return $item->subMenu->items() !== [];
+        }
+
+        return $item->command !== 0 && $this->commandEnabled($item->command);
+    }
 }

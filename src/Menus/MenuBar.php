@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Menus;
 
+use HelgeSverre\TurboVision\Dialogs\Mnemonic;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Cmd;
@@ -50,14 +51,7 @@ final class MenuBar extends MenuView
                     $merged->add($item);
                 }
             } else {
-                $merged->add(new MenuItem(
-                    name: $menu->name,
-                    command: 0,
-                    key: $menu->key,
-                    help: '',
-                    subMenu: $menu->menu(),
-                    helpCtx: $menu->helpCtx,
-                ));
+                $merged->add($menu->toMenuItem());
             }
         }
 
@@ -98,19 +92,6 @@ final class MenuBar extends MenuView
         return $this->boxes;
     }
 
-    public function itemEnabled(MenuItem $item): bool
-    {
-        if ($item->name === '') {
-            return false;
-        }
-
-        if ($item->subMenu !== null) {
-            return $item->subMenu->items() !== [];
-        }
-
-        return $item->command !== 0 && $this->commandEnabled($item->command);
-    }
-
     public function draw(): void
     {
         $width = $this->bounds->width();
@@ -121,20 +102,14 @@ final class MenuBar extends MenuView
 
         $buffer = new DrawBuffer($width);
         $buffer->moveChar(0, ' ', $normal, $width);
-        $x = 1;
-        foreach ($this->menu->items() as $index => $item) {
-            if ($item->name === '') {
-                continue;
+        foreach ($this->topLayout() as $entry) {
+            if ($entry['x'] + $entry['width'] < $width) {
+                $itemNormal = $entry['index'] === $this->activeIndex ? $selected : $normal;
+                $itemHotkey = $entry['index'] === $this->activeIndex ? $selectedHighlight : $highlight;
+                $buffer->moveChar($entry['x'], ' ', $itemNormal, 1);
+                $buffer->moveCStr($entry['x'] + 1, $entry['name'], $itemNormal, $itemHotkey);
+                $buffer->moveChar($entry['x'] + $entry['width'] + 1, ' ', $itemNormal, 1);
             }
-            $length = $this->visibleLength($item->name);
-            if ($x + $length < $width) {
-                $itemNormal = $index === $this->activeIndex ? $selected : $normal;
-                $itemHotkey = $index === $this->activeIndex ? $selectedHighlight : $highlight;
-                $buffer->moveChar($x, ' ', $itemNormal, 1);
-                $buffer->moveCStr($x + 1, $item->name, $itemNormal, $itemHotkey);
-                $buffer->moveChar($x + $length + 1, ' ', $itemNormal, 1);
-            }
-            $x += $length + 2;
         }
         $this->writeBuf(0, 0, $width, 1, $buffer);
     }
@@ -370,7 +345,7 @@ final class MenuBar extends MenuView
             return;
         }
         foreach ($box->menu()->items() as $index => $item) {
-            if ($this->hotkey($item->name) === $character && $box->itemEnabled($item)) {
+            if (Mnemonic::hotKey($item->name) === $character && $box->itemEnabled($item)) {
                 $box->selectIndex($index);
                 $this->activateBoxItem($this->deepestDepth(), $item, $box);
 
@@ -506,16 +481,10 @@ final class MenuBar extends MenuView
 
     private function topIndexAtColumn(int $column): ?int
     {
-        $x = 1;
-        foreach ($this->menu->items() as $index => $item) {
-            if ($item->name === '') {
-                continue;
+        foreach ($this->topLayout() as $entry) {
+            if ($column >= $entry['x'] && $column < $entry['x'] + $entry['width'] + 2) {
+                return $entry['index'];
             }
-            $end = $x + $this->visibleLength($item->name) + 2;
-            if ($column >= $x && $column < $end) {
-                return $index;
-            }
-            $x = $end;
         }
 
         return null;
@@ -523,17 +492,36 @@ final class MenuBar extends MenuView
 
     private function topItemX(int $target): int
     {
-        $x = 1;
-        foreach ($this->menu->items() as $index => $item) {
-            if ($index === $target) {
-                return $x;
-            }
-            if ($item->name !== '') {
-                $x += $this->visibleLength($item->name) + 2;
+        foreach ($this->topLayout() as $entry) {
+            if ($entry['index'] === $target) {
+                return $entry['x'];
             }
         }
 
         return 1;
+    }
+
+    /**
+     * Horizontal placement of every visible top-level item, laid out left to
+     * right from the one-column margin with two trailing spaces per entry.
+     * Painting and hit-testing both consume this so they can never drift.
+     *
+     * @return list<array{index:int, x:int, width:int, name:string}>
+     */
+    private function topLayout(): array
+    {
+        $entries = [];
+        $x = 1;
+        foreach ($this->menu->items() as $index => $item) {
+            if ($item->name === '') {
+                continue;
+            }
+            $width = Mnemonic::visibleLength($item->name);
+            $entries[] = ['index' => $index, 'x' => $x, 'width' => $width, 'name' => $item->name];
+            $x += $width + 2;
+        }
+
+        return $entries;
     }
 
     private function findHotkeyCommand(Menu $menu, KeyDownEvent $key): ?int
@@ -563,11 +551,6 @@ final class MenuBar extends MenuView
         return $depth >= 0 ? $this->boxes[$depth] : null;
     }
 
-    private function hotkey(string $label): string
-    {
-        return preg_match('/~(.)~/u', $label, $matches) === 1 ? strtolower($matches[1]) : '';
-    }
-
     private function putCommand(int $command): void
     {
         if ($this->owner instanceof Group) {
@@ -575,8 +558,4 @@ final class MenuBar extends MenuView
         }
     }
 
-    private function visibleLength(string $name): int
-    {
-        return TerminalText::length(str_replace('~', '', $name));
-    }
 }

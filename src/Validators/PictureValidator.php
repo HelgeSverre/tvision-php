@@ -35,7 +35,7 @@ final class PictureValidator extends Validator
         }
 
         $offset = 0;
-        $this->tree = $this->parseSequence($offset, null);
+        $this->tree = $this->parseSequence($offset);
         if ($offset !== strlen($pictureMask) || $this->status !== self::StatusOk) {
             $this->status = self::StatusSyntax;
         }
@@ -380,16 +380,12 @@ final class PictureValidator extends Validator
     }
 
     /** @return list<PictureNode> */
-    private function parseSequence(int &$offset, ?string $terminator): array
+    private function parseSequence(int &$offset): array
     {
         $nodes = [];
         $length = strlen($this->pictureMask);
         while ($offset < $length) {
             $character = $this->pictureMask[$offset];
-            if ($terminator !== null && $character === $terminator) {
-                $offset++;
-                break;
-            }
             if ($character === ']' || $character === '}') {
                 $this->status = self::StatusSyntax;
                 return [];
@@ -421,10 +417,6 @@ final class PictureValidator extends Validator
             $nodes[] = in_array($character, ['#', '?', '&', '!', '@'], true)
                 ? new PictureNode('slot', $character)
                 : new PictureNode('literal', $character);
-        }
-
-        if ($terminator !== null && ($offset === $length && ($length === 0 || $this->pictureMask[$length - 1] !== $terminator))) {
-            $this->status = self::StatusSyntax;
         }
 
         return $nodes;

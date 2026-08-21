@@ -9,6 +9,7 @@ use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
+use HelgeSverre\TurboVision\Events\KeyModifier;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Views\State;
@@ -136,11 +137,36 @@ abstract class Cluster extends View
 
             return;
         }
-        if ($event->what !== EventType::KeyDown || !$this->getState(State::Focused)) {
+        if ($event->what !== EventType::KeyDown) {
             return;
         }
         $key = $event->asKey();
         if ($key === null) {
+            return;
+        }
+
+        // Item mnemonics (~O~ne) stay reachable while another control owns the
+        // cursor via Alt+letter — this class opts into PreProcess routing for
+        // exactly that, mirroring Button's mnemonic convention. Plain letters
+        // still require focus, and a focused InputLine consumes its own keys
+        // before pre-process views ever see them.
+        $fromAlt = ($key->modifiers & KeyModifier::Alt) !== 0;
+        if ($fromAlt || $this->getState(State::Focused)) {
+            foreach ($this->items as $item => $text) {
+                $hotKey = self::hotKey($text);
+                if ($hotKey !== null && strcasecmp($hotKey, $key->char) === 0 && $this->buttonState($item)) {
+                    $this->selectItem($item);
+                    $this->press($item);
+                    $this->drawView();
+                    $this->clearEvent($event);
+
+                    return;
+                }
+            }
+        }
+
+        // Cursor motion and toggling require focus.
+        if (! $this->getState(State::Focused)) {
             return;
         }
         $next = match ($key->keyCode) {
@@ -164,17 +190,6 @@ abstract class Cluster extends View
             $this->clearEvent($event);
 
             return;
-        }
-        foreach ($this->items as $item => $text) {
-            $hotKey = self::hotKey($text);
-            if ($hotKey !== null && strcasecmp($hotKey, $key->char) === 0 && $this->buttonState($item)) {
-                $this->selectItem($item);
-                $this->press($item);
-                $this->drawView();
-                $this->clearEvent($event);
-
-                return;
-            }
         }
     }
 

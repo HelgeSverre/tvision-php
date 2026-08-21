@@ -4,7 +4,15 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Editors;
 
-/** Editor search/replace flags, retaining the original ef* bit values. */
+/**
+ * Editor search/replace flags, retaining the original ef* bit values.
+ *
+ * Honored today: CaseSensitive, WholeWordsOnly, BackupFiles. Replacement is
+ * always whole-document (ReplaceAll semantics); PromptOnReplace and DoReplace
+ * are reserved bit values accepted for source compatibility but not yet wired
+ * to an interactive prompt — see Editor::setDialogHandler() for the extension
+ * point applications can use for custom find/replace UIs.
+ */
 final class SearchOptions
 {
     public const int CaseSensitive = 0x0001;

@@ -7,6 +7,7 @@ namespace HelgeSverre\TurboVision\Menus;
 use Closure;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
+use HelgeSverre\TurboVision\Dialogs\Mnemonic;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Events\EventType;
@@ -90,19 +91,6 @@ class MenuBox extends MenuView
         $this->onSelect = $callback === null ? null : Closure::fromCallable($callback);
 
         return $this;
-    }
-
-    public function itemEnabled(MenuItem $item): bool
-    {
-        if ($item->name === '') {
-            return false;
-        }
-
-        if ($item->subMenu !== null) {
-            return $item->subMenu->items() !== [];
-        }
-
-        return $item->command !== 0 && $this->commandEnabled($item->command);
     }
 
     public function selectIndex(int $index): bool
@@ -314,7 +302,7 @@ class MenuBox extends MenuView
             return false;
         }
         foreach ($this->menu->items() as $index => $item) {
-            if ($this->hotkey($item->name) === $char && $this->itemEnabled($item)) {
+            if (Mnemonic::hotKey($item->name) === $char && $this->itemEnabled($item)) {
                 $this->activate($index);
 
                 return true;
@@ -356,11 +344,6 @@ class MenuBox extends MenuView
         $bottom->moveStr(0, '└', $attr);
         $bottom->moveStr($width - 1, '┘', $attr);
         $this->writeLine(0, $height - 1, $width, 1, $bottom);
-    }
-
-    private function hotkey(string $label): string
-    {
-        return preg_match('/~(.)~/u', $label, $matches) === 1 ? strtolower($matches[1]) : '';
     }
 
     private function putCommand(int $command): void

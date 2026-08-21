@@ -4,7 +4,14 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Editors;
 
-/** Semantic editor-dialog requests, preserving the original ed* identifiers. */
+/**
+ * Semantic editor-dialog requests, preserving the original ed* identifiers.
+ *
+ * The framework emits ReadError, WriteError, CreateError, SaveModified,
+ * SaveUntitled, SaveAs, and SearchFailed. Find, Replace, ReplacePrompt, and
+ * OutOfMemory are reserved identifiers applications may emit from their own
+ * dialog handlers; the built-in editor never raises them yet.
+ */
 enum EditorDialogKind: int
 {
     case OutOfMemory = 0;

@@ -368,7 +368,13 @@ class Editor extends View
 
     public function searchAgain(): bool
     {
-        return $this->search($this->findStr, $this->editorFlags);
+        if (! $this->search($this->findStr, $this->editorFlags)) {
+            $this->notify(EditorDialogKind::SearchFailed, ['find' => $this->findStr]);
+
+            return false;
+        }
+
+        return true;
     }
 
     public function find(FindRequest $request): bool
@@ -376,7 +382,13 @@ class Editor extends View
         $this->findStr = $request->find;
         $this->editorFlags = $request->options;
 
-        return $this->search($request->find, $request->options, $request->wrap);
+        if (! $this->search($request->find, $request->options, $request->wrap)) {
+            $this->notify(EditorDialogKind::SearchFailed, ['find' => $request->find]);
+
+            return false;
+        }
+
+        return true;
     }
 
     /** Replace every matching occurrence and return the number changed. */

@@ -22,19 +22,29 @@ final class SubMenu
         $this->menu = new Menu();
     }
 
+    /**
+     * Lower this submenu into the MenuItem form its parent menu stores, keeping
+     * name, hotkey, and help context. Shared by Menu::of(), MenuBar::buildMenu(),
+     * and items() so the lowering exists exactly once.
+     */
+    public function toMenuItem(): MenuItem
+    {
+        return new MenuItem(
+            name: $this->name,
+            command: 0,
+            key: $this->key,
+            help: '',
+            subMenu: $this->menu(),
+            helpCtx: $this->helpCtx,
+        );
+    }
+
     /** Fluently append items (MenuItem or nested SubMenu). Returns $this. */
     public function items(MenuItem|SubMenu ...$items): static
     {
         foreach ($items as $item) {
             if ($item instanceof SubMenu) {
-                $this->menu->add(new MenuItem(
-                    name: $item->name,
-                    command: 0,
-                    key: $item->key,
-                    help: '',
-                    subMenu: $item->menu(),
-                    helpCtx: $item->helpCtx,
-                ));
+                $this->menu->add($item->toMenuItem());
             } else {
                 $this->menu->add($item);
             }

@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use HelgeSverre\TurboVision\Editors\Editor;
+use HelgeSverre\TurboVision\Editors\EditorDialogKind;
+use HelgeSverre\TurboVision\Editors\EditorDialogRequest;
 use HelgeSverre\TurboVision\Editors\FindRequest;
 use HelgeSverre\TurboVision\Editors\Memo;
 use HelgeSverre\TurboVision\Editors\ReplaceRequest;
@@ -172,4 +174,18 @@ it('preserves the goal column when moving vertically across shorter lines', func
     // ...the new goal survives the clamp and restores on the way back down.
     $editor->handleEvent(Event::key(Key::Down));
     expect($editor->positionOf($editor->curPtr)->x)->toBe(4);
+});
+
+it('notifies SearchFailed through the dialog handler when a find misses', function (): void {
+    $editor = new Editor(Rect::of(0, 0, 40, 10), text: 'abc');
+    $kinds = [];
+    $editor->setDialogHandler(function (EditorDialogRequest $request) use (&$kinds): int {
+        $kinds[] = $request->kind;
+
+        return Cmd::Cancel;
+    });
+
+    expect($editor->find(new FindRequest('zzz')))->toBeFalse()
+        ->and($editor->find(new FindRequest('b')))->toBeTrue()
+        ->and($kinds)->toBe([EditorDialogKind::SearchFailed]);
 });

@@ -6,6 +6,7 @@ namespace HelgeSverre\TurboVision\Menus;
 
 use Closure;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
+use HelgeSverre\TurboVision\Dialogs\Mnemonic;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Cmd;
@@ -97,24 +98,21 @@ final class StatusLine extends MenuView
         $b = new DrawBuffer($width);
         $b->moveChar(0, ' ', $cNormal, $width);
 
-        $x = 0;
-        foreach ($this->enabledItems() as $item) {
-            if ($item->text === '') {
-                continue;
-            }
-            $len = $this->visibleLength($item->text);
+        $layout = $this->hintLayout();
+        foreach ($layout as ['item' => $item, 'x' => $x, 'len' => $len]) {
             if ($x + $len < $width) {
                 $b->moveChar($x, ' ', $cNormal, 1);
                 $b->moveCStr($x + 1, $item->text, $cNormal, $cHighlight);
                 $b->moveChar($x + $len + 1, ' ', $cNormal, 1);
             }
-            $x += $len + 2;
         }
+        $last = end($layout);
+        $after = $last === false ? 0 : $last['x'] + $last['len'] + 2;
 
         $hint = $this->hintProvider === null ? '' : ($this->hintProvider)($this->helpCtx);
-        if ($hint !== '' && $x < $width - 2) {
-            $b->moveStr($x, ' │ ', $cNormal);
-            $b->moveStr($x + 3, TerminalText::slice($hint, 0, max(0, $width - $x - 3)), $cNormal);
+        if ($hint !== '' && $after < $width - 2) {
+            $b->moveStr($after, ' │ ', $cNormal);
+            $b->moveStr($after + 3, TerminalText::slice($hint, 0, max(0, $width - $after - 3)), $cNormal);
         }
 
         $this->writeBuf(0, 0, $width, 1, $b);
@@ -164,24 +162,36 @@ final class StatusLine extends MenuView
 
     public function commandAtColumn(int $localX): int
     {
-        $x = 0;
-        foreach ($this->enabledItems() as $item) {
-            if ($item->text === '') {
-                continue;
-            }
-            $len = $this->visibleLength($item->text);
-            $end = $x + $len + 2;
-            if ($localX >= $x && $localX < $end) {
+        foreach ($this->hintLayout() as ['item' => $item, 'x' => $x, 'len' => $len]) {
+            if ($localX >= $x && $localX < $x + $len + 2) {
                 return $item->command;
             }
-            $x = $end;
         }
 
         return 0;
     }
 
-    private function visibleLength(string $text): int
+    /**
+     * Horizontal placement of every visible enabled hint, laid out left to
+     * right with two trailing spaces per entry. Painting and hit-testing both
+     * consume this so they can never drift.
+     *
+     * @return list<array{item: StatusItem, x: int, len: int}>
+     */
+    private function hintLayout(): array
     {
-        return TerminalText::length(str_replace('~', '', $text));
+        $entries = [];
+        $x = 0;
+        foreach ($this->enabledItems() as $item) {
+            if ($item->text === '') {
+                continue;
+            }
+            $len = Mnemonic::visibleLength($item->text);
+            $entries[] = ['item' => $item, 'x' => $x, 'len' => $len];
+            $x += $len + 2;
+        }
+
+        return $entries;
     }
+
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Dialogs;
 
+use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
 use HelgeSverre\TurboVision\Events\KeyModifier;
@@ -14,6 +15,18 @@ final class Mnemonic
     public static function extract(string $text): ?string
     {
         return preg_match('/~(\X)~/u', $text, $matches) === 1 ? $matches[1] : null;
+    }
+
+    /** Lowercase mnemonic letter of a "~X~label" string, or '' when absent. */
+    public static function hotKey(string $text): string
+    {
+        return preg_match('/~(.)~/u', $text, $matches) === 1 ? strtolower($matches[1]) : '';
+    }
+
+    /** Display length of the text with ~mnemonic~ markers removed. */
+    public static function visibleLength(string $text): int
+    {
+        return TerminalText::length(str_replace('~', '', $text));
     }
 
     public static function matches(string $text, KeyDownEvent $key): bool

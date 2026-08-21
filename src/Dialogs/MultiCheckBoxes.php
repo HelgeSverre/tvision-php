@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HelgeSverre\TurboVision\Dialogs;
 
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Support\IntMath;
 
 /** A compact multi-state bit-field cluster (Turbo Vision's TMultiCheckBoxes). */
 final class MultiCheckBoxes extends Cluster
@@ -44,7 +45,14 @@ final class MultiCheckBoxes extends Cluster
         $mask = $this->flags & 0xff;
         $current = $this->multiMark($item);
         $next = ($current - 1 + max(1, $this->selectionRange)) % max(1, $this->selectionRange);
-        $shift = $item * $bits;
+        $shift = IntMath::multiply($item, $bits);
+        if ($shift > PHP_INT_SIZE * 8 - $bits) {
+            // Enough items at this range width would shift past the integer
+            // width; PHP wraps silently, corrupting unrelated items' bits.
+            throw new \InvalidArgumentException(
+                'MultiCheckBoxes with this many items exceed the 64-bit packed value; use fewer items or a smaller selectionRange.',
+            );
+        }
         $this->value = ($this->value & ~($mask << $shift)) | ($next << $shift);
     }
 }

@@ -113,3 +113,24 @@ test('ListBox replaces its collection and round-trips selected item data', funct
     expect($list->list())->toBe(['A', 'B', 'C'])
         ->and($list->getData())->toBe(['collection' => ['A', 'B', 'C'], 'selection' => 2]);
 });
+
+test('radio mnemonics fire via Alt while a text field owns the cursor', function (): void {
+    $host = new Group(Rect::of(0, 0, 80, 25));
+    $dialog = new Dialog(Rect::of(10, 5, 50, 15), 'Pick');
+    $input = new InputLine(Rect::of(2, 2, 28, 3), 40);
+    $radios = new RadioButtons(Rect::of(2, 5, 24, 8), SItem::list('~O~ne', '~T~wo'));
+    $dialog->insert($input);
+    $dialog->insert($radios);
+    $dialog->setCurrent($input);
+    $host->insert($dialog);
+
+    // Plain letters stay with the focused input.
+    $dialog->handleEvent(Event::keyDown(new KeyDownEvent(ord('o'), 'o')));
+    expect($input->text())->toBe('o')
+        ->and($radios->value)->toBe(0);
+
+    // Alt+letter reaches the unfocused cluster through pre-process routing.
+    $dialog->handleEvent(Event::keyDown(new KeyDownEvent(ord('t'), 't', KeyModifier::Alt)));
+    expect($radios->value)->toBe(1)
+        ->and($host->pumpEvent())->toBeNull();
+});

@@ -30,6 +30,10 @@ final class RadioButtons extends Cluster
     public function setData(mixed $data): void
     {
         parent::setData($data);
-        $this->sel = max(0, min(count($this->items) - 1, $this->value));
+        // Keep the stored index inside the item list so exactly one row renders
+        // selected and the cursor cannot sit apart from it.
+        $last = max(0, count($this->items) - 1);
+        $this->value = max(0, min($last, $this->value));
+        $this->sel = $this->value;
     }
 }

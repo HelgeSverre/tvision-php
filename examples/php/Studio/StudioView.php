@@ -7,6 +7,7 @@ namespace HelgeSverre\TurboVision\Examples\Studio;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
@@ -99,6 +100,7 @@ final class StudioView extends View
         private bool $persistenceBlocked = false,
     ) {
         parent::__construct($bounds);
+        $this->eventMask |= EventMask::Mouse;
         $this->options |= State::Selectable | State::FirstClick;
         $this->themes = StudioTheme::presets();
         $this->dirty = $initiallyDirty;

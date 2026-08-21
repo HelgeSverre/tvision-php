@@ -7,6 +7,7 @@ use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Views\Frame;
 use HelgeSverre\TurboVision\Views\FrameOwner;
 use HelgeSverre\TurboVision\Views\ScrollBar;
+use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarOrientation;
 use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarPart;
 use HelgeSverre\TurboVision\Views\State;
 use HelgeSverre\TurboVision\Views\Window;
@@ -58,7 +59,7 @@ test('sizeLimits enforces the 16x6 minimum window size', function (): void {
 
 test('standardScrollBar(vertical) inserts a 1-wide bar on the right edge', function (): void {
     $w = new Window(Rect::of(0, 0, 26, 7), 'Demo', 1);
-    $bar = $w->standardScrollBar(ScrollBarPart::Vertical);
+    $bar = $w->standardScrollBar(options: ScrollBarPart::Vertical);
 
     expect($bar)->toBeInstanceOf(ScrollBar::class)
         ->and($bar->isVertical())->toBeTrue()
@@ -79,6 +80,18 @@ test('standardScrollBar with sbHandleKeyboard sets ofPostProcess', function (): 
     $bar = $w->standardScrollBar(ScrollBarPart::Vertical | ScrollBarPart::HandleKeyboard);
 
     expect(($bar->options & State::PostProcess) !== 0)->toBeTrue();
+});
+
+test('standardScrollBar accepts a typed orientation and keyboard option', function (): void {
+    $w = new Window(Rect::of(0, 0, 26, 7), 'Demo', 1);
+    $bar = $w->standardScrollBar(
+        ScrollBarOrientation::Horizontal,
+        handleKeyboard: true,
+    );
+
+    expect($bar->isVertical())->toBeFalse()
+        ->and($bar->getBounds())->toEqual(Rect::of(2, 6, 24, 7))
+        ->and(($bar->options & State::PostProcess) !== 0)->toBeTrue();
 });
 
 test('frameIsZoomed reflects whether the window fills its max extent', function (): void {

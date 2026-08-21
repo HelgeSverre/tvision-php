@@ -20,6 +20,15 @@ test('a MenuItem carries name, command, key and help', function (): void {
         ->and($item->subMenu)->toBeNull();
 });
 
+test('MenuItem::separator creates a non-command separator entry', function (): void {
+    $item = MenuItem::separator();
+
+    expect($item->name)->toBe('')
+        ->and($item->command)->toBe(0)
+        ->and($item->key)->toBeNull()
+        ->and($item->subMenu)->toBeNull();
+});
+
 test('SubMenu->items() is fluent and collects items into a Menu', function (): void {
     $sub = new SubMenu('~F~ile', Key::AltF)->items(
         new MenuItem('~O~pen', Cmd::FirstUser, Key::F3, 'F3'),
@@ -71,4 +80,14 @@ test('StatusDef->items() is fluent and scopes items to a help-context range', fu
         ->and($def->max)->toBe(0xFFFF)
         ->and($def->getItems())->toHaveCount(2)
         ->and($def->getItems()[0]->command)->toBe(Cmd::Quit);
+});
+
+test('StatusDef::all creates a full-range definition', function (): void {
+    $def = StatusDef::all(
+        new StatusItem('~Alt-X~ Exit', Key::AltX, Cmd::Quit),
+    );
+
+    expect($def->min)->toBe(0)
+        ->and($def->max)->toBe(0xFFFF)
+        ->and($def->getItems())->toHaveCount(1);
 });

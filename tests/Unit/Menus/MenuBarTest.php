@@ -13,7 +13,9 @@ use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Menus\Menu;
 use HelgeSverre\TurboVision\Menus\MenuBar;
+use HelgeSverre\TurboVision\Menus\MenuBox;
 use HelgeSverre\TurboVision\Menus\MenuItem;
+use HelgeSverre\TurboVision\Menus\MenuPopup;
 use HelgeSverre\TurboVision\Menus\SubMenu;
 use HelgeSverre\TurboVision\Terminal\Screen;
 use HelgeSverre\TurboVision\Views\Group;
@@ -90,7 +92,6 @@ test('Alt-hotkey on a top-level submenu is recognized (handled, event consumed)'
     $ev = Event::keyDown(new KeyDownEvent(Key::AltF->value));
     $bar->handleEvent($ev);
 
-    // M1: the bar recognizes the top-level hotkey and consumes the key.
     expect($ev->isNothing())->toBeTrue();
 });
 
@@ -201,4 +202,123 @@ test('mouse clicks open a pull-down and activate its selected row', function ():
     $root->handleEvent(Event::mouse(EventType::MouseDown, new MouseEvent(new Point(3, 2), buttons: 1)));
     expect($root->pumpEvent()?->isCommand(200))->toBeTrue()
         ->and($bar->activeIndex())->toBe(-1);
+});
+
+test('a submenu host is selectable and arbitrary nested menus open and close by keyboard', function (): void {
+    [$root] = menuRoot(48, 14);
+    $bar = new MenuBar(
+        Rect::of(0, 0, 48, 1),
+        new SubMenu('~F~ile', Key::AltF)->items(
+            new SubMenu('~E~xport')->items(
+                new SubMenu('~F~ormat')->items(
+                    new MenuItem('~J~SON', 321, null, 'JSON'),
+                ),
+            ),
+        ),
+    );
+    $root->insert($bar);
+
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::AltF->value)));
+    expect($bar->openBoxes())->toHaveCount(1)
+        ->and($bar->openBoxes()[0]->selectedIndex())->toBe(0);
+
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::Right->value)));
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::Right->value)));
+    expect($bar->openBoxes())->toHaveCount(3);
+
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::Left->value)));
+    expect($bar->openBoxes())->toHaveCount(2);
+
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::Right->value)));
+    $bar->handleEvent(Event::keyDown(new KeyDownEvent(Key::Enter->value)));
+    expect($root->pumpEvent()?->isCommand(321))->toBeTrue()
+        ->and($bar->openBoxes())->toBe([])
+        ->and($bar->activeIndex())->toBe(-1);
+});
+
+test('mouse hover opens nested menus and an outside click dismisses the full menu hierarchy', function (): void {
+    [$root] = menuRoot(48, 14);
+    $bar = new MenuBar(
+        Rect::of(0, 0, 48, 1),
+        new SubMenu('~F~ile', Key::AltF)->items(
+            new SubMenu('~E~xport')->items(new MenuItem('~J~SON', 322)),
+        ),
+    );
+    $root->insert($bar);
+
+    $root->handleEvent(Event::mouse(EventType::MouseDown, new MouseEvent(new Point(2, 0), buttons: 1)));
+    // The first box starts below the bar; hovering its first row opens Export.
+    $root->handleEvent(Event::mouse(EventType::MouseMove, new MouseEvent(new Point(3, 2), buttons: 1)));
+    expect($bar->openBoxes())->toHaveCount(2);
+
+    $root->handleEvent(Event::mouse(EventType::MouseDown, new MouseEvent(new Point(47, 13), buttons: 1)));
+    expect($bar->openBoxes())->toBe([])
+        ->and($bar->activeIndex())->toBe(-1);
+});
+
+test('MenuPopup is a real compact standalone context menu and dispatches its selected command', function (): void {
+    [$root, $screen] = menuRoot(32, 10);
+    $popup = new MenuPopup(
+        Rect::of(4, 3, 20, 7),
+        new Menu([new MenuItem('~R~ename', 323, null, 'F2')]),
+    );
+    $root->insert($popup);
+    $root->draw();
+
+    expect(implode("\n", $screen->back()->rows()))->toContain('Rename');
+    $root->handleEvent(Event::mouse(EventType::MouseDown, new MouseEvent(new Point(6, 4), buttons: 1)));
+
+    expect($root->pumpEvent()?->isCommand(323))->toBeTrue();
+});
+
+test('a modal MenuPopup dismisses immediately when clicking outside its bounds', function (): void {
+    [$root] = menuRoot(32, 10);
+    $popup = new MenuPopup(
+        Rect::of(4, 3, 20, 7),
+        new Menu([new MenuItem('~R~ename', 327)]),
+    );
+    $root->putEvent(Event::mouse(EventType::MouseDown, new MouseEvent(new Point(0, 0), buttons: 1)));
+    // The fallback event prevents a broken implementation from blocking forever.
+    $root->putEvent(Event::key(Key::Enter));
+
+    expect($root->execView($popup))->toBe(Cmd::Cancel)
+        ->and($root->pumpEvent()?->isKey(Key::Enter))->toBeTrue();
+});
+
+test('a standalone MenuBox receives grouped hover events and updates its selection', function (): void {
+    [$root] = menuRoot(32, 10);
+    $box = new MenuBox(
+        Rect::of(4, 2, 20, 7),
+        new Menu([
+            new MenuItem('~F~irst', 325),
+            new MenuItem('~S~econd', 326),
+        ]),
+    );
+    $root->insert($box);
+
+    $move = Event::mouse(EventType::MouseMove, new MouseEvent(new Point(6, 4), buttons: 1));
+    $root->handleEvent($move);
+
+    expect($box->selectedIndex())->toBe(1)
+        ->and($move->isNothing())->toBeTrue();
+});
+
+test('a standalone popup can open nested context menus and route keyboard activation to the leaf', function (): void {
+    [$root] = menuRoot(32, 10);
+    $popup = new MenuPopup(
+        Rect::of(3, 2, 16, 6),
+        new Menu([
+            new MenuItem('~M~ore', 0, null, '', new Menu([new MenuItem('~D~eep action', 324)])),
+        ]),
+    );
+    $root->insert($popup);
+
+    $popup->handleEvent(Event::keyDown(new KeyDownEvent(Key::Right->value)));
+    expect($popup->child())->not->toBeNull()
+        ->and($root->subviews())->toHaveCount(2);
+
+    $popup->handleEvent(Event::keyDown(new KeyDownEvent(Key::Enter->value)));
+    expect($root->pumpEvent()?->isCommand(324))->toBeTrue()
+        ->and($popup->child())->toBeNull()
+        ->and($root->subviews())->toHaveCount(1);
 });

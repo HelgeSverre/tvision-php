@@ -73,6 +73,16 @@ function corpusKeyEntries(): array
         'Alt+A (ESC prefix)'      => ['1b61', 'AltA'],
         'Alt+Z (ESC prefix)'      => ['1b7a', 'AltZ'],
         'Alt+X (ESC prefix)'      => ['1b78', 'AltX'],
+        'Alt+0 (ESC prefix)'      => ['1b30', 'Alt0'],
+        'Alt+1 (ESC prefix)'      => ['1b31', 'Alt1'],
+        'Alt+2 (ESC prefix)'      => ['1b32', 'Alt2'],
+        'Alt+3 (ESC prefix)'      => ['1b33', 'Alt3'],
+        'Alt+4 (ESC prefix)'      => ['1b34', 'Alt4'],
+        'Alt+5 (ESC prefix)'      => ['1b35', 'Alt5'],
+        'Alt+6 (ESC prefix)'      => ['1b36', 'Alt6'],
+        'Alt+7 (ESC prefix)'      => ['1b37', 'Alt7'],
+        'Alt+8 (ESC prefix)'      => ['1b38', 'Alt8'],
+        'Alt+9 (ESC prefix)'      => ['1b39', 'Alt9'],
         'F1 SS3 form'             => ['1b4f50', 'F1'],
         'F2 SS3 form'             => ['1b4f51', 'F2'],
         'F3 SS3 form'             => ['1b4f52', 'F3'],
@@ -140,6 +150,38 @@ test('corpus key: each sequence decodes to the expected Key enum case', function
         expect($key->is($match))->toBeTrue(
             "{$label}: expected Key::{$keyName} (0x" . dechex($match->value) . ') but got keyCode=0x' . dechex($key->keyCode)
         );
+    }
+});
+
+/**
+ * @return array<string, array{string, Key, int}>
+ */
+function corpusLegacyModifiedKeyEntries(): array
+{
+    return [
+        'xterm Shift+F1' => ['1b5b313b3250', Key::ShiftF1, \HelgeSverre\TurboVision\Events\KeyModifier::Shift],
+        'xterm Alt+F4' => ['1b5b313b3353', Key::AltF4, \HelgeSverre\TurboVision\Events\KeyModifier::Alt],
+        'xterm Ctrl+F5' => ['1b5b31353b357e', Key::CtrlF5, \HelgeSverre\TurboVision\Events\KeyModifier::Ctrl],
+        'xterm Ctrl+Left' => ['1b5b313b3544', Key::CtrlLeft, \HelgeSverre\TurboVision\Events\KeyModifier::Ctrl],
+        'xterm Shift+Insert' => ['1b5b323b327e', Key::ShiftInsert, \HelgeSverre\TurboVision\Events\KeyModifier::Shift],
+        'Kitty Ctrl+F5' => ['1b5b35373336383b3575', Key::CtrlF5, \HelgeSverre\TurboVision\Events\KeyModifier::Ctrl],
+        'Kitty Shift+Tab' => ['1b5b393b3275', Key::ShiftTab, \HelgeSverre\TurboVision\Events\KeyModifier::Shift],
+        'Kitty Alt+2' => ['1b5b35303b3375', Key::Alt2, \HelgeSverre\TurboVision\Events\KeyModifier::Alt],
+    ];
+}
+
+test('corpus modified keys: modern modifier sequences retain legacy combined identities', function (): void {
+    foreach (corpusLegacyModifiedKeyEntries() as $label => [$bytesHex, $expected, $modifiers]) {
+        $raw = hex2bin($bytesHex);
+        if ($raw === false) {
+            throw new \RuntimeException("hex2bin failed for {$label}: {$bytesHex}");
+        }
+
+        $key = corpusDecodeOne($raw)->asKey();
+
+        expect($key)->not->toBeNull()
+            ->and($key?->is($expected))->toBeTrue("{$label}: wrong legacy key identity")
+            ->and($key?->modifiers)->toBe($modifiers, "{$label}: modifier metadata was not retained");
     }
 });
 
@@ -299,7 +341,7 @@ test(
 );
 
 // ---------------------------------------------------------------------------
-// kind=unknown — raw Ctrl characters (no named Key enum case)
+// kind=control — raw Ctrl characters retain their ASCII control identity
 // ---------------------------------------------------------------------------
 
 /**
@@ -335,7 +377,7 @@ function corpusCtrlEntries(): array
 }
 
 test(
-    'corpus ctrl: raw control bytes decode to KeyDown with matching keyCode, no char, and no named Key case',
+    'corpus ctrl: raw control bytes decode to their named legacy Key identities',
     function (): void {
         foreach (corpusCtrlEntries() as $label => [$bytesHex, $keyCode]) {
             $raw = hex2bin($bytesHex);
@@ -353,7 +395,7 @@ test(
             expect($event->what)->toBe(EventType::KeyDown, "{$label}: wrong EventType")
                 ->and($key->keyCode)->toBe($keyCode, "{$label}: wrong keyCode")
                 ->and($key->char)->toBe('', "{$label}: char should be empty")
-                ->and(Key::tryFrom($keyCode))->toBeNull("{$label}: Ctrl char should have no named Key case");
+                ->and(Key::tryFrom($keyCode)?->value)->toBe($keyCode, "{$label}: Ctrl char should have a matching Key case");
         }
     }
 );

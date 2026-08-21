@@ -55,9 +55,15 @@ test('default Workbench showcases menus windows dashboard list and shortcuts', f
 test('Workbench pull-down menus render and activate commands', function (): void {
     $app = workbenchApp();
     workbenchKey($app, Key::AltF);
+    $openMenu = implode("\n", $app->backRowsForTest());
 
-    expect(implode("\n", $app->backRowsForTest()))->toContain('New workspace')
-        ->and(implode("\n", $app->backRowsForTest()))->toContain('Save snapshot');
+    expect($openMenu)->toContain('New workspace')
+        ->and($openMenu)->toContain('Save snapshot')
+        // The full-screen menu input shield is transparent: only the compact
+        // pull-down may cover the already-rendered application beneath it.
+        ->and($openMenu)->toContain('Build pipeline')
+        ->and($openMenu)->toContain('Task Board')
+        ->and($openMenu)->toContain('F10 Menu');
 
     workbenchKey($app, Key::Down);
     workbenchKey($app, Key::Enter);

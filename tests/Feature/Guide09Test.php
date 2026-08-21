@@ -7,7 +7,7 @@ use HelgeSverre\TurboVision\Terminal\Screen;
 
 require_once __DIR__ . '/../../examples/php/tutorial/Guide09.php';
 
-test('Guide09 renders two scroller panes with their own scroll bars', function (): void {
+test('Guide09 renders two scroller panes and shows bars for the selected pane', function (): void {
     $driver = new HeadlessDriver(80, 25);
     $app = new Guide09App(new Screen($driver));
     $app->bootForTest();
@@ -15,8 +15,9 @@ test('Guide09 renders two scroller panes with their own scroll bars', function (
     $app->drawAndFlushForTest();
 
     $joined = implode("\n", $app->backRowsForTest());
-    // Both panes show file content; at least two vertical bars (4 arrow glyphs total).
-    expect(substr_count($joined, '▲'))->toBeGreaterThanOrEqual(2)
+    // Turbo Vision only exposes the bars belonging to the active, selected pane.
+    expect(substr_count($joined, '▲'))->toBe(1)
+        ->and(substr_count($joined, '▼'))->toBe(1)
         ->and($joined)->toContain('Line 00');
 });
 

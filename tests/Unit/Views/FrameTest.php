@@ -71,18 +71,18 @@ test('an inactive frame draws single-line box corners', function (): void {
 });
 
 test('an active frame draws double-line box corners and the title', function (): void {
-    $screen = new Screen(new HeadlessDriver(20, 6));
+    $screen = new Screen(new HeadlessDriver(30, 6));
     $screen->init();
-    $win = new StubWindow(Rect::of(0, 0, 20, 6), $screen);
+    $win = new StubWindow(Rect::of(0, 0, 30, 6), $screen);
     $win->title = 'Demo';
-    $frame = new Frame(Rect::of(0, 0, 20, 6));
+    $frame = new Frame(Rect::of(0, 0, 30, 6));
     $win->insert($frame);
     $frame->setState(State::Active, true);
     $frame->draw();
 
     $rows = $screen->back()->rows();
     expect(mb_substr($rows[0], 0, 1))->toBe(Glyphs::DOUBLE_TOP_LEFT)
-        ->and(mb_substr($rows[0], 19, 1))->toBe(Glyphs::DOUBLE_TOP_RIGHT)
+        ->and(mb_substr($rows[0], 29, 1))->toBe(Glyphs::DOUBLE_TOP_RIGHT)
         ->and($rows[0])->toContain('Demo');
 });
 
@@ -125,6 +125,22 @@ test('the window number is drawn on the frame', function (): void {
     $frame->draw();
 
     expect($screen->back()->rows()[0])->toContain('3');
+});
+
+test('a narrow frame keeps its title out of the number and zoom controls', function (): void {
+    $screen = new Screen(new HeadlessDriver(28, 6));
+    $screen->init();
+    $win = new StubWindow(Rect::of(0, 0, 28, 6), $screen);
+    $win->title = 'Feature Navigator';
+    $frame = new Frame(Rect::of(0, 0, 28, 6));
+    $win->insert($frame);
+    $frame->setState(State::Active, true);
+    $frame->draw();
+
+    $top = $screen->back()->rows()[0];
+    expect($top)->toContain('Feature Naviga')
+        ->and(mb_substr($top, 21, 1))->toBe('1')
+        ->and(mb_substr($top, 23, 3))->toBe('[↑]');
 });
 
 test('Frame growMode is gfGrowHiX|gfGrowHiY', function (): void {

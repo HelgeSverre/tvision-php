@@ -18,5 +18,12 @@ final class MenuItem
         public ?Key $key = null,
         public string $help = '',
         public ?Menu $subMenu = null,
+        /** Application help context shown while this item is selected. */
+        public int $helpCtx = 0,
     ) {}
+
+    public static function separator(): self
+    {
+        return new self('', 0);
+    }
 }

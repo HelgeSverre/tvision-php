@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use HelgeSverre\TurboVision\Drivers\HeadlessDriver;
+use HelgeSverre\TurboVision\Dialogs\Dialog;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
@@ -15,6 +17,7 @@ use HelgeSverre\TurboVision\Terminal\Screen;
 use HelgeSverre\TurboVision\Views\Group;
 use HelgeSverre\TurboVision\Views\State;
 use HelgeSverre\TurboVision\Views\View;
+use HelgeSverre\TurboVision\Views\Window;
 
 /** A view that records every event it handled and can consume on a target command. */
 final class RecordingView extends View
@@ -210,6 +213,8 @@ test('a broadcast event fans out to every subview', function (): void {
     $g = new Group(Rect::of(0, 0, 10, 10));
     $a = new RecordingView(Rect::of(0, 0, 10, 5));
     $b = new RecordingView(Rect::of(0, 5, 10, 10));
+    $a->eventMask |= EventMask::Broadcast;
+    $b->eventMask |= EventMask::Broadcast;
     $g->insert($a);
     $g->insert($b);
 
@@ -297,4 +302,44 @@ test('execView restores modal ownership and state when a handler throws', functi
         ->and($modal->owner)->toBeNull()
         ->and($modal->getState(State::Modal))->toBeFalse()
         ->and($group->subviews())->not->toContain($modal);
+});
+
+test('execView selects a dialog while modal and restores the preceding window afterwards', function (): void {
+    $screen = new Screen(new HeadlessDriver(50, 20));
+    $screen->init();
+    $root = new RootGroup($screen);
+    $window = new Window(Rect::of(0, 0, 20, 8), 'Existing');
+    $dialog = new class(Rect::of(5, 4, 28, 12), 'Modal') extends Dialog {
+        public bool $wasCurrent = false;
+        public bool $frameWasActive = false;
+
+        public function handleEvent(Event $event): void
+        {
+            $this->wasCurrent = $this->owner instanceof Group && $this->owner->current() === $this;
+            $this->frameWasActive = $this->subviews()[0]->getState(State::Active);
+            parent::handleEvent($event);
+        }
+    };
+    $root->insert($window);
+    $root->setCurrent($window);
+    $root->putEvent(Event::command(Cmd::Cancel));
+
+    expect($root->execView($dialog))->toBe(Cmd::Cancel)
+        ->and($dialog->wasCurrent)->toBeTrue()
+        ->and($dialog->frameWasActive)->toBeTrue()
+        ->and($root->current())->toBe($window)
+        ->and($window->getState(State::Selected))->toBeTrue();
+});
+
+test('execView presents the modal before waiting for its first event', function (): void {
+    $driver = new HeadlessDriver(40, 12);
+    $screen = new Screen($driver);
+    $screen->init();
+    $root = new RootGroup($screen);
+    $dialog = new Dialog(Rect::of(5, 2, 35, 10), 'Physically Presented');
+    $root->putEvent(Event::command(Cmd::Cancel));
+
+    expect($root->execView($dialog))->toBe(Cmd::Cancel)
+        ->and($driver->output())->toContain('Physically')
+        ->and($driver->output())->toContain('Presented');
 });

@@ -38,6 +38,14 @@ final class CountingScroller extends Scroller
     }
 }
 
+final class CursorProbeScroller extends Scroller
+{
+    public function rawCursor(): Point
+    {
+        return $this->cursor;
+    }
+}
+
 /** A Group rooted at a real Screen so child writes hit the back buffer. */
 final class ScRootGroup extends Group
 {
@@ -130,4 +138,16 @@ test('changeBounds re-clamps the bars (limit reapplied)', function (): void {
     $s->changeBounds(Rect::of(0, 0, 9, 9)); // size.y=9 -> maxVal 91
 
     expect($vBar->maxVal)->toBe(91);
+});
+
+test('scrolling keeps the logical cursor anchored to the same document coordinate', function (): void {
+    $bar = new ScrollBar(Rect::of(0, 0, 1, 5));
+    $scroller = new CursorProbeScroller(Rect::of(0, 0, 9, 5), null, $bar);
+    $scroller->setCursor(2, 3);
+    $bar->setRange(0, 100);
+    $bar->setValue(4);
+    $scroller->handleEvent(Event::broadcast(Cmd::ScrollBarChanged, $bar));
+
+    expect($scroller->delta)->toEqual(new Point(0, 4))
+        ->and($scroller->rawCursor())->toEqual(new Point(2, -1));
 });

@@ -6,8 +6,8 @@ namespace HelgeSverre\TurboVision\Menus;
 
 /**
  * A help-context-ranged set of StatusItems (faithful to TStatusDef). Items are added
- * fluently via ->items(...). The status line picks the def whose [min,max] contains
- * the current help context (M1 uses a single full-range def).
+ * fluently via ->items(...). The status line picks the definition whose [min,max]
+ * contains the current help context.
  */
 final class StatusDef
 {
@@ -19,10 +19,11 @@ final class StatusDef
         public int $max,
     ) {}
 
-    /**
-     * Fluent appender: adds StatusItems and returns $this for chaining.
-     * Use getItems() to retrieve the accumulated list.
-     */
+    public static function all(StatusItem ...$items): self
+    {
+        return new self(0, 0xFFFF)->items(...$items);
+    }
+
     public function items(StatusItem ...$newItems): static
     {
         foreach ($newItems as $item) {
@@ -32,11 +33,7 @@ final class StatusDef
         return $this;
     }
 
-    /**
-     * Returns all accumulated StatusItems.
-     *
-     * @return list<StatusItem>
-     */
+    /** @return list<StatusItem> */
     public function getItems(): array
     {
         return $this->statusItems;

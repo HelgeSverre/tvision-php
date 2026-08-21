@@ -26,6 +26,11 @@ final class Event
         return new self(EventType::KeyDown, $key);
     }
 
+    public static function key(Key $key, int $modifiers = 0): self
+    {
+        return self::keyDown(new KeyDownEvent($key->value, modifiers: $modifiers));
+    }
+
     public static function mouse(EventType $what, MouseEvent $mouse): self
     {
         return new self($what, $mouse);

@@ -19,7 +19,7 @@ use HelgeSverre\TurboVision\Menus\StatusLine;
 use HelgeSverre\TurboVision\Menus\SubMenu;
 use HelgeSverre\TurboVision\Terminal\Screen;
 use HelgeSverre\TurboVision\Views\Desktop;
-use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarPart;
+use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarOrientation;
 use HelgeSverre\TurboVision\Views\State;
 use HelgeSverre\TurboVision\Views\StaticText;
 use HelgeSverre\TurboVision\Views\Window;
@@ -91,15 +91,15 @@ final class WorkbenchApp extends Application
                 new MenuItem('~N~ew workspace…', WorkbenchCommand::NewWorkspace, Key::F4, 'F4'),
                 new MenuItem('Open ~t~ask board', WorkbenchCommand::OpenTasks, Key::F2, 'F2'),
                 new MenuItem('Open ~a~ctivity log', WorkbenchCommand::OpenActivity, Key::F3, 'F3'),
-                new MenuItem('', 0),
+                MenuItem::separator(),
                 new MenuItem('~S~ave snapshot', WorkbenchCommand::SaveSnapshot, null, 'Ctrl-S'),
-                new MenuItem('', 0),
+                MenuItem::separator(),
                 new MenuItem('E~x~it', Cmd::Quit, Key::AltX, 'Alt-X'),
             ),
             new SubMenu('~E~dit', Key::AltE)->items(
                 new MenuItem('~U~ndo', WorkbenchCommand::Undo, null, 'Ctrl-Z'),
                 new MenuItem('~R~edo', WorkbenchCommand::Redo, null, 'Ctrl-Y'),
-                new MenuItem('', 0),
+                MenuItem::separator(),
                 new MenuItem('Command ~p~alette…', WorkbenchCommand::CommandPalette, null, 'Ctrl-P'),
             ),
             new SubMenu('~V~iew', Key::AltV)->items(
@@ -126,7 +126,7 @@ final class WorkbenchApp extends Application
 
     protected function initStatusLine(Rect $bounds): StatusLine
     {
-        return new StatusLine($bounds, new StatusDef(0, 0xFFFF)->items(
+        return new StatusLine($bounds, StatusDef::all(
             new StatusItem('~F10~ Menu', Key::F10, Cmd::Menu),
             new StatusItem('~F1~ Help', Key::F1, WorkbenchCommand::KeyboardHelp),
             new StatusItem('~F2~ Tasks', Key::F2, WorkbenchCommand::OpenTasks),
@@ -252,7 +252,7 @@ final class WorkbenchApp extends Application
         $height = min(18, max(9, $extent->height() - 5));
         $x = max(0, $extent->width() - $width - 2);
         $window = new Window(Rect::of($x, 3, $x + $width, 3 + $height), 'Task Board', ++$this->windowNumber);
-        $vertical = $window->standardScrollBar(ScrollBarPart::Vertical | ScrollBarPart::HandleKeyboard);
+        $vertical = $window->standardScrollBar(ScrollBarOrientation::Vertical, handleKeyboard: true);
         $interior = $window->getExtent()->grow(-1, -1);
         $list = new WorkbenchTaskList(Rect::of(1, 1, $interior->b->x - 1, $interior->b->y), $vertical, self::TASKS);
         $list->growMode = State::GrowHiX | State::GrowHiY;
@@ -281,8 +281,8 @@ final class WorkbenchApp extends Application
         $x = min(max(0, 5 + $offset), max(0, $extent->width() - $width));
         $y = min(max(0, 2 + intdiv($offset, 2)), max(0, $extent->height() - $height));
         $window = new Window(Rect::of($x, $y, $x + $width, $y + $height), 'Activity Inspector', ++$this->windowNumber);
-        $vertical = $window->standardScrollBar(ScrollBarPart::Vertical | ScrollBarPart::HandleKeyboard);
-        $horizontal = $window->standardScrollBar(ScrollBarPart::Horizontal | ScrollBarPart::HandleKeyboard);
+        $vertical = $window->standardScrollBar(ScrollBarOrientation::Vertical, handleKeyboard: true);
+        $horizontal = $window->standardScrollBar(ScrollBarOrientation::Horizontal, handleKeyboard: true);
         $interior = $window->getExtent()->grow(-1, -1);
         $log = new WorkbenchLogView(
             Rect::of(1, 1, $interior->b->x - 1, $interior->b->y - 1),

@@ -8,8 +8,8 @@ use HelgeSverre\TurboVision\Terminal\TerminalCapabilities;
 use InvalidArgumentException;
 
 /**
- * A no-I/O Driver for tests: scripted input queue, captured output, fixed/settable
- * size. The keystone that makes the entire render/input pipeline deterministic.
+ * A no-I/O Driver for tests with scripted input, captured output, and a configurable
+ * terminal size.
  */
 final class HeadlessDriver implements Driver, ProvidesTerminalCapabilities
 {

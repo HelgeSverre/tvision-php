@@ -50,10 +50,10 @@ class Guide04App extends Application
 
     protected function initStatusLine(Rect $bounds): StatusLine
     {
-        return new StatusLine($bounds, new StatusDef(0, 0xFFFF)->items(
+        return new StatusLine($bounds, StatusDef::all(
             new StatusItem('', Key::F10, Cmd::Menu),
             new StatusItem('~Alt-X~ Exit', Key::AltX, Cmd::Quit),
-            new StatusItem('~Alt-F3~ Close', Key::Esc, Cmd::Close),
+            new StatusItem('~Alt-F3~ Close', Key::AltF3, Cmd::Close),
         ));
     }
 

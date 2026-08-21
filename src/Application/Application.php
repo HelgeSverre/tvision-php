@@ -48,7 +48,7 @@ class Application extends Program
 
     protected function initStatusLine(Rect $bounds): ?StatusLine
     {
-        return new StatusLine($bounds, new StatusDef(0, 0xFFFF)->items(
+        return new StatusLine($bounds, StatusDef::all(
             new StatusItem('~Alt-X~ Exit', Key::AltX, Cmd::Quit),
         ));
     }

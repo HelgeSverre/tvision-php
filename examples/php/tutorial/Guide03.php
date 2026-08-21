@@ -6,7 +6,7 @@ declare(strict_types=1);
  * Guide03 — PHP port of Turbo Vision's tvguid03.cc (Borland, 1991).
  * Adds a full menu bar (File: Open/New/Exit; Window: Next/Zoom) and a status line
  * (F10 Menu, Alt-X Exit, Alt-F3 Close). User command codes 200/201 from the original
- * become Cmd::FirstUser + n. Close binds to Esc (M1 has no AltF3 key — see Guide02).
+ * become Cmd::FirstUser + n.
  */
 
 use HelgeSverre\TurboVision\Application\Application;
@@ -45,10 +45,10 @@ final class Guide03App extends Application
 
     protected function initStatusLine(Rect $bounds): StatusLine
     {
-        return new StatusLine($bounds, new StatusDef(0, 0xFFFF)->items(
+        return new StatusLine($bounds, StatusDef::all(
             new StatusItem('', Key::F10, Cmd::Menu),
             new StatusItem('~Alt-X~ Exit', Key::AltX, Cmd::Quit),
-            new StatusItem('~Alt-F3~ Close', Key::Esc, Cmd::Close),
+            new StatusItem('~Alt-F3~ Close', Key::AltF3, Cmd::Close),
         ));
     }
 }

@@ -10,7 +10,7 @@ use HelgeSverre\TurboVision\Drawing\Buffer;
 /**
  * Renders a screen Buffer to a self-contained HTML document — a monospace grid of
  * coloured cells using the canonical CGA/VGA RGB palette. Companion to DiffPresenter
- * (which renders to ANSI): this one is for human eyeballing and pixel-diff visual
+ * (which renders to ANSI): this one is for visual inspection and pixel-diff
  * snapshot tests. Foregrounds and explicit backgrounds use fixed RGB values; default
  * black backgrounds inherit the browser canvas unless classic rendering is requested.
  */

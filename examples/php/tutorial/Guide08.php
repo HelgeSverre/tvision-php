@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 /*
  * Guide08 — PHP port of tvguid08.cc. The interior is a Scroller with vertical+horizontal
- * standard scroll bars (sbHandleKeyboard). setLimit sizes the logical area; draw() paints
+ * keyboard-aware scroll bars. setLimit sizes the logical area; draw() paints
  * delta-offset lines from the fixture.
  */
 
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Views\ScrollBar;
-use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarPart;
+use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarOrientation;
 use HelgeSverre\TurboVision\Views\Scroller;
 use HelgeSverre\TurboVision\Views\State;
 use HelgeSverre\TurboVision\Views\Window;
@@ -56,8 +56,8 @@ final class Guide08Window extends Window
     public function __construct(Rect $bounds, string $title, int $number, array $lines)
     {
         parent::__construct($bounds, $title, $number);
-        $v = $this->standardScrollBar(ScrollBarPart::Vertical | ScrollBarPart::HandleKeyboard);
-        $h = $this->standardScrollBar(ScrollBarPart::Horizontal | ScrollBarPart::HandleKeyboard);
+        $v = $this->standardScrollBar(ScrollBarOrientation::Vertical, handleKeyboard: true);
+        $h = $this->standardScrollBar(ScrollBarOrientation::Horizontal, handleKeyboard: true);
         $r = $this->getClipRect()->grow(-1, -1);
         $this->interior = new Guide08Interior($r, $h, $v, $lines);
         $this->insert($this->interior);

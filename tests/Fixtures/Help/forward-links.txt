@@ -1,0 +1,7 @@
+.topic Start=10
+Read {the guide:Guide}.
+
+  code line
+
+.topic Guide
+The guide.

@@ -41,13 +41,15 @@ programs running (on a real terminal + headless snapshot tests).
 |---|-----------|----------|---------------------|--------|
 | **M1** | **Walking skeleton** | Driver (ANSI + headless) · screen buffer + diff renderer · `View`/`Group` · event loop · `Application`/`Program`/`Desktop`/`Background`/`StaticText` · minimal `MenuBar`+`StatusLine` | `tvguid01–03` | **Complete** — all three plans built & green; 173 tests passed, PHPStan max clean |
 | M2 | Windowing | `Window`, `Frame`, `ScrollBar`, `Scroller`, `ListViewer`; resize handling | `tvguid04–10` | **Complete** — all tasks built & green; PHPStan max clean; tvguid04–10 ported with headless snapshot tests |
-| M3 | Menus-deep + Dialogs | Pull-down menu navigation; `Dialog`, `Button`, `InputLine`, `CheckBoxes`, `RadioButtons`, `Label`, `ListBox`, `MessageBox`; `setData`/`getData` | `tvguid11–16` | **In progress** — keyboard/mouse pull-downs complete; reusable dialog/form controls remain |
-| M4 | Editor & files | `Validator` family; `Editor`/`FileEditor`/`EditWindow`/`Memo`; `FileDialog`/`ChDirDialog` | `validator.cc`, `tvedit.cc`, std dialogs | **Spike plan written** |
-| M5 | Outline & color | `OutlineViewer`/`Outline`/`Node`; `ColorDialog` + selectors | outline + color demos | **Spike plan written** |
-| M6 | Help & persistence | Help system (+ `tvhc` or a PHP-native help format); persistence via **PHP-native serialization** (binary streamer dropped — see spike) | demo app help; `load.cc` | **Spike plan written** |
-| M7 | The full demo | The complete TVDEMO app wired end-to-end (calculator, calendar, puzzle, ASCII table, gadgets, mouse dialog, help) | `examples/cpp/demo/*` | Stretch |
+| M3 | Menus-deep + Dialogs | Nested pull-down menus; `Dialog`, `Button`, `InputLine`, clusters, labels, lists, history, message boxes; data/validation hooks | `tvguid11–16` | **Complete** — reusable controls and all six tutorials are ported and covered |
+| M4 | Editor & files | Validator family; `Editor`/`FileEditor`/`EditWindow`/`Memo`; file and directory dialogs | `validator.cc`, `tvedit.cc`, std dialogs | **Complete** — focused legacy editor, validator, and picker acceptance demos included |
+| M5 | Outline & color | `OutlineViewer`/`Outline`/`Node`; `ColorDialog` and selectors | outline + color demos | **Complete** — reusable outline and colour subsystems covered by headless tests |
+| M6 | Help & persistence | Compiled PHP help format + viewer; safe PHP-native resources and string lists | demo help; `load.cc` | **Complete** — `bin/tvhc` produces the documented help format; resources include explicit allow-listed declarative view trees, not binary stream compatibility |
+| M7 | The full demo | The complete historic TVDEMO app wired end-to-end (calculator, calendar, puzzle, ASCII table, gadgets, mouse dialog, help) | `examples/cpp/demo/*` | **Stretch** — supporting framework families and focused legacy acceptance demos are present; the monolithic original app is not yet ported |
 
-All plans live in `docs/superpowers/plans/`. The two M1 build-plans (driver/renderer, views/application) are full TDD plans with complete code; M2–M6 are spike outlines to be promoted to full plans just before each is built.
+All plans live in `docs/superpowers/plans/`. The two M1 build-plans (driver/renderer,
+views/application) are full TDD plans; the later milestone spikes now serve as
+implementation and compatibility notes for the completed PHP-native subsystems.
 
 ## Cross-cutting tracks (advance alongside milestones)
 
@@ -57,45 +59,33 @@ All plans live in `docs/superpowers/plans/`. The two M1 build-plans (driver/rend
 - **Packaging/licensing:** MIT for our code + `NOTICE` crediting Borland (public
   domain) and Sergio Sigala (BSD port).
 
-## Cross-milestone coordination notes (surfaced while spiking the plans)
+## Cross-milestone implementation notes
 
-These are the load-bearing dependencies between milestones — get them right early or pay a retrofit tax:
+These were the load-bearing dependencies between milestones and now describe the
+implemented seams:
 
-- **`Group::execView()` modal loop is the keystone for M3+.** Every dialog and message
-  box hangs on a correct re-entrant modal sub-loop. It is built and headless-tested in
-  **M1 Plan 3** (ahead of strict need) precisely to de-risk M3.
-- **Broadcast fan-out + `Button` default protocol.** `Group` must fan `evBroadcast` to all
-  subviews; M3's default-button behaviour fails silently without it. Built in M1 Plan 3.
-- **`ScrollBar`/`ListViewer` must ship with stable interfaces in M2** — M3 (`ListBox`,
-  dialog scroll bars) and M5 (`OutlineViewer`, color list views) all extend them.
-- **Shared `wcwidth` utility lands in M4 (editor) but should be reusable** by `DrawBuffer`
-  and any width-sensitive view, not re-solved per class. PHP has no built-in.
-- **Persistence fork resolved → PHP-native serialization** (M6 spike): drop Borland's
-  binary `*pstream` hierarchy; use `__serialize`/`__unserialize` on a `Streamable`
-  interface + a `StreamableRegistry`. Watch-item: if we want round-trippable view trees,
-  add a tiny `Streamable` marker to `View` in M1/M2 rather than retrofitting M2–M5 later.
-- **`InputLine` validator hooks (M4)** — ensure M3's `InputLine` exposes a validator seam
-  (`setValidator`/`valid()`), or M4 back-fills it first.
+- **Nested modality and broadcast fan-out.** `Group::execView()` supports re-entrant
+  dialogs, while broadcast delivery and the default-button protocol support reusable
+  dialog controls.
+- **Shared scrolling contracts.** `ScrollBar` and `ListViewer` are the base contracts
+  used by dialog list boxes, outlines, and colour lists.
+- **Width-aware text.** The editor and text device share Unicode-aware width and
+  clipping behaviour rather than treating terminal cells as PHP byte offsets.
+- **Deliberate resource boundary.** Resource files use an explicit `Streamable`
+  allow-list and bounded JSON codec. Named `ViewResource` trees rebuild runtime
+  ownership through registered factories; live owners/screens/cursors and Turbo
+  Vision binary `*pstream` compatibility remain deliberately outside the format.
+- **Input validation seam.** `InputLine` exposes validator and transfer hooks used by
+  the reusable validator family.
 
-### Deferred follow-ups from the M2 review (non-blocking nits)
-
-- **`gfGrowRel` proportional resize** is unimplemented (`View::calcBounds` only does the
-  edge-grow flags). Default windows translate+grow by the full delta on terminal resize
-  instead of scaling. Implement a `Window::calcBounds` override when it matters.
-
-### Deferred follow-ups from the faithfulness audit (4-family parallel review)
+### Deferred follow-ups from the faithfulness audit
 
 All constant families audited byte-for-byte faithful vs the C++ source (Cmd/EventType/
-EventMask/Key/sf-of-gf-dm/all palettes/CGA→ANSI/palette chain). Remaining non-urgent items:
+EventMask/Key/sf-of-gf-dm/all palettes/CGA→ANSI/palette chain). Remaining non-urgent item:
 
 - **Scroll-bar track glyph.** `Glyphs::SCROLL_TRACK = '░'` speckles on crisp fonts just like
   the old desktop did. Consider `▒`/`▓` (or a configurable track glyph) for consistency with
   the new `▓` desktop.
-- **Key-enum coverage gaps** (no *wrong* mappings, just missing entries): Ctrl/Shift/Alt-
-  modified keys (kbCtrlLeft, kbShiftF1, kbAltF1…), Alt-digit keys (kbAlt0–9), and the
-  modifier-variant nav keys aren't enumerated; the decoder strips modifier params. Also LF
-  (0x0A) is aliased to `Key::Enter`, so Ctrl+Enter can't be distinguished. Add when hotkey
-  fidelity matters (M3 menus/dialogs use Alt-letter, which IS covered).
 
 ## Known deferred decisions (revisit at the relevant milestone)
 
@@ -103,12 +93,11 @@ EventMask/Key/sf-of-gf-dm/all palettes/CGA→ANSI/palette chain). Remaining non-
   `>=8.3` if adoption outweighs bleeding-edge idioms.
 - **Windows support** — out of scope initially (`stty`/POSIX assumed); a future
   driver could target Windows VT/conpty.
-- **Wide/combining graphemes** (East-Asian width) — clean ASCII/BMP in M1; full
-  wcwidth-style handling lands with the editor (M4).
-- **Object streaming (M6)** — port Borland's binary streamer vs idiomatic PHP
-  serialization; decided in M6's own spec.
+- **Full historic TVDEMO port** — framework parity and small acceptance demos are in
+  place, but the original all-in-one demo application remains a separately scoped
+  exercise.
 
-## Where workflows / "ultracode" pay off (deferred parallel-heavy work)
+## Where workflows / "ultracode" pay off (future parallel-heavy work)
 
 Most build tasks are sequential TDD and don't warrant multi-agent orchestration. These
 *do*, and should be run as workflows when we reach them:
@@ -116,19 +105,28 @@ Most build tasks are sequential TDD and don't warrant multi-agent orchestration.
 1. **Escape-sequence decoder corpus (Plan 2).** Fan out agents to build + adversarially
    verify the terminal-input decoder against real byte sequences from xterm, kitty, tmux,
    screen, Windows Terminal, iTerm — each emits different bytes for the same key.
-2. **Parallel example translation + faithfulness audit.** Translate the `tvguid*`/demo
-   programs concurrently, each cross-checked against its C++ original for divergence.
-3. **Whole-codebase faithfulness review** against `docs/references/source/` once enough
-   surface exists to audit.
+2. **TVDEMO translation.** Translate its independent calculator, calendar, puzzle,
+   table, gadget, and mouse-dialog screens concurrently, each cross-checked against
+   its C++ original for divergence.
+3. **Whole-codebase faithfulness review** against `docs/references/source/` after a
+   future TVDEMO pass.
 
 ## Where we are
 
-- ✅ **M1 complete:** views & application built and green; tvguid01–03 run on a real terminal and pass headless snapshot tests.
-- ✅ **M2 complete:** windowing built and green; tvguid04–10 ported with headless snapshot tests + real-PTY case. Full suite: 278 passed, PHPStan max clean.
+- ✅ **M1–M2 complete:** foundation and windowing, including the `tvguid01–10`
+  acceptance path, are implemented and continuously covered headlessly.
+- ✅ **M3 complete:** deep menus, reusable dialogs/controls/history/message boxes, and
+  `tvguid11–16` are implemented.
+- ✅ **M4 complete:** validators, editor family, and file/directory dialogs are
+  implemented, with focused legacy acceptance examples.
+- ✅ **M5 complete:** outline and colour-dialog subsystems are implemented.
+- ✅ **M6 complete:** compiled help/viewer, bounded PHP-native resource persistence,
+  string lists, and terminal text devices are implemented.
 - ✅ Reference-gathering complete (`docs/references/`, `examples/cpp/`).
 - ✅ Foundation design approved (`docs/superpowers/specs/2026-06-05-turbovision-foundation-design.md`).
 - ✅ **M1 Plan 1 built & green** and merged to `main`: Geometry, Drawing, Events (47 tests, PHPStan max clean).
 - ✅ **M1 Plan 2 built & green:** Drivers (ANSI + headless), EscapeDecoder, Rendering, Terminal\Screen.
-- ✅ **M1 Plan 3 built & green:** Views (State/View/Group/StaticText/Background/Desktop), Menus (MenuBar/StatusLine + definitions), Application (Program/Application), examples Guide01–03 with headless Feature tests. Full suite: 173 passed, PHPStan max clean.
-- ▶️ **Now:** M3 has working pull-down menus and a full Workbench integration demo; reusable `Dialog`, `Button`, `InputLine`, and `ListBox` controls are next.
+- ✅ **M1 Plan 3 built & green:** Views (State/View/Group/StaticText/Background/Desktop), Menus (MenuBar/StatusLine + definitions), Application (Program/Application), examples Guide01–03 with headless Feature tests.
+- ▶️ **Now:** integrate and harden the completed framework surface; the complete
+  historic TVDEMO remains the next substantial parity project.
 - 🛠️ Working directly on `main` (no feature branches by default).

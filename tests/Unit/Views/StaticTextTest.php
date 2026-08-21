@@ -99,7 +99,7 @@ test('a leading \003 control char centers the line', function (): void {
     expect($screen->back()->rows()[0])->toBe('   Hi     ');
 });
 
-test('supports typed alignment and a centered factory', function (): void {
+test('supports typed alignment and named alignment factories', function (): void {
     $screen = new Screen(new HeadlessDriver(10, 3));
     $screen->init();
     $root = new StaticTextRoot($screen);
@@ -110,11 +110,7 @@ test('supports typed alignment and a centered factory', function (): void {
         alignment: TextAlignment::Center,
     );
     $factory = StaticText::centered(Rect::of(0, 1, 9, 2), 'Hi');
-    $right = new StaticText(
-        Rect::of(0, 2, 9, 3),
-        'Hi',
-        alignment: TextAlignment::Right,
-    );
+    $right = StaticText::rightAligned(Rect::of(0, 2, 9, 3), 'Hi');
     $root->insert($centered);
     $root->insert($factory);
     $root->insert($right);
@@ -122,6 +118,7 @@ test('supports typed alignment and a centered factory', function (): void {
     $root->draw();
 
     expect($factory)->toBeInstanceOf(StaticText::class)
+        ->and($right)->toBeInstanceOf(StaticText::class)
         ->and($screen->back()->rows())->toBe([
             '   Hi     ',
             '   Hi     ',

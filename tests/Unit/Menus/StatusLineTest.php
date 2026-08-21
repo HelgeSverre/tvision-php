@@ -87,3 +87,37 @@ test('a non-matching key press is left untouched', function (): void {
     expect($ev->what)->toBe(EventType::KeyDown)
         ->and($ev->asKey()?->is(Key::Enter))->toBeTrue();
 });
+
+test('status definitions switch when the explicit help context changes', function (): void {
+    [$root, $screen] = statusRoot(30);
+    $line = new StatusLine(
+        Rect::of(0, 0, 30, 1),
+        new StatusDef(0, 0)->items(new StatusItem('~F1~ Help', Key::F1, Cmd::Help)),
+        new StatusDef(42, 42)->items(new StatusItem('~F2~ Rename', Key::F2, 250)),
+    );
+    $root->insert($line);
+
+    $line->setHelpContext(42);
+    $line->draw();
+    expect($screen->back()->rows()[0])->toContain('F2 Rename');
+    expect($screen->back()->rows()[0])->not->toContain('F1 Help');
+
+    $event = Event::keyDown(new KeyDownEvent(Key::F2->value));
+    $line->handleEvent($event);
+    expect($event->isCommand(250))->toBeTrue();
+});
+
+test('status update reads the owner help context and command-set broadcasts redraw safely', function (): void {
+    [$root, $screen] = statusRoot(30);
+    $root->helpCtx = 7;
+    $line = new StatusLine(
+        Rect::of(0, 0, 30, 1),
+        new StatusDef(7, 7)->items(new StatusItem('~F1~ Context', Key::F1, Cmd::Help)),
+    );
+    $root->insert($line);
+
+    $line->update();
+    $line->handleEvent(Event::broadcast(Cmd::CommandSetChanged));
+
+    expect($screen->back()->rows()[0])->toContain('F1 Context');
+});

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace HelgeSverre\TurboVision\Views;
 
 /**
- * The Unicode graphemes M2 views paint, mapped from Turbo Vision's CP437 semigraphics.
+ * Unicode graphemes used by views, mapped from Turbo Vision's CP437 semigraphics.
  * Single source of truth: a future CP437/terminal-quirk mode changes only this file.
  * Icon strings embed ~..~ highlight markers consumed by DrawBuffer::moveCStr.
  */

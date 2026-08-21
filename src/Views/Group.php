@@ -29,6 +29,22 @@ class Group extends View
     /** @var list<Event> Events queued on a root Group that is not a Program. */
     private array $queuedEvents = [];
 
+    /** Nested drawing locks delay a full group redraw until the outer unlock. */
+    private int $drawLock = 0;
+
+    private bool $drawPending = false;
+
+    /** The view currently being executed modally by this group, if any. */
+    private ?View $executingModal = null;
+
+    public function __construct(Rect $bounds)
+    {
+        parent::__construct($bounds);
+        // A group is a router: unlike a plain view it needs every event class in
+        // order to decide which child, if any, should receive it.
+        $this->eventMask = 0xFFFF;
+    }
+
     public function insert(View $view): void
     {
         if ($view === $this) {
@@ -43,6 +59,7 @@ class Group extends View
             throw new InvalidArgumentException('A view must be unowned before it can be inserted.');
         }
 
+        $this->centerIfRequested($view);
         $view->setOwner($this);
         $this->children[] = $view;
         // ofSelectable is an OPTION flag (lives in $options), not a state flag.
@@ -96,6 +113,55 @@ class Group extends View
         return $this->currentView;
     }
 
+    /** Apply ofCenterX/ofCenterY in owner-local coordinates before ownership changes. */
+    private function centerIfRequested(View $view): void
+    {
+        $bounds = $this->centeredBounds($view);
+        if ($bounds === null) {
+            return;
+        }
+
+        $view->setBounds($bounds);
+    }
+
+    /** Recalculate an opted-in child's centered owner-local bounds. */
+    private function centeredBounds(View $view): ?Rect
+    {
+        $options = $view->options;
+        if (($options & State::Centered) === 0) {
+            return null;
+        }
+
+        $bounds = $view->getBounds();
+        $x = $bounds->a->x;
+        $y = $bounds->a->y;
+        if (($options & State::CenterX) !== 0) {
+            $x = max(0, intdiv($this->getExtent()->width() - $bounds->width(), 2));
+        }
+        if (($options & State::CenterY) !== 0) {
+            $y = max(0, intdiv($this->getExtent()->height() - $bounds->height(), 2));
+        }
+
+        return Rect::of($x, $y, $x + $bounds->width(), $y + $bounds->height());
+    }
+
+    /** Keep current selection valid when a selected child is hidden or disabled. */
+    public function viewStateChanged(View $view, int $flag, bool $enable): void
+    {
+        if ($view !== $this->currentView
+            || $enable
+            || ($flag & (State::Visible | State::Disabled)) === 0
+        ) {
+            return;
+        }
+
+        $index = array_search($view, $this->children, true);
+        $this->setCurrent(null);
+        if ($index !== false) {
+            $this->focusReplacement($index);
+        }
+    }
+
     public function setCurrent(?View $view): void
     {
         if ($view !== null && ($view->owner !== $this || ! in_array($view, $this->children, true))) {
@@ -111,6 +177,31 @@ class Group extends View
         $this->currentView = $view;
         if ($view !== null) {
             $view->setState(State::Focused | State::Selected, true);
+        }
+    }
+
+    /**
+     * Active and drag state belong to the whole composite, while focus belongs to
+     * its current child. This lets a selected Window activate nested Scrollers and
+     * expose their scrollbars without every intermediate container duplicating it.
+     */
+    public function setState(int $flag, bool $enable): void
+    {
+        parent::setState($flag, $enable);
+
+        if (($flag & (State::Active | State::Dragging)) !== 0) {
+            $this->lock();
+            try {
+                foreach ($this->children as $child) {
+                    $child->setState($flag, $enable);
+                }
+            } finally {
+                $this->unlock();
+            }
+        }
+
+        if (($flag & State::Focused) !== 0 && $this->currentView !== null) {
+            $this->currentView->setState(State::Focused, $enable);
         }
     }
 
@@ -180,6 +271,93 @@ class Group extends View
         }
     }
 
+    /**
+     * Put $view ahead of $target in Z order. A null target means front-most.
+     * Both views must belong to this group; a target equal to the view is a no-op.
+     */
+    public function reorderInFrontOf(View $view, ?View $target): void
+    {
+        $index = array_search($view, $this->children, true);
+        if ($index === false) {
+            throw new InvalidArgumentException('The reordered view must belong to this group.');
+        }
+        if ($target === $view) {
+            return;
+        }
+        if ($target !== null && ! in_array($target, $this->children, true)) {
+            throw new InvalidArgumentException('The target view must belong to this group.');
+        }
+
+        array_splice($this->children, $index, 1);
+        if ($target === null) {
+            $this->children[] = $view;
+        } else {
+            $targetIndex = array_search($target, $this->children, true);
+            // Later entries are drawn above earlier ones, so insert immediately
+            // after the target to put this view in front of it.
+            array_splice($this->children, $targetIndex + 1, 0, [$view]);
+        }
+        $this->drawView();
+    }
+
+    /**
+     * Return the part of a screen row obscured by siblings drawn after $child.
+     * Used by View's compositor so a direct redraw of a rear sibling cannot
+     * overwrite an already-drawn front sibling.
+     *
+     * @return list<array{0:int,1:int}>
+     */
+    public function higherSiblingIntervals(View $child, int $globalY, int $minX, int $maxX): array
+    {
+        $index = array_search($child, $this->children, true);
+        if ($index === false || $minX >= $maxX) {
+            return [];
+        }
+
+        $intervals = [];
+        for ($i = $index + 1, $count = count($this->children); $i < $count; $i++) {
+            $sibling = $this->children[$i];
+            array_push($intervals, ...$sibling->occlusionIntervals($globalY, $minX, $maxX));
+        }
+
+        return $intervals;
+    }
+
+    /**
+     * Opaque groups cover their whole extent. Transparent groups contribute only
+     * the portions painted by visible descendants, clipped to the group itself.
+     *
+     * @return list<array{0:int,1:int}>
+     */
+    public function occlusionIntervals(int $globalY, int $minX, int $maxX): array
+    {
+        if (! $this->getState(State::Visible) || $minX >= $maxX) {
+            return [];
+        }
+
+        $origin = $this->absoluteOrigin();
+        $bottom = \HelgeSverre\TurboVision\Support\IntMath::add($origin->y, $this->bounds->height());
+        if ($globalY < $origin->y || $globalY >= $bottom) {
+            return [];
+        }
+
+        $start = max($minX, $origin->x);
+        $end = min($maxX, \HelgeSverre\TurboVision\Support\IntMath::add($origin->x, $this->bounds->width()));
+        if ($start >= $end) {
+            return [];
+        }
+        if ($this->isOpaque()) {
+            return [[$start, $end]];
+        }
+
+        $intervals = [];
+        foreach ($this->children as $child) {
+            array_push($intervals, ...$child->occlusionIntervals($globalY, $start, $end));
+        }
+
+        return $intervals;
+    }
+
     public function hasMouseCapture(): bool
     {
         if (parent::hasMouseCapture()) {
@@ -197,8 +375,34 @@ class Group extends View
 
     public function draw(): void
     {
+        if ($this->drawLock > 0) {
+            $this->drawPending = true;
+
+            return;
+        }
+
         foreach ($this->children as $child) {
             $child->drawView();
+        }
+    }
+
+    /** Defer drawing until matching unlock() calls finish. Safe for nesting. */
+    public function lock(): void
+    {
+        $this->drawLock++;
+    }
+
+    /** Complete a deferred drawing region. Extra unlocks are harmless no-ops. */
+    public function unlock(): void
+    {
+        if ($this->drawLock === 0) {
+            return;
+        }
+
+        $this->drawLock--;
+        if ($this->drawLock === 0 && $this->drawPending) {
+            $this->drawPending = false;
+            $this->drawView();
         }
     }
 
@@ -217,11 +421,92 @@ class Group extends View
 
         if ($delta->x !== 0 || $delta->y !== 0) {
             foreach ($this->children as $child) {
-                $child->changeBounds($child->calcBounds($delta));
+                $child->changeBounds($this->centeredBounds($child) ?? $child->calcBounds($delta));
             }
         }
 
         $this->drawView();
+    }
+
+    /**
+     * Return child data in insertion/Z order. PHP values replace the original
+     * byte-record pointer while preserving the same per-child transfer contract.
+     */
+    public function getData(): mixed
+    {
+        $data = [];
+        foreach ($this->children as $child) {
+            if ($child->dataSize() > 0) {
+                $data[] = $child->getData();
+            }
+        }
+
+        return $data;
+    }
+
+    public function dataSize(): int
+    {
+        $size = 0;
+        foreach ($this->children as $child) {
+            $size += max(0, $child->dataSize());
+        }
+
+        return $size;
+    }
+
+    public function setData(mixed $data): void
+    {
+        if (! is_array($data)) {
+            return;
+        }
+
+        $offset = 0;
+        foreach ($this->children as $child) {
+            if ($child->dataSize() <= 0) {
+                continue;
+            }
+            if (array_key_exists($offset, $data)) {
+                $child->setData($data[$offset]);
+            }
+            $offset++;
+        }
+    }
+
+    /** The selected child supplies context unless it explicitly has none. */
+    public function getHelpCtx(): int
+    {
+        $context = $this->currentView?->getHelpCtx() ?? 0;
+
+        return $context !== 0 ? $context : parent::getHelpCtx();
+    }
+
+    /** Validate all controls, except focus-release validation targets the current one. */
+    public function valid(int $command): bool
+    {
+        if ($command === \HelgeSverre\TurboVision\Events\Cmd::ReleasedFocus) {
+            return $this->currentView === null
+                || ($this->currentView->options & State::Validate) === 0
+                || $this->currentView->valid($command);
+        }
+
+        foreach ($this->children as $child) {
+            if (! $child->valid($command)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** The focused path owns the terminal cursor, not the group container. */
+    public function cursorPosition(): ?Point
+    {
+        return $this->currentView?->cursorPosition() ?? parent::cursorPosition();
+    }
+
+    public function resetCursor(): void
+    {
+        $this->screen()?->setCursor($this->cursorPosition());
     }
 
     public function handleEvent(Event $event): void
@@ -240,7 +525,7 @@ class Group extends View
 
         if (($bit & EventMask::Broadcast) !== 0) {
             foreach ($this->children as $child) {
-                if (! $event->isNothing()) {
+                if (! $event->isNothing() && $this->acceptsEvent($child, $event)) {
                     $child->handleEvent($event);
                 }
             }
@@ -257,6 +542,7 @@ class Group extends View
             if (! $event->isNothing()
                 && $this->currentView !== null
                 && $this->acceptsFocusedEvents($this->currentView)
+                && $this->acceptsEvent($this->currentView, $event)
             ) {
                 $this->currentView->handleEvent($event);
             }
@@ -275,6 +561,7 @@ class Group extends View
             if ($child === $this->currentView
                 || ($child->options & $option) === 0
                 || ! $this->acceptsFocusedEvents($child)
+                || ! $this->acceptsEvent($child, $event)
             ) {
                 continue;
             }
@@ -289,6 +576,11 @@ class Group extends View
     private function acceptsFocusedEvents(View $view): bool
     {
         return $view->getState(State::Visible) && ! $view->getState(State::Disabled);
+    }
+
+    private function acceptsEvent(View $view, Event $event): bool
+    {
+        return $event->what->inMask($view->eventMask);
     }
 
     /** Select the closest eligible child at or after a removed child's old index. */
@@ -318,7 +610,7 @@ class Group extends View
         // pointer leaves the view's bounds.
         for ($i = count($this->children) - 1; $i >= 0; $i--) {
             $child = $this->children[$i];
-            if ($child->hasMouseCapture()) {
+            if ($child->hasMouseCapture() && $this->acceptsEvent($child, $event)) {
                 $child->handleEvent($event);
 
                 return;
@@ -331,6 +623,9 @@ class Group extends View
         for ($i = count($this->children) - 1; $i >= 0; $i--) {
             $child = $this->children[$i];
             if (! $child->getState(State::Visible) || $child->getState(State::Disabled)) {
+                continue;
+            }
+            if (! $this->acceptsEvent($child, $event)) {
                 continue;
             }
             if (! $child->getBounds()->contains($local)) {
@@ -363,12 +658,34 @@ class Group extends View
     /** End the current modal execute() loop with $command. */
     public function endModal(int $command): void
     {
-        $this->endState = $command;
+        if ($this->getState(State::Modal)) {
+            $this->endState = $command;
+
+            return;
+        }
+
+        if ($this->executingModal !== null) {
+            if ($this->executingModal->valid($command)) {
+                $this->endState = $command;
+            }
+
+            return;
+        }
+
+        if ($this->owner === null) {
+            if ($this->valid($command)) {
+                $this->endState = $command;
+            }
+
+            return;
+        }
+
+        parent::endModal($command);
     }
 
     /**
-     * Insert $modal, mark it modal, pump events to it until it ends modal, then
-     * remove it and return the end-state command. The keystone for M3 dialogs.
+     * Insert $modal, pump events to it until it ends, then remove it and return the
+     * end-state command.
      */
     public function execView(View $modal): int
     {
@@ -377,32 +694,77 @@ class Group extends View
             throw new InvalidArgumentException('A modal view must be unowned or owned by the executing group.');
         }
         $saveEndState = $this->endState;
+        $saveExecutingModal = $this->executingModal;
+        $saveCurrent = $this->currentView;
         $this->endState = 0;
+        $this->executingModal = $modal;
+        $saveModalEndState = $modal instanceof self ? $modal->endState : 0;
+        if ($modal instanceof self) {
+            $modal->endState = 0;
+        }
 
         if ($saveOwner === null) {
             $this->insert($modal);
         }
         $modal->setState(State::Modal, true);
+        // A modal is the active view for its whole execution scope. This drives
+        // window/frame activation and lets its focused controls receive events.
+        $this->setCurrent($modal);
 
         try {
             $modal->drawView();
+            $modal->present();
 
-            while ($this->endState === 0) {
-                $event = $this->pumpEvent();
-                if ($event === null) {
-                    continue;
+            while (true) {
+                while ($this->endState === 0 && (! $modal instanceof self || $modal->endState === 0)) {
+                    $event = $this->pumpEvent();
+                    if ($event === null) {
+                        continue;
+                    }
+
+                    $modalEnd = $this->handleModalEvent($event);
+                    if ($modalEnd !== null) {
+                        $this->endState = $modalEnd;
+                    } elseif (! $event->isNothing()) {
+                        $modal->handleEvent($event);
+                    }
+
+                    $modal->drawView();
+                    $modal->present();
                 }
-                $modal->handleEvent($event);
-                $modal->drawView();
-            }
 
-            return $this->endState;
+                if ($modal instanceof self && $modal->endState !== 0) {
+                    $result = $modal->endState;
+                    // A grouped modal owns its validation pass; a rejected command
+                    // remains modal rather than leaking a partial form result.
+                    if (! $modal->valid($result)) {
+                        $modal->endState = 0;
+
+                        continue;
+                    }
+
+                    return $result;
+                }
+
+                return $this->endState;
+            }
         } finally {
             $modal->setState(State::Modal, false);
+            if ($modal instanceof self) {
+                $modal->endState = $saveModalEndState;
+            }
             if ($saveOwner === null) {
                 $this->remove($modal);
             }
+            if ($saveCurrent === null) {
+                $this->setCurrent(null);
+            } elseif ($saveCurrent->owner === $this && in_array($saveCurrent, $this->children, true)) {
+                $this->setCurrent($saveCurrent);
+            }
+            $this->executingModal = $saveExecutingModal;
             $this->endState = $saveEndState;
+            $this->drawView();
+            $this->present();
         }
     }
 

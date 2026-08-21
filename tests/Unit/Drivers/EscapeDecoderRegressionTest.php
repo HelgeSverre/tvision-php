@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Regression tests for verified decoder defects fixed in M1 driver layer.
+ * Regression tests for verified terminal decoder defects.
  *
  * Each test is labelled with the original defect ID and covers the exact
  * hex byte sequence that was previously decoded incorrectly.
@@ -52,18 +52,20 @@ test('rxvt Ctrl+Down ESC O b decodes to Key::Down', function (): void {
     expect($result->events[0]->asKey()?->is(Key::Down))->toBeTrue();
 });
 
-test('rxvt Ctrl+Right ESC O c decodes to Key::Right', function (): void {
+test('rxvt Ctrl+Right ESC O c decodes to Key::CtrlRight', function (): void {
     $result = regressionDecode('1b4f63');
 
     expect($result->events)->toHaveCount(1);
-    expect($result->events[0]->asKey()?->is(Key::Right))->toBeTrue();
+    expect($result->events[0]->asKey()?->is(Key::CtrlRight))->toBeTrue()
+        ->and($result->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Ctrl);
 });
 
-test('rxvt Ctrl+Left ESC O d decodes to Key::Left', function (): void {
+test('rxvt Ctrl+Left ESC O d decodes to Key::CtrlLeft', function (): void {
     $result = regressionDecode('1b4f64');
 
     expect($result->events)->toHaveCount(1);
-    expect($result->events[0]->asKey()?->is(Key::Left))->toBeTrue();
+    expect($result->events[0]->asKey()?->is(Key::CtrlLeft))->toBeTrue()
+        ->and($result->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Ctrl);
 });
 
 // ---------------------------------------------------------------------------
@@ -351,13 +353,42 @@ test('Kitty shifted alternate code is used consistently as the ASCII key code', 
         ->and($shifted->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Shift);
 });
 
-test('legacy modifier parameters are retained for arrows and tilde keys', function (): void {
+test('legacy modifier parameters normalize keys with a Turbo Vision combined identity', function (): void {
     $shiftUp = regressionDecode('1b5b313b3241');
     $ctrlF5 = regressionDecode('1b5b31353b357e');
+    $ctrlLeft = regressionDecode('1b5b313b3544');
+    $shiftInsert = regressionDecode('1b5b323b327e');
 
     expect($shiftUp->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Shift)
-        ->and($ctrlF5->events[0]->asKey()?->is(Key::F5))->toBeTrue()
-        ->and($ctrlF5->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Ctrl);
+        ->and($ctrlF5->events[0]->asKey()?->is(Key::CtrlF5))->toBeTrue()
+        ->and($ctrlF5->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Ctrl)
+        ->and($ctrlLeft->events[0]->asKey()?->is(Key::CtrlLeft))->toBeTrue()
+        ->and($ctrlLeft->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Ctrl)
+        ->and($shiftInsert->events[0]->asKey()?->is(Key::ShiftInsert))->toBeTrue()
+        ->and($shiftInsert->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Shift);
+});
+
+test('xterm modified function keys normalize to their Turbo Vision combined identities', function (): void {
+    $shiftF1 = regressionDecode('1b5b313b3250'); // CSI 1;2P
+    $altF4 = regressionDecode('1b5b313b3353'); // CSI 1;3S
+
+    expect($shiftF1->events[0]->asKey()?->is(Key::ShiftF1))->toBeTrue()
+        ->and($shiftF1->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Shift)
+        ->and($altF4->events[0]->asKey()?->is(Key::AltF4))->toBeTrue()
+        ->and($altF4->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Alt);
+});
+
+test('Kitty functional key code points normalize to legacy key identities', function (): void {
+    $ctrlF5 = regressionDecode('1b5b35373336383b3575'); // CSI 57368;5u
+    $shiftTab = regressionDecode('1b5b393b3275'); // CSI 9;2u
+    $ctrlShiftF5 = regressionDecode('1b5b35373336383b3675'); // CSI 57368;6u
+
+    expect($ctrlF5->events[0]->asKey()?->is(Key::CtrlF5))->toBeTrue()
+        ->and($ctrlF5->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Ctrl)
+        ->and($shiftTab->events[0]->asKey()?->is(Key::ShiftTab))->toBeTrue()
+        ->and($shiftTab->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Shift)
+        ->and($ctrlShiftF5->events[0]->asKey()?->is(Key::F5))->toBeTrue()
+        ->and($ctrlShiftF5->events[0]->asKey()?->modifiers)->toBe(KeyModifier::Ctrl | KeyModifier::Shift);
 });
 
 // ---------------------------------------------------------------------------

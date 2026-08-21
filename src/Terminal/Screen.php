@@ -50,6 +50,16 @@ final class Screen
 
     private bool $wasResized = false;
 
+    /** Desired hardware cursor position; null keeps it hidden. */
+    private ?Point $cursor = null;
+
+    private ?Point $presentedCursor = null;
+
+    private bool $cursorVisible = false;
+
+    /** A resize invalidates terminal cursor state independently of cell buffers. */
+    private bool $cursorNeedsReconcile = false;
+
     /** @param (Closure():float)|null $clock Monotonic seconds, injectable for tests. */
     public function __construct(
         private readonly Driver $driver,
@@ -79,6 +89,10 @@ final class Screen
             $this->remainder = '';
             $this->remainderSince = null;
             $this->wasResized = false;
+            $this->cursor = null;
+            $this->presentedCursor = null;
+            $this->cursorVisible = false;
+            $this->cursorNeedsReconcile = false;
         } catch (\Throwable $exception) {
             // Driver::shutdown() is contractually idempotent and must unwind partial init.
             $this->driver->shutdown();
@@ -118,18 +132,64 @@ final class Screen
         $this->back = new Buffer($this->back->width, $this->back->height);
     }
 
+    /**
+     * Set the cursor requested by the focused view. The request is emitted at the
+     * end of the next flush so a frame's paint operations cannot displace it.
+     */
+    public function setCursor(?Point $cursor): void
+    {
+        if ($cursor !== null
+            && ($cursor->x < 0 || $cursor->y < 0 || $cursor->x >= $this->cols() || $cursor->y >= $this->rows())
+        ) {
+            $cursor = null;
+        }
+
+        $this->cursor = $cursor;
+    }
+
     /** Diff front->back, write the minimal ANSI, then copy back into front. */
     public function flush(): void
     {
         $ansi = $this->presenter->present($this->front, $this->back, $this->encoder);
-        if ($ansi === '') {
+        $cursorAnsi = $this->cursorSequence();
+        if ($ansi === '' && $cursorAnsi === '') {
             return;
         }
 
         $this->driver->write($this->capabilities->synchronizedUpdates
-            ? $this->encoder->beginSyncUpdate() . $ansi . $this->encoder->endSyncUpdate()
-            : $ansi);
+            ? $this->encoder->beginSyncUpdate() . $ansi . $cursorAnsi . $this->encoder->endSyncUpdate()
+            : $ansi . $cursorAnsi);
         $this->front = $this->back->copy();
+    }
+
+    private function cursorSequence(): string
+    {
+        if ($this->cursor === null) {
+            if (! $this->cursorVisible && ! $this->cursorNeedsReconcile) {
+                return '';
+            }
+            $this->cursorVisible = false;
+            $this->presentedCursor = null;
+            $this->cursorNeedsReconcile = false;
+
+            return $this->encoder->hideCursor();
+        }
+
+        $sequence = '';
+        if ($this->presentedCursor === null
+            || $this->presentedCursor->x !== $this->cursor->x
+            || $this->presentedCursor->y !== $this->cursor->y
+        ) {
+            $sequence .= $this->encoder->moveCursor($this->cursor->x, $this->cursor->y);
+            $this->presentedCursor = $this->cursor;
+        }
+        if (! $this->cursorVisible || $this->cursorNeedsReconcile) {
+            $sequence .= $this->encoder->showCursor();
+            $this->cursorVisible = true;
+        }
+        $this->cursorNeedsReconcile = false;
+
+        return $sequence;
     }
 
     /**
@@ -212,6 +272,13 @@ final class Screen
         $this->back = new Buffer($cols, $rows);
         $frontFill = $invalidateFront ? new Cell("\0", -1) : null;
         $this->front = new Buffer($cols, $rows, $frontFill);
+        if ($this->cursor !== null
+            && ($this->cursor->x < 0 || $this->cursor->y < 0 || $this->cursor->x >= $cols || $this->cursor->y >= $rows)
+        ) {
+            $this->cursor = null;
+        }
+        $this->presentedCursor = null;
+        $this->cursorNeedsReconcile = true;
     }
 
 }

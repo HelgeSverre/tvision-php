@@ -26,7 +26,7 @@ test('mouseInView is true only for points inside the view bounds', function (): 
         ->and($v->mouseInView(new Point(0, 0)))->toBeFalse();
 });
 
-test('getClipRect returns the extent in M2', function (): void {
+test('getClipRect returns the local extent', function (): void {
     $v = new View(Rect::of(5, 3, 15, 10));
 
     expect($v->getClipRect())->toEqual(Rect::of(0, 0, 10, 7));

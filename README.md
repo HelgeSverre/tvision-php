@@ -94,23 +94,38 @@ restoration, and `Alt-X`/Ctrl-C exit handling.
 ## What you can build today
 
 - **Windowed TUIs** with focus, overlapping views, shadows, move/resize/zoom/close,
-  scroll bars, scrollers, and list viewers.
+  tiled/cascaded desktops, scroll bars, scrollers, and list viewers.
 - **Keyboard and mouse interfaces** with hotkeys, commands, captured drags,
   double-clicks, wheel input, modifier-aware keys, and terminal-resize reflow.
+- **Deep application chrome** with nested pull-down menus, context-sensitive status
+  hints, command sets, palette modes, and keyboard-selectable windows.
+- **Reusable application surfaces** including modal dialogs, buttons, labels,
+  check/radio clusters, validated text fields with history, standard message boxes,
+  file/directory pickers, editors, outline views, colour configuration, and compiled
+  context help.
+- **Text and resources** through bounded terminal text devices plus explicit,
+  allow-listed PHP-native serialization, named declarative view trees, and string lists.
 - **Testable terminal software** through the headless driver, screen buffer, HTML
   renderer, and deterministic frame snapshots.
 - **Modern Unicode displays** with grapheme-aware drawing, box characters, the 16
   CGA colors, ANSI diff rendering, and synchronized terminal updates.
 
-The repository includes five larger applications built entirely on the framework:
+The repository includes six larger applications built entirely on the framework:
 
 | Demo | What it shows | Run it |
 |---|---|---|
+| **Ultra Super Kitchen Sink** | The comprehensive framework tour: feature navigator, deep menus and context menu, dialogs and every control/validator, editors, file pickers, canvas, outline, terminal stream, themes, palette editor, contextual help, safe persistence, declarative resources, tiling, and cascading | `composer demo:kitchensink` |
 | **Turbo Workbench** | The default interactive showcase: real pull-down menus, movable windows, dashboard actions, list and scroller views, palette cycling, status shortcuts, confirmations, and modal help surfaces | `composer demo` |
 | **Turbo Studio** | A visual TUI builder with drag/resize, inspector, layers, persistent themes, undo/redo, safe save prompts, preview, JSON projects, and themed PHP export | `composer demo:studio` |
 | **Calendar** | A polished month planner with mouse navigation, event sheets, recurrence, and metadata-preserving RFC 5545 `.ics` round-tripping | `composer demo:calendar` |
 | **BIOS** | A Phoenix-era setup utility with the iconic cyan/blue/gray palette, tabbed settings, editing, contextual help, and keyboard legends | `composer demo:bios` |
 | **OpenCode UI study** | A source-guided, model-free recreation of OpenCode's centered home, session transcript, prompt composer, model picker, permission, working, and error states | `composer demo:opencode` |
+
+The repository also ships the full `tvguid11`–`tvguid16` tutorial set and focused
+ports of historic acceptance examples for backgrounds, list boxes, validation, text
+devices, life, resource loading, and the editor. They are deliberately small,
+runnable reference applications rather than a claim that every screen of the original
+`TVDEMO` has been recreated.
 
 Turbo Studio is self-hosting: arrange panels, labels, buttons, inputs, lists,
 checkboxes, progress bars, and text areas in the designer, then press **F9** to inspect
@@ -136,6 +151,14 @@ Alt-letter menu hotkey to open a pull-down, use the dashboard buttons, select ta
 rows with Enter, inspect the independently scrollable activity window, cycle window
 palettes with `F8`, and exercise confirmation/help modals. Windows can be moved,
 resized, zoomed, closed, and cycled with the mouse or status-line shortcuts.
+
+For the exhaustive tour, start the Kitchen Sink. Its right-hand Feature Navigator
+opens every reusable subsystem as a real lab; use Enter, Space, or a double-click,
+and right-click the landing Dashboard for the standalone `MenuPopup`. The demo
+preserves live windows across undersized-terminal fallbacks and exposes complete
+find, replace, save, discard, and contextual-help workflows. See the [coverage
+matrix](examples/php/KitchenSink/FEATURES.md) for the exact location of each
+framework feature.
 
 ## Built for real terminals
 
@@ -172,6 +195,7 @@ git clone https://github.com/HelgeSverre/tvision-php.git
 cd tvision-php
 composer install
 
+composer demo:kitchensink
 composer demo
 composer demo:studio
 composer demo:calendar
@@ -204,10 +228,12 @@ chains, command events, modal execution, draw buffers, and deterministic geometr
 behind typed events, enums, immutable rectangles, constructor promotion, and an
 injectable driver boundary.
 
-The foundation, windowing layer, and keyboard/mouse pull-down menus are complete.
-The Workbench and larger demos include application-specific modal surfaces; reusable
-form controls, standard dialogs, editors, help, and persistence remain later
-milestones. See [ROADMAP.md](ROADMAP.md) for the honest feature matrix.
+The framework now includes the reusable dialog, editor, file, help, colour, outline,
+text-device, and resource layers needed for traditional full-screen applications.
+Its resource support intentionally uses an explicit PHP-native, allow-listed format
+rather than claiming compatibility with Turbo Vision's binary object streams. See
+[ROADMAP.md](ROADMAP.md) for the remaining boundary: the complete historic `TVDEMO`
+application is still a stretch goal.
 
 ## Development
 

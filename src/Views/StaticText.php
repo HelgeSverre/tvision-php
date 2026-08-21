@@ -34,6 +34,11 @@ class StaticText extends View
         return new self($bounds, $text, alignment: TextAlignment::Center);
     }
 
+    public static function rightAligned(Rect $bounds, string $text): self
+    {
+        return new self($bounds, $text, alignment: TextAlignment::Right);
+    }
+
     /** StaticText uses palette index 1 -> its text color. */
     public function getPalette(): ?Palette
     {
@@ -46,7 +51,6 @@ class StaticText extends View
         $height = $this->bounds->height();
         $attr = $this->mapColor(1);
 
-        // Blank the whole extent first.
         $blank = new DrawBuffer($width);
         $blank->moveChar(0, ' ', $attr, $width);
         for ($y = 0; $y < $height; $y++) {

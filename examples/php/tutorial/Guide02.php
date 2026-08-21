@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 /*
  * Guide02 — PHP port of Turbo Vision's tvguid02.cc (Borland, 1991).
- * Adds a custom status line with two items. The original binds "Close" to kbAltF3;
- * M1's Key enum stops at the Alt-letter set, so we bind Close to Esc (the conventional
- * close key) — the intent (a second status item dispatching cmClose) is preserved.
+ * Adds a custom status line with two items, including the original Alt-F3 Close
+ * binding.
  */
 
 use HelgeSverre\TurboVision\Application\Application;
@@ -23,9 +22,9 @@ final class Guide02App extends Application
 {
     protected function initStatusLine(Rect $bounds): StatusLine
     {
-        return new StatusLine($bounds, new StatusDef(0, 0xFFFF)->items(
+        return new StatusLine($bounds, StatusDef::all(
             new StatusItem('~Alt-X~ Exit', Key::AltX, Cmd::Quit),
-            new StatusItem('~Alt-F3~ Close', Key::Esc, Cmd::Close),
+            new StatusItem('~Alt-F3~ Close', Key::AltF3, Cmd::Close),
         ));
     }
 }

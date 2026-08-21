@@ -7,6 +7,7 @@ use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
+use HelgeSverre\TurboVision\Events\KeyModifier;
 use HelgeSverre\TurboVision\Events\MessageEvent;
 use HelgeSverre\TurboVision\Events\MouseEvent;
 use HelgeSverre\TurboVision\Events\EventMask;
@@ -28,6 +29,14 @@ test('keyDown() wraps a key payload and exposes it via asKey()', function (): vo
         ->and($e->asKey())->toBeInstanceOf(KeyDownEvent::class)
         ->and($e->asKey()?->is(Key::AltX))->toBeTrue()
         ->and($e->asMessage())->toBeNull();
+});
+
+test('key() creates a named key event with modifiers', function (): void {
+    $e = Event::key(Key::Enter, KeyModifier::Ctrl | KeyModifier::Alt);
+
+    expect($e->what)->toBe(EventType::KeyDown)
+        ->and($e->asKey()?->is(Key::Enter))->toBeTrue()
+        ->and($e->asKey()?->modifiers)->toBe(KeyModifier::Ctrl | KeyModifier::Alt);
 });
 
 test('command() wraps a message payload', function (): void {

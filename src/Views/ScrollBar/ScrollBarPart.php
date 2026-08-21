@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Views\ScrollBar;
 
-/** ScrollBar part codes + orientation/option flags, verbatim from views.h. */
+/** ScrollBar part codes and legacy orientation flags, verbatim from views.h. */
 final class ScrollBarPart
 {
     // sb* part codes (which region was clicked / which key was pressed).
@@ -18,7 +18,7 @@ final class ScrollBarPart
     public const int PageDown = 7;
     public const int Indicator = 8;
 
-    // sb* orientation/option flags passed to Window::standardScrollBar().
+    // Legacy sb* flags accepted by Window::standardScrollBar().
     public const int Horizontal = 0x000;
     public const int Vertical = 0x001;
     public const int HandleKeyboard = 0x002;

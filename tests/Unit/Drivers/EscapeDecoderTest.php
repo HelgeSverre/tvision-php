@@ -93,7 +93,37 @@ test('function keys decode from SS3 and tilde forms', function (): void {
 test('Alt+letter decodes to the matching Alt key', function (): void {
     expect(decodeOneKey("\ex")->is(Key::AltX))->toBeTrue()
         ->and(decodeOneKey("\ef")->is(Key::AltF))->toBeTrue()
-        ->and(decodeOneKey("\eA")->is(Key::AltA))->toBeTrue();
+        ->and(decodeOneKey("\eA")->is(Key::AltA))->toBeTrue()
+        ->and(decodeOneKey("\eA")->modifiers)->toBe(KeyModifier::Alt);
+});
+
+test('legacy ESC Alt-digit sequences retain window-selection key identities', function (): void {
+    $keys = [
+        '0' => Key::Alt0,
+        '1' => Key::Alt1,
+        '2' => Key::Alt2,
+        '3' => Key::Alt3,
+        '4' => Key::Alt4,
+        '5' => Key::Alt5,
+        '6' => Key::Alt6,
+        '7' => Key::Alt7,
+        '8' => Key::Alt8,
+        '9' => Key::Alt9,
+    ];
+
+    foreach ($keys as $character => $expected) {
+        $key = decodeOneKey("\e{$character}");
+
+        expect($key->is($expected))->toBeTrue("Alt+{$character} should be {$expected->name}")
+            ->and($key->modifiers)->toBe(KeyModifier::Alt);
+    }
+});
+
+test('legacy ESC Alt punctuation maps to its Turbo Vision identity', function (): void {
+    expect(decodeOneKey("\e-")->is(Key::AltMinus))->toBeTrue()
+        ->and(decodeOneKey("\e=")->is(Key::AltEqual))->toBeTrue()
+        ->and(decodeOneKey("\e ")->is(Key::AltSpace))->toBeTrue()
+        ->and(decodeOneKey("\e\x7f")->is(Key::AltBackspace))->toBeTrue();
 });
 
 test('SGR mouse press decodes position (1-based -> 0-based) and button', function (): void {
@@ -204,7 +234,9 @@ test('flushPending turns a stranded ESC into Key::Esc', function (): void {
 test('flushPendingEvents preserves consecutive bare ESC presses', function (): void {
     $events = (new EscapeDecoder())->flushPendingEvents("\e\e");
 
+    $events[0]->clear();
+
     expect($events)->toHaveCount(2)
-        ->and($events[0]->asKey()?->is(Key::Esc))->toBeTrue()
+        ->and($events[0]->isNothing())->toBeTrue()
         ->and($events[1]->asKey()?->is(Key::Esc))->toBeTrue();
 });

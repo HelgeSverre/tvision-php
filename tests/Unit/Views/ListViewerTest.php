@@ -8,6 +8,7 @@ use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyDownEvent;
+use HelgeSverre\TurboVision\Events\KeyModifier;
 use HelgeSverre\TurboVision\Events\MouseEvent;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
@@ -177,4 +178,43 @@ test('a cmScrollBarChanged from the vertical bar re-focuses to the bar value', f
 test('getPalette returns cpListViewer', function (): void {
     $lv = new NumberList(Rect::of(0, 0, 12, 5), 1, null, null);
     expect($lv->getPalette()?->get(1))->toBe(0x1A);
+});
+
+test('list viewer resizes attached scroll steps and supports control page navigation', function (): void {
+    $hBar = new ScrollBar(Rect::of(0, 0, 12, 1));
+    $vBar = new ScrollBar(Rect::of(0, 0, 1, 5));
+    $lv = new NumberList(Rect::of(0, 0, 12, 5), 1, $hBar, $vBar);
+    $lv->setRange(20);
+    $lv->changeBounds(Rect::of(0, 0, 20, 8));
+    $lv->focusItem(10);
+
+    $lv->handleEvent(Event::keyDown(new KeyDownEvent(Key::PageUp->value, modifiers: KeyModifier::Ctrl)));
+    expect($hBar->pageStep)->toBe(20)
+        ->and($vBar->pageStep)->toBe(8)
+        ->and($lv->focused)->toBe(0);
+
+    $lv->handleEvent(Event::keyDown(new KeyDownEvent(Key::PageDown->value, modifiers: KeyModifier::Ctrl)));
+    expect($lv->focused)->toBe(19);
+});
+
+test('clicking an attached scrollbar focuses the list and dragging outside auto-scrolls', function (): void {
+    [$root] = lvRoot(20, 10);
+    $bar = new ScrollBar(Rect::of(12, 0, 13, 5));
+    $list = new NumberList(Rect::of(0, 0, 12, 5), 1, null, $bar);
+    $root->insert($bar);
+    $root->insert($list);
+    $list->setRange(20);
+
+    $root->setCurrent($bar);
+    $list->handleEvent(Event::broadcast(Cmd::ScrollBarClicked, $bar));
+    expect($root->current())->toBe($list);
+
+    $list->handleEvent(Event::mouse(EventType::MouseDown, new MouseEvent(new Point(2, 2), buttons: 1)));
+    for ($i = 0; $i < 4; $i++) {
+        $list->handleEvent(Event::mouse(EventType::MouseAuto, new MouseEvent(new Point(2, 8), buttons: 1)));
+    }
+    $list->handleEvent(Event::mouse(EventType::MouseUp, new MouseEvent(new Point(2, 8))));
+
+    expect($list->focused)->toBe(3)
+        ->and($list->getState(State::Dragging))->toBeFalse();
 });

@@ -47,3 +47,19 @@ test('Guide04 closing the window removes it', function (): void {
 
     expect(implode("\n", $app->backRowsForTest()))->not->toContain('Demo Window');
 });
+
+test('Guide04 Alt-F3 status binding closes the selected window', function (): void {
+    $driver = new HeadlessDriver(80, 25);
+    $app = new Guide04App(new Screen($driver));
+    $app->bootForTest();
+    $app->openNewWindowForTest();
+
+    // Exercise an unambiguous xterm Alt-F3 sequence through decoding and
+    // status-line preprocessing, rather than injecting the enum directly.
+    // CSI ... R is also a cursor-position report, so the numeric F3 form is used.
+    $driver->feedInput("\e[13;3~");
+    $app->handleEvent($app->getEvent());
+    $app->drawAndFlushForTest();
+
+    expect(implode("\n", $app->backRowsForTest()))->not->toContain('Demo Window');
+});

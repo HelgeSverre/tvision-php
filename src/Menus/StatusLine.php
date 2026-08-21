@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Menus;
 
+use Closure;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
+use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\MessageEvent;
@@ -23,7 +25,8 @@ final class StatusLine extends MenuView
     /** @var list<StatusDef> */
     private array $defs;
 
-    private int $helpCtx = 0;
+    /** @var null|Closure(int):string */
+    private ?Closure $hintProvider = null;
 
     public function __construct(Rect $bounds, StatusDef ...$defs)
     {
@@ -35,6 +38,29 @@ final class StatusLine extends MenuView
     public function getPalette(): Palette
     {
         return Palette::fromBytes("\x02\x03\x04\x05\x06\x07");
+    }
+
+    /** Change the active help context and redraw only when it actually changes. */
+    public function setHelpContext(int $helpCtx): void
+    {
+        if ($this->helpCtx === $helpCtx) {
+            return;
+        }
+        $this->helpCtx = $helpCtx;
+        $this->drawView();
+    }
+
+    /** Pull the active context from the owning view tree (normally the desktop). */
+    public function update(): void
+    {
+        $this->setHelpContext($this->owner?->getHelpCtx() ?? 0);
+    }
+
+    /** @param null|callable(int):string $provider */
+    public function setHintProvider(?callable $provider): void
+    {
+        $this->hintProvider = $provider === null ? null : Closure::fromCallable($provider);
+        $this->drawView();
     }
 
     /**
@@ -85,11 +111,22 @@ final class StatusLine extends MenuView
             $x += $len + 2;
         }
 
+        $hint = $this->hintProvider === null ? '' : ($this->hintProvider)($this->helpCtx);
+        if ($hint !== '' && $x < $width - 2) {
+            $b->moveStr($x, ' │ ', $cNormal);
+            $b->moveStr($x + 3, TerminalText::slice($hint, 0, max(0, $width - $x - 3)), $cNormal);
+        }
+
         $this->writeBuf(0, 0, $width, 1, $b);
     }
 
     public function handleEvent(Event $event): void
     {
+        if ($event->what === EventType::Broadcast && $event->asMessage()?->command === Cmd::CommandSetChanged) {
+            $this->drawView();
+
+            return;
+        }
         if ($event->what === EventType::KeyDown) {
             $key = $event->asKey();
             if ($key === null) {
@@ -97,7 +134,6 @@ final class StatusLine extends MenuView
             }
             foreach ($this->enabledItems() as $item) {
                 if ($item->key !== null && $key->is($item->key)) {
-                    // Faithful: rewrite this event into a Command in place.
                     $event->what = EventType::Command;
                     $event->payload = new MessageEvent($item->command);
 

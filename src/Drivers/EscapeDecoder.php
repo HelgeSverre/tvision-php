@@ -93,6 +93,29 @@ final class EscapeDecoder
         'd' => Key::Left,
     ];
 
+    /**
+     * Kitty's all-keys-as-escape-codes enhancement represents F1..F12 using
+     * private-use code points. Earlier functional keys retain their legacy
+     * CSI/SS3 representations, so this is the first range we can faithfully
+     * expose through Turbo Vision's public Key enum.
+     *
+     * @see https://sw.kovidgoyal.net/kitty/keyboard-protocol/#functional-key-definitions
+     */
+    private const array KITTY_FUNCTIONAL = [
+        57364 => Key::F1,
+        57365 => Key::F2,
+        57366 => Key::F3,
+        57367 => Key::F4,
+        57368 => Key::F5,
+        57369 => Key::F6,
+        57370 => Key::F7,
+        57371 => Key::F8,
+        57372 => Key::F9,
+        57373 => Key::F10,
+        57374 => Key::F11,
+        57375 => Key::F12,
+    ];
+
     public function decode(string $bytes): DecodeResult
     {
         /** @var list<Event> $events */
@@ -191,11 +214,12 @@ final class EscapeDecoder
             return [];
         }
 
-        return array_fill(
-            0,
-            strlen($remainder),
-            Event::keyDown(new KeyDownEvent(Key::Esc->value)),
-        );
+        $events = [];
+        for ($i = 0, $count = strlen($remainder); $i < $count; $i++) {
+            $events[] = Event::key(Key::Esc);
+        }
+
+        return $events;
     }
 
     /**
@@ -260,7 +284,9 @@ final class EscapeDecoder
             }
             $final = $bytes[$i + 2];
             if (isset(self::SS3[$final])) {
-                $events[] = Event::keyDown(new KeyDownEvent(self::SS3[$final]->value));
+                // rxvt encodes Ctrl+arrows as lowercase SS3 final bytes.
+                $modifiers = ctype_lower($final) ? KeyModifier::Ctrl : KeyModifier::None;
+                $events[] = $this->legacyKeyEvent(self::SS3[$final], $modifiers);
             }
 
             return 3;
@@ -300,18 +326,16 @@ final class EscapeDecoder
             // Two bare ESC bytes (or ESC ESC followed by non-sequence byte):
             // emit first ESC as Key::Esc, consume 1 byte; the second ESC will be
             // processed on the next iteration or returned as remainder.
-            $events[] = Event::keyDown(new KeyDownEvent(Key::Esc->value));
+            $events[] = Event::key(Key::Esc);
 
             return 1;
         }
 
-        // \e<letter> -> Alt+letter
-        if (preg_match('/[A-Za-z]/', $next) === 1) {
-            $altCase = 'Alt' . strtoupper($next);
-            $key     = self::altKey($altCase);
-            if ($key !== null) {
-                $events[] = Event::keyDown(new KeyDownEvent($key->value));
-            }
+        // Legacy Alt keypresses are sent as ESC followed by their base byte.
+        // Preserve Turbo Vision's combined identities, including Alt+digits
+        // used for desktop window selection.
+        if (($key = self::altCharacterKey($next)) !== null) {
+            $events[] = $this->legacyKeyEvent($key, KeyModifier::Alt);
 
             return 2;
         }
@@ -356,7 +380,9 @@ final class EscapeDecoder
     {
         // Plain CSI letter with no parameters: direct navigation key.
         if ($params === '' && isset(self::CSI_LETTER[$final])) {
-            $events[] = Event::keyDown(new KeyDownEvent(self::CSI_LETTER[$final]->value));
+            // rxvt encodes Shift+arrows as lowercase CSI final bytes.
+            $modifiers = ctype_lower($final) ? KeyModifier::Shift : KeyModifier::None;
+            $events[] = $this->legacyKeyEvent(self::CSI_LETTER[$final], $modifiers);
 
             return;
         }
@@ -365,7 +391,7 @@ final class EscapeDecoder
         if ($final === '~') {
             [$n, $modifiers] = $this->legacyKeyParameters($params);
             if ($n !== null && isset(self::CSI_TILDE[$n])) {
-                $events[] = Event::keyDown(new KeyDownEvent(self::CSI_TILDE[$n]->value, modifiers: $modifiers));
+                $events[] = $this->legacyKeyEvent(self::CSI_TILDE[$n], $modifiers);
             }
 
             return;
@@ -389,10 +415,7 @@ final class EscapeDecoder
         if ($params !== '' && isset(self::CSI_LETTER[$final])) {
             [$prefix, $modifiers] = $this->legacyKeyParameters($params);
             if ($prefix === 1) {
-                $events[] = Event::keyDown(new KeyDownEvent(
-                    self::CSI_LETTER[$final]->value,
-                    modifiers: $modifiers,
-                ));
+                $events[] = $this->legacyKeyEvent(self::CSI_LETTER[$final], $modifiers);
             }
 
             return;
@@ -403,10 +426,7 @@ final class EscapeDecoder
         if ($params !== '' && $final !== 'R' && isset(self::SS3[$final])) {
             [$prefix, $modifiers] = $this->legacyKeyParameters($params);
             if ($prefix === 1) {
-                $events[] = Event::keyDown(new KeyDownEvent(
-                    self::SS3[$final]->value,
-                    modifiers: $modifiers,
-                ));
+                $events[] = $this->legacyKeyEvent(self::SS3[$final], $modifiers);
             }
 
             return;
@@ -483,7 +503,7 @@ final class EscapeDecoder
             }
         }
 
-        $special = match ($codepoint) {
+        $special = self::KITTY_FUNCTIONAL[$codepoint] ?? match ($codepoint) {
             9 => Key::Tab,
             13 => Key::Enter,
             27 => Key::Esc,
@@ -491,7 +511,7 @@ final class EscapeDecoder
             default => null,
         };
         if ($special !== null) {
-            $events[] = Event::keyDown(new KeyDownEvent($special->value, modifiers: $modifiers));
+            $events[] = $this->legacyKeyEvent($special, $modifiers);
 
             return;
         }
@@ -519,12 +539,12 @@ final class EscapeDecoder
         }
 
         if (($modifiers & KeyModifier::Alt) !== 0
-            && (($shortcutCodepoint >= ord('A') && $shortcutCodepoint <= ord('Z'))
-                || ($shortcutCodepoint >= ord('a') && $shortcutCodepoint <= ord('z')))
+            && $shortcutCodepoint >= 0
+            && $shortcutCodepoint <= 0x7F
         ) {
-            $altKey = self::altKey('Alt' . strtoupper(chr($shortcutCodepoint)));
+            $altKey = self::altCharacterKey(chr($shortcutCodepoint));
             if ($altKey !== null) {
-                $events[] = Event::keyDown(new KeyDownEvent($altKey->value, '', $modifiers));
+                $events[] = $this->legacyKeyEvent($altKey, $modifiers);
 
                 return;
             }
@@ -570,6 +590,85 @@ final class EscapeDecoder
         }
 
         return mb_chr($codepoint, 'UTF-8');
+    }
+
+    /**
+     * Preserve Turbo Vision's historical combined key identities when the
+     * modern terminal protocol describes the same unambiguous keypress as a
+     * base key plus modifiers. Modifier metadata is kept intact for callers
+     * that need the full modern input state.
+     */
+    private function legacyKeyEvent(Key $key, int $modifiers): Event
+    {
+        return Event::keyDown(new KeyDownEvent(
+            $this->legacyKeyCode($key, $modifiers),
+            modifiers: $modifiers,
+        ));
+    }
+
+    private function legacyKeyCode(Key $key, int $modifiers): int
+    {
+        // Lock and platform-modifier bits do not alter Turbo Vision's kbXxx
+        // identity. Only normalize an exact Shift, Alt, or Ctrl counterpart;
+        // combinations such as Ctrl+Shift+F5 deliberately retain the base key
+        // plus full metadata because no historical combined code exists.
+        $primary = $modifiers & (KeyModifier::Shift | KeyModifier::Alt | KeyModifier::Ctrl);
+
+        return match ($primary) {
+            KeyModifier::Shift => match ($key) {
+                Key::Tab => Key::ShiftTab->value,
+                Key::Insert => Key::ShiftInsert->value,
+                Key::Delete => Key::ShiftDelete->value,
+                Key::F1 => Key::ShiftF1->value,
+                Key::F2 => Key::ShiftF2->value,
+                Key::F3 => Key::ShiftF3->value,
+                Key::F4 => Key::ShiftF4->value,
+                Key::F5 => Key::ShiftF5->value,
+                Key::F6 => Key::ShiftF6->value,
+                Key::F7 => Key::ShiftF7->value,
+                Key::F8 => Key::ShiftF8->value,
+                Key::F9 => Key::ShiftF9->value,
+                Key::F10 => Key::ShiftF10->value,
+                default => $key->value,
+            },
+            KeyModifier::Ctrl => match ($key) {
+                Key::Enter => Key::CtrlEnter->value,
+                Key::Backspace => Key::CtrlBackspace->value,
+                Key::Insert => Key::CtrlInsert->value,
+                Key::Delete => Key::CtrlDelete->value,
+                Key::Left => Key::CtrlLeft->value,
+                Key::Right => Key::CtrlRight->value,
+                Key::End => Key::CtrlEnd->value,
+                Key::PageDown => Key::CtrlPageDown->value,
+                Key::Home => Key::CtrlHome->value,
+                Key::PageUp => Key::CtrlPageUp->value,
+                Key::F1 => Key::CtrlF1->value,
+                Key::F2 => Key::CtrlF2->value,
+                Key::F3 => Key::CtrlF3->value,
+                Key::F4 => Key::CtrlF4->value,
+                Key::F5 => Key::CtrlF5->value,
+                Key::F6 => Key::CtrlF6->value,
+                Key::F7 => Key::CtrlF7->value,
+                Key::F8 => Key::CtrlF8->value,
+                Key::F9 => Key::CtrlF9->value,
+                Key::F10 => Key::CtrlF10->value,
+                default => $key->value,
+            },
+            KeyModifier::Alt => match ($key) {
+                Key::F1 => Key::AltF1->value,
+                Key::F2 => Key::AltF2->value,
+                Key::F3 => Key::AltF3->value,
+                Key::F4 => Key::AltF4->value,
+                Key::F5 => Key::AltF5->value,
+                Key::F6 => Key::AltF6->value,
+                Key::F7 => Key::AltF7->value,
+                Key::F8 => Key::AltF8->value,
+                Key::F9 => Key::AltF9->value,
+                Key::F10 => Key::AltF10->value,
+                default => $key->value,
+            },
+            default => $key->value,
+        };
     }
 
     /** Consume OSC/DCS/SOS/PM/APC through BEL (OSC only) or the ESC \\ ST terminator. */
@@ -688,6 +787,30 @@ final class EscapeDecoder
             $what,
             new MouseEvent(new Point($x, $y), $buttonBit, $doubleClick),
         );
+    }
+
+    /** Resolve a byte participating in a legacy Alt sequence to a Key, or null. */
+    private static function altCharacterKey(string $character): ?Key
+    {
+        return match ($character) {
+            '0' => Key::Alt0,
+            '1' => Key::Alt1,
+            '2' => Key::Alt2,
+            '3' => Key::Alt3,
+            '4' => Key::Alt4,
+            '5' => Key::Alt5,
+            '6' => Key::Alt6,
+            '7' => Key::Alt7,
+            '8' => Key::Alt8,
+            '9' => Key::Alt9,
+            '-' => Key::AltMinus,
+            '=' => Key::AltEqual,
+            ' ' => Key::AltSpace,
+            "\x08", "\x7f" => Key::AltBackspace,
+            default => preg_match('/^[A-Za-z]$/D', $character) === 1
+                ? self::altKey('Alt' . strtoupper($character))
+                : null,
+        };
     }
 
     /** Resolve an "Alt<LETTER>" case name to the Key enum, or null. */

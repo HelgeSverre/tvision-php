@@ -84,9 +84,8 @@ final class AnsiEncoder
     }
 
     /**
-     * Begin a synchronized update (DEC private mode 2026). Modern terminals
-     * Supporting terminals buffer everything until the matching endSyncUpdate()
-     * and present the frame atomically — no tearing or flicker.
+     * Begin a synchronized update (DEC private mode 2026). Supporting terminals buffer
+     * output until endSyncUpdate() and present the frame atomically.
      */
     public function beginSyncUpdate(): string
     {

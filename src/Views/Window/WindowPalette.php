@@ -18,10 +18,19 @@ final class WindowPalette
     /** The palette byte string for a wp* index (defaults to Blue). */
     public static function byteFor(int $index): string
     {
-        return match ($index) {
+        return match (self::normalize($index)) {
             self::Cyan => self::CYAN_WINDOW,
             self::Gray => self::GRAY_WINDOW,
             default => self::BLUE_WINDOW,
+        };
+    }
+
+    /** Normalize untrusted palette values to Turbo Vision's default blue window. */
+    public static function normalize(int $index): int
+    {
+        return match ($index) {
+            self::Cyan, self::Gray => $index,
+            default => self::Blue,
         };
     }
 }

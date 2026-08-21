@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Views;
 
+use HelgeSverre\TurboVision\Commands\CommandSet;
+use HelgeSverre\TurboVision\Commands\CommandTarget;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
@@ -12,6 +14,7 @@ use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\MouseEvent;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarOrientation;
 use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarPart;
 use HelgeSverre\TurboVision\Views\Window\WindowFlags;
 use HelgeSverre\TurboVision\Views\Window\WindowPalette;
@@ -79,6 +82,11 @@ class Window extends Group implements FrameOwner
         return $this->number;
     }
 
+    public function frame(): ?Frame
+    {
+        return $this->frame;
+    }
+
     public function frameIsZoomed(): bool
     {
         [$minW, $minH, $maxW, $maxH] = $this->sizeLimits();
@@ -86,11 +94,64 @@ class Window extends Group implements FrameOwner
         return $this->bounds->width() === $maxW && $this->bounds->height() === $maxH;
     }
 
-    // --- palette ---
+    // --- title, number, palette ---
 
     public function setPalette(int $index): void
     {
+        $index = WindowPalette::normalize($index);
+        if ($this->paletteIndex === $index) {
+            return;
+        }
+
         $this->paletteIndex = $index;
+        $this->drawView();
+    }
+
+    public function paletteIndex(): int
+    {
+        return $this->paletteIndex;
+    }
+
+    public function setTitle(string $title): void
+    {
+        if ($this->title === $title) {
+            return;
+        }
+
+        $this->title = $title;
+        $this->frame?->drawView();
+    }
+
+    public function getTitle(): string
+    {
+        return $this->title;
+    }
+
+    public function setNumber(int $number): void
+    {
+        if ($this->number === $number) {
+            return;
+        }
+
+        $this->number = $number;
+        $this->frame?->drawView();
+    }
+
+    public function setFlags(int $flags): void
+    {
+        if ($this->flags === $flags) {
+            return;
+        }
+
+        $selected = $this->getState(State::Selected);
+        if ($selected) {
+            $this->setWindowCommands(false);
+        }
+        $this->flags = $flags;
+        if ($selected) {
+            $this->setWindowCommands(true);
+        }
+        $this->frame?->drawView();
     }
 
     public function getPalette(): ?Palette
@@ -116,21 +177,33 @@ class Window extends Group implements FrameOwner
 
     /**
      * Build, insert and return a standard scroll bar on the right (vertical) or bottom
-     * (horizontal) edge, faithful to TWindow::standardScrollBar positions.
+     * (horizontal) edge. Integer flags remain supported for compatibility.
      */
-    public function standardScrollBar(int $options): ScrollBar
-    {
+    public function standardScrollBar(
+        ScrollBarOrientation|int $options,
+        bool $handleKeyboard = false,
+    ): ScrollBar {
+        if (is_int($options)) {
+            $handleKeyboard = $handleKeyboard
+                || ($options & ScrollBarPart::HandleKeyboard) !== 0;
+            $orientation = ($options & ScrollBarPart::Vertical) !== 0
+                ? ScrollBarOrientation::Vertical
+                : ScrollBarOrientation::Horizontal;
+        } else {
+            $orientation = $options;
+        }
+
         $ext = $this->getExtent();
 
-        if (($options & ScrollBarPart::Vertical) !== 0) {
+        if ($orientation === ScrollBarOrientation::Vertical) {
             $r = Rect::of($ext->b->x - 1, $ext->a->y + 1, $ext->b->x, $ext->b->y - 1);
         } else {
             $r = Rect::of($ext->a->x + 2, $ext->b->y - 1, $ext->b->x - 2, $ext->b->y);
         }
 
-        $bar = new ScrollBar($r);
+        $bar = new ScrollBar($r, $orientation);
         $this->insert($bar);
-        if (($options & ScrollBarPart::HandleKeyboard) !== 0) {
+        if ($handleKeyboard) {
             $bar->options |= State::PostProcess;
         }
 
@@ -170,10 +243,24 @@ class Window extends Group implements FrameOwner
                 $forUs = $info === null || $info === $this;
 
                 switch ($msg->command) {
+                    case Cmd::Resize:
+                        if (($this->flags & (WindowFlags::Move | WindowFlags::Grow)) !== 0 && $forUs) {
+                            // Frame drags run directly in this PHP port. Retain cmResize
+                            // as a consumed compatibility command for custom frames.
+                            $this->clearEvent($event);
+                        }
+                        break;
                     case Cmd::Close:
                         if (($this->flags & WindowFlags::Close) !== 0 && $forUs) {
                             $this->clearEvent($event);
-                            $this->close();
+                            if ($this->getState(State::Modal)) {
+                                // A modal close must unwind through Dialog's cmCancel
+                                // path, not detach the executing view out from under
+                                // Group::execView().
+                                $this->putEvent(Event::command(Cmd::Cancel, $this));
+                            } else {
+                                $this->close();
+                            }
                         }
                         break;
                     case Cmd::Zoom:
@@ -183,6 +270,18 @@ class Window extends Group implements FrameOwner
                         }
                         break;
                 }
+            }
+        } elseif ($event->what === EventType::Broadcast) {
+            $message = $event->asMessage();
+            if ($message !== null
+                && $message->command === Cmd::SelectWindowNum
+                && $message->info === $this->number
+                && $this->number >= 1
+                && $this->number <= 9
+                && ($this->options & State::Selectable) !== 0
+            ) {
+                $this->select();
+                $this->clearEvent($event);
             }
         } elseif ($event->what === EventType::KeyDown) {
             $key = $event->asKey();
@@ -240,10 +339,10 @@ class Window extends Group implements FrameOwner
         $this->setState(State::Dragging, false);
     }
 
-    /** Remove this window from its owner (faithful close, sans valid()/destroy). */
+    /** Remove this window only when its controls accept a close validation pass. */
     public function close(): void
     {
-        if ($this->owner instanceof Group) {
+        if ($this->valid(Cmd::Close) && $this->owner instanceof Group) {
             $this->owner->remove($this);
         }
     }
@@ -251,12 +350,20 @@ class Window extends Group implements FrameOwner
     /** Toggle between the saved zoomRect and the maximum (desktop) extent. */
     public function zoom(): void
     {
+        // An unowned window has no finite desktop extent. In the C++ framework a
+        // window is always owned before a zoom command can reach it; make the PHP
+        // convenience API equally safe when called directly in tests or builders.
+        if (! $this->owner instanceof Group) {
+            return;
+        }
+
         [$minW, $minH, $maxW, $maxH] = $this->sizeLimits();
 
         if ($this->bounds->width() !== $maxW || $this->bounds->height() !== $maxH) {
             $this->zoomRect = $this->bounds;
-            $originX = $this->owner?->getExtent()->a->x ?? 0;
-            $originY = $this->owner?->getExtent()->a->y ?? 0;
+            $extent = $this->owner->getExtent();
+            $originX = $extent->a->x;
+            $originY = $extent->a->y;
             $this->changeBounds(Rect::of($originX, $originY, $originX + $maxW, $originY + $maxH));
         } else {
             $this->changeBounds($this->zoomRect);
@@ -277,9 +384,47 @@ class Window extends Group implements FrameOwner
         if (($flag & State::Selected) !== 0) {
             parent::setState(State::Active, $enable);
             $this->frame?->setState(State::Active, $enable);
+            $this->setWindowCommands($enable);
         }
         if (($flag & State::Dragging) !== 0) {
             $this->frame?->setState(State::Dragging, $enable);
         }
+    }
+
+    /** Commands enabled only while this window is the selected desktop window. */
+    private function setWindowCommands(bool $enable): void
+    {
+        $target = $this->commandTarget();
+        if ($target === null) {
+            return;
+        }
+
+        $commands = CommandSet::of(Cmd::Next, Cmd::Prev);
+        if (($this->flags & (WindowFlags::Move | WindowFlags::Grow)) !== 0) {
+            $commands = $commands->with(Cmd::Resize);
+        }
+        if (($this->flags & WindowFlags::Close) !== 0) {
+            $commands = $commands->with(Cmd::Close);
+        }
+        if (($this->flags & WindowFlags::Zoom) !== 0) {
+            $commands = $commands->with(Cmd::Zoom);
+        }
+
+        if ($enable) {
+            $commands->enableOn($target);
+        } else {
+            $commands->disableOn($target);
+        }
+    }
+
+    private function commandTarget(): ?CommandTarget
+    {
+        for ($view = $this->owner; $view !== null; $view = $view->owner) {
+            if ($view instanceof CommandTarget) {
+                return $view;
+            }
+        }
+
+        return null;
     }
 }

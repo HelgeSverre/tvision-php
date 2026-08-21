@@ -70,7 +70,6 @@ class Frame extends View
             ? [Glyphs::DOUBLE_TOP_LEFT, Glyphs::DOUBLE_TOP_RIGHT, Glyphs::DOUBLE_BOTTOM_LEFT, Glyphs::DOUBLE_BOTTOM_RIGHT, Glyphs::DOUBLE_HORIZONTAL, Glyphs::DOUBLE_VERTICAL]
             : [Glyphs::SINGLE_TOP_LEFT, Glyphs::SINGLE_TOP_RIGHT, Glyphs::SINGLE_BOTTOM_LEFT, Glyphs::SINGLE_BOTTOM_RIGHT, Glyphs::SINGLE_HORIZONTAL, Glyphs::SINGLE_VERTICAL];
 
-        // --- top line ---
         $top = new DrawBuffer($w);
         $top->moveChar(0, $tl, $frameAttr, 1);
         $top->moveChar(1, $hz, $frameAttr, $w - 2);
@@ -79,18 +78,29 @@ class Frame extends View
         $owner = $this->frameOwner();
         if ($owner !== null) {
             $title = $owner->frameTitle();
-            if ($title !== '') {
-                $maxTitle = max(0, $w - 10);
-                $len = min(TerminalText::length($title), $maxTitle);
-                $title = TerminalText::slice($title, 0, $len);
-                $i = intdiv($w - $len, 2);
-                $top->moveChar($i - 1, ' ', $titleAttr, 1);
-                $top->moveStr($i, $title, $titleAttr);
-                $top->moveChar($i + $len, ' ', $titleAttr, 1);
-            }
-
             $flags = $owner->frameFlags();
             $number = $owner->frameNumber();
+            if ($title !== '') {
+                // Reserve the active close icon and the always-visible number/zoom
+                // cluster before centering the title. The historic width-10 rule
+                // alone lets a long title overwrite those controls in narrow windows.
+                $left = $active && ($flags & WindowFlags::Close) !== 0 ? 5 : 1;
+                $right = $w - 1;
+                if ($number > 0 && $number < 10) {
+                    $right = min($right, ($flags & WindowFlags::Zoom) !== 0 ? $w - 7 : $w - 3);
+                } elseif ($active && ($flags & WindowFlags::Zoom) !== 0) {
+                    $right = min($right, $w - 5);
+                }
+                $maxTitle = max(0, min($w - 10, $right - $left - 2));
+                $len = min(TerminalText::length($title), $maxTitle);
+                $title = TerminalText::slice($title, 0, $len);
+                if ($len > 0) {
+                    $i = $left + 1 + intdiv(max(0, $right - $left - $len - 2), 2);
+                    $top->moveChar($i - 1, ' ', $titleAttr, 1);
+                    $top->moveStr($i, $title, $titleAttr);
+                    $top->moveChar($i + $len, ' ', $titleAttr, 1);
+                }
+            }
 
             if ($active) {
                 if (($flags & WindowFlags::Close) !== 0) {
@@ -110,7 +120,6 @@ class Frame extends View
 
         $this->writeLine(0, 0, $w, 1, $top);
 
-        // --- middle lines ---
         for ($y = 1; $y < $h - 1; $y++) {
             $mid = new DrawBuffer($w);
             $mid->moveChar(0, $vt, $frameAttr, 1);
@@ -119,7 +128,6 @@ class Frame extends View
             $this->writeLine(0, $y, $w, 1, $mid);
         }
 
-        // --- bottom line ---
         $bot = new DrawBuffer($w);
         $bot->moveChar(0, $bl, $frameAttr, 1);
         $bot->moveChar(1, $hz, $frameAttr, $w - 2);
@@ -189,7 +197,6 @@ class Frame extends View
             }
         }
 
-        // Bottom-right resize corner.
         if ($local->x >= $w - 2 && $local->y >= $h - 1 && $active && ($flags & WindowFlags::Grow) !== 0) {
             if ($owner instanceof Window) {
                 $owner->beginMouseDrag($mouse, State::DragGrow);

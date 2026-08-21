@@ -1,0 +1,24 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use HelgeSverre\TurboVision\Help\HelpCompiler;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+if ($argc < 3 || $argc > 4) {
+    fwrite(STDERR, "Usage: tvhc <source.txt> <output.tvhelp> [contexts.php]\n");
+    exit(64);
+}
+$source = @file_get_contents($argv[1]);
+if ($source === false) {
+    fwrite(STDERR, "Unable to read help source '{$argv[1]}'.\n");
+    exit(66);
+}
+try {
+    (new HelpCompiler())->compile($source, $argv[2], $argv[3] ?? null);
+} catch (Throwable $exception) {
+    fwrite(STDERR, "tvhc: {$exception->getMessage()}\n");
+    exit(1);
+}

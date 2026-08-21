@@ -17,6 +17,7 @@ final class SubMenu
     public function __construct(
         public string $name,
         public ?Key $key = null,
+        public int $helpCtx = 0,
     ) {
         $this->menu = new Menu();
     }
@@ -32,6 +33,7 @@ final class SubMenu
                     key: $item->key,
                     help: '',
                     subMenu: $item->menu(),
+                    helpCtx: $item->helpCtx,
                 ));
             } else {
                 $this->menu->add($item);

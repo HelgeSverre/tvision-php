@@ -21,6 +21,7 @@ final class Menu
                 key: $sub->key,
                 help: '',
                 subMenu: $sub->menu(),
+                helpCtx: $sub->helpCtx,
             );
         }
 

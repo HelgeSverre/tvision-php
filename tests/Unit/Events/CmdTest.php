@@ -26,7 +26,7 @@ test('user commands begin at 100', function (): void {
     expect(Cmd::FirstUser)->toBe(100);
 });
 
-test('M2 broadcast and window command codes match Turbo Vision', function (): void {
+test('broadcast and window command codes match Turbo Vision', function (): void {
     expect(Cmd::CloseAll)->toBe(37)
         ->and(Cmd::ReceivedFocus)->toBe(50)
         ->and(Cmd::ReleasedFocus)->toBe(51)
@@ -35,4 +35,31 @@ test('M2 broadcast and window command codes match Turbo Vision', function (): vo
         ->and(Cmd::ScrollBarClicked)->toBe(54)
         ->and(Cmd::SelectWindowNum)->toBe(55)
         ->and(Cmd::ListItemSelected)->toBe(56);
+});
+
+test('standard application, dialog, colour, file, outline, and editor command families match Turbo Vision', function (): void {
+    expect(Cmd::Cut)->toBe(20)
+        ->and(Cmd::Cascade)->toBe(26)
+        ->and(Cmd::New)->toBe(30)
+        ->and(Cmd::DosShell)->toBe(36)
+        ->and(Cmd::SysWakeup)->toBe(40)
+        ->and(Cmd::RecordHistory)->toBe(60)
+        ->and(Cmd::GrabDefault)->toBe(61)
+        ->and(Cmd::ReleaseDefault)->toBe(62)
+        ->and(Cmd::ColorForegroundChanged)->toBe(71)
+        ->and(Cmd::SaveColorIndex)->toBe(76)
+        ->and(Cmd::Find)->toBe(82)
+        ->and(Cmd::SearchAgain)->toBe(84)
+        ->and(Cmd::FileFocused)->toBe(102)
+        ->and(Cmd::FileDoubleClicked)->toBe(103)
+        ->and(Cmd::FileOpen)->toBe(1001)
+        ->and(Cmd::DirSelection)->toBe(1007)
+        ->and(Cmd::OutlineItemSelected)->toBe(301)
+        ->and(Cmd::CharLeft)->toBe(500)
+        ->and(Cmd::UpdateTitle)->toBe(523);
+});
+
+test('new applications can use a non-colliding command range', function (): void {
+    expect(Cmd::FirstUser)->toBe(100)
+        ->and(Cmd::FirstSafeUser)->toBe(200);
 });

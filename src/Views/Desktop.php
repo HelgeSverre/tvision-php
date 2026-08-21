@@ -11,10 +11,13 @@ use HelgeSverre\TurboVision\Geometry\Rect;
 
 /**
  * The backdrop Group (faithful to TDeskTop). Occupies the area between the menu bar
- * and the status line, and owns a Background filling its extent. Hosts windows in M2.
+ * and status line, owns a Background filling its extent, and hosts application windows.
  */
 class Desktop extends Group
 {
+    /** Arrange tiles by rows by default; set true to prefer vertical columns. */
+    public bool $tileColumnsFirst = false;
+
     public function __construct(Rect $bounds)
     {
         parent::__construct($bounds);
@@ -63,8 +66,10 @@ class Desktop extends Group
         if ($event->what === EventType::Command) {
             $msg = $event->asMessage();
             if ($msg !== null && ($msg->command === Cmd::Next || $msg->command === Cmd::Prev)) {
-                $this->cycleWindow($msg->command === Cmd::Next ? 1 : -1);
                 $this->clearEvent($event);
+                if ($this->valid(Cmd::ReleasedFocus)) {
+                    $this->cycleWindow($msg->command === Cmd::Next ? 1 : -1);
+                }
 
                 return;
             }
@@ -73,18 +78,108 @@ class Desktop extends Group
         parent::handleEvent($event);
     }
 
+    /**
+     * Redisplay visible, tileable children in overlapping cascade order.
+     *
+     * The back-most child is offset the furthest, matching TDeskTop::cascade.
+     */
+    public function cascade(Rect $bounds): void
+    {
+        $tileable = $this->tileableViews();
+        $count = count($tileable);
+        if ($count === 0) {
+            return;
+        }
+
+        $placements = [];
+        foreach ($tileable as $index => $view) {
+            $offset = $count - $index - 1;
+            $placement = Rect::of(
+                $bounds->a->x + $offset,
+                $bounds->a->y + $offset,
+                $bounds->b->x,
+                $bounds->b->y,
+            );
+            if (! $this->fitsMinimumSize($view, $placement)) {
+                $this->tileError();
+
+                return;
+            }
+            $placements[] = [$view, $placement];
+        }
+        $this->applyLayout($placements);
+    }
+
+    /** Arrange visible, tileable children across $bounds, without gaps or overlap. */
+    public function tile(Rect $bounds): void
+    {
+        $tileable = $this->tileableViews();
+        $count = count($tileable);
+        if ($count === 0) {
+            return;
+        }
+
+        [$columns, $rows] = $this->mostEqualDivisors($count, ! $this->tileColumnsFirst);
+        if (intdiv($bounds->width(), $columns) === 0 || intdiv($bounds->height(), $rows) === 0) {
+            $this->tileError();
+
+            return;
+        }
+
+        $leftOver = $count % $columns;
+        $placements = [];
+        foreach ($tileable as $index => $view) {
+            // TDeskTop walks views back-to-front while tileNum counts down.
+            $position = $count - $index - 1;
+            $placement = $this->tileRect($position, $bounds, $columns, $rows, $leftOver);
+            if (! $this->fitsMinimumSize($view, $placement)) {
+                $this->tileError();
+
+                return;
+            }
+            $placements[] = [$view, $placement];
+        }
+        $this->applyLayout($placements);
+    }
+
+    /** Override to surface an arrangement which cannot fit the requested bounds. */
+    protected function tileError(): void {}
+
+    private function fitsMinimumSize(View $view, Rect $bounds): bool
+    {
+        [$minWidth, $minHeight] = $view->sizeLimits();
+
+        return $bounds->width() >= $minWidth && $bounds->height() >= $minHeight;
+    }
+
+    /** @param list<array{0: View, 1: Rect}> $placements */
+    private function applyLayout(array $placements): void
+    {
+        $this->lock();
+        try {
+            foreach ($placements as [$view, $bounds]) {
+                $view->locate($bounds);
+            }
+        } finally {
+            $this->unlock();
+        }
+    }
+
     /** Cycle the current window to the next selectable window (wrapping). */
     private function cycleWindow(int $direction): void
     {
         $windows = array_values(array_filter(
             $this->subviews(),
-            static fn (View $v): bool => $v instanceof Window,
+            static fn (View $v): bool => $v instanceof Window
+                && ($v->options & State::Selectable) !== 0
+                && $v->getState(State::Visible)
+                && ! $v->getState(State::Disabled),
         ));
         if (count($windows) < 2) {
             return;
         }
 
-        $idx = 0;
+        $idx = null;
         foreach ($windows as $i => $w) {
             if ($w === $this->current()) {
                 $idx = $i;
@@ -92,7 +187,9 @@ class Desktop extends Group
             }
         }
         $count = count($windows);
-        $next = $windows[(($idx + $direction) % $count + $count) % $count];
+        $next = $idx === null
+            ? ($direction > 0 ? $windows[0] : $windows[array_key_last($windows)])
+            : $windows[(($idx + $direction) % $count + $count) % $count];
         $this->selectWindow($next);
     }
 
@@ -106,5 +203,58 @@ class Desktop extends Group
         }
 
         return null;
+    }
+
+    /** @return list<View> */
+    private function tileableViews(): array
+    {
+        return array_values(array_filter(
+            $this->subviews(),
+            static fn (View $view): bool => ($view->options & State::Tileable) !== 0
+                && $view->getState(State::Visible),
+        ));
+    }
+
+    /** @return array{0: int, 1: int} [columns, rows] */
+    private function mostEqualDivisors(int $count, bool $favorRows): array
+    {
+        $smaller = 1;
+        for ($candidate = (int) floor(sqrt($count)); $candidate >= 1; $candidate--) {
+            if ($count % $candidate === 0) {
+                $smaller = $candidate;
+                break;
+            }
+        }
+        $larger = intdiv($count, $smaller);
+
+        return $favorRows ? [$smaller, $larger] : [$larger, $smaller];
+    }
+
+    private function tileRect(int $position, Rect $bounds, int $columns, int $rows, int $leftOver): Rect
+    {
+        $shortColumns = $columns - $leftOver;
+        $shortArea = $shortColumns * $rows;
+        if ($position < $shortArea) {
+            $x = intdiv($position, $rows);
+            $y = $position % $rows;
+            $rowCount = $rows;
+        } else {
+            $longRows = $rows + 1;
+            $x = intdiv($position - $shortArea, $longRows) + $shortColumns;
+            $y = ($position - $shortArea) % $longRows;
+            $rowCount = $longRows;
+        }
+
+        return Rect::of(
+            $this->divider($bounds->a->x, $bounds->b->x, $columns, $x),
+            $this->divider($bounds->a->y, $bounds->b->y, $rowCount, $y),
+            $this->divider($bounds->a->x, $bounds->b->x, $columns, $x + 1),
+            $this->divider($bounds->a->y, $bounds->b->y, $rowCount, $y + 1),
+        );
+    }
+
+    private function divider(int $low, int $high, int $count, int $position): int
+    {
+        return $low + intdiv(($high - $low) * $position, $count);
     }
 }

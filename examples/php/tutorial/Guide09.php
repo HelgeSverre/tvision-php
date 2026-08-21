@@ -70,14 +70,14 @@ class Guide09Window extends Window
 
     protected function makePane(Rect $bounds, bool $left): Guide09Interior
     {
-        $vBar = new ScrollBar(Rect::of($bounds->b->x - 1, $bounds->a->y + 1, $bounds->b->x, $bounds->b->y - 1));
+        $vBar = ScrollBar::vertical(Rect::of($bounds->b->x - 1, $bounds->a->y + 1, $bounds->b->x, $bounds->b->y - 1));
         $vBar->options |= State::PostProcess;
         if ($left) {
             $vBar->growMode = State::GrowHiY;
         }
         $this->insert($vBar);
 
-        $hBar = new ScrollBar(Rect::of($bounds->a->x + 2, $bounds->b->y - 1, $bounds->b->x - 2, $bounds->b->y));
+        $hBar = ScrollBar::horizontal(Rect::of($bounds->a->x + 2, $bounds->b->y - 1, $bounds->b->x - 2, $bounds->b->y));
         $hBar->options |= State::PostProcess;
         if ($left) {
             $hBar->growMode = State::GrowHiY | State::GrowLoY;

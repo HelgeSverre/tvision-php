@@ -7,6 +7,7 @@ namespace HelgeSverre\TurboVision\Views;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 
@@ -39,6 +40,7 @@ class Scroller extends View
         $this->delta = new Point(0, 0);
         $this->limit = new Point(0, 0);
         $this->options |= State::Selectable;
+        $this->eventMask |= EventMask::Broadcast;
     }
 
     public function getPalette(): ?Palette
@@ -98,7 +100,6 @@ class Scroller extends View
         $this->hScrollBar?->setValue($x);
         $this->vScrollBar?->setValue($y);
         $this->drawLock--;
-        // Sync delta from the bars' (possibly clamped) values.
         $this->scrollDraw();
         $this->checkDraw();
     }
@@ -110,6 +111,10 @@ class Scroller extends View
         $dy = $this->vScrollBar !== null ? $this->vScrollBar->value : 0;
 
         if ($dx !== $this->delta->x || $dy !== $this->delta->y) {
+            $this->setCursor(
+                $this->cursor->x + $this->delta->x - $dx,
+                $this->cursor->y + $this->delta->y - $dy,
+            );
             $this->delta = new Point($dx, $dy);
             if ($this->drawLock !== 0) {
                 $this->drawFlag = true;
@@ -144,6 +149,25 @@ class Scroller extends View
             if ($info === $this->hScrollBar || $info === $this->vScrollBar) {
                 $this->scrollDraw();
             }
+        }
+    }
+
+    public function setState(int $flag, bool $enable): void
+    {
+        parent::setState($flag, $enable);
+        if (($flag & (State::Active | State::Selected)) !== 0) {
+            $this->showScrollBar($this->hScrollBar);
+            $this->showScrollBar($this->vScrollBar);
+        }
+    }
+
+    private function showScrollBar(?ScrollBar $scrollBar): void
+    {
+        if ($scrollBar !== null) {
+            $scrollBar->setState(
+                State::Visible,
+                $this->getState(State::Active | State::Selected),
+            );
         }
     }
 }

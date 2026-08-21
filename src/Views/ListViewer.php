@@ -9,8 +9,10 @@ use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
+use HelgeSverre\TurboVision\Events\KeyModifier;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Support\IntMath;
 
@@ -18,8 +20,7 @@ use HelgeSverre\TurboVision\Support\IntMath;
  * Abstract scrollable list (faithful to TListViewer). Subclasses supply getText().
  * Tracks focused/topItem/range across one or more columns, navigates by keyboard and
  * mouse, draws items (highlighting the focused one when selected+active), reacts to a
- * vertical scroll bar's cmScrollBarChanged, and broadcasts cmListItemSelected. The
- * stable base M3's concrete ListBox extends.
+ * vertical scroll bar's cmScrollBarChanged, and broadcasts cmListItemSelected.
  */
 abstract class ListViewer extends View
 {
@@ -32,6 +33,8 @@ abstract class ListViewer extends View
 
     public int $range = 0;
 
+    private int $mouseAutoCount = 0;
+
     public function __construct(
         Rect $bounds,
         public int $numCols = 1,
@@ -41,6 +44,7 @@ abstract class ListViewer extends View
         parent::__construct($bounds);
         $this->numCols = $this->effectiveColumnCount();
         $this->options |= State::Selectable | State::FirstClick;
+        $this->eventMask |= EventMask::Mouse | EventMask::Broadcast;
 
         if ($this->vScrollBar !== null) {
             if ($this->numCols === 1) {
@@ -121,7 +125,15 @@ abstract class ListViewer extends View
         }
     }
 
-    /** Override in M3 to react to a chosen item; default broadcasts cmListItemSelected. */
+    public function changeBounds(Rect $bounds): void
+    {
+        parent::changeBounds($bounds);
+        $columns = $this->effectiveColumnCount();
+        $this->hScrollBar?->setStep(intdiv($bounds->width(), $columns), $this->hScrollBar->arrowStep);
+        $this->vScrollBar?->setStep(max(0, $bounds->height()), $this->vScrollBar->arrowStep);
+    }
+
+    /** Override to react to a chosen item; the default broadcasts cmListItemSelected. */
     public function selectItem(int $item): void
     {
         $this->owner?->handleEvent(Event::broadcast(Cmd::ListItemSelected, $this));
@@ -168,7 +180,7 @@ abstract class ListViewer extends View
 
     public function handleEvent(Event $event): void
     {
-        if ($event->what === EventType::MouseDown) {
+        if ($event->what === EventType::MouseDown || $this->getState(State::Dragging)) {
             $this->handleMouse($event);
 
             return;
@@ -188,6 +200,11 @@ abstract class ListViewer extends View
             } elseif ($info === $this->hScrollBar) {
                 $this->drawView();
             }
+        } elseif ($event->isCommand(Cmd::ScrollBarClicked)
+            && ($event->asMessage()?->info === $this->hScrollBar
+                || $event->asMessage()?->info === $this->vScrollBar)
+        ) {
+            $this->focus();
         }
     }
 
@@ -197,18 +214,44 @@ abstract class ListViewer extends View
         if ($mouse === null) {
             return;
         }
-        $numCols = $this->effectiveColumnCount();
-        $colWidth = intdiv($this->bounds->width(), $numCols) + 1;
-        $local = $this->makeLocal($mouse->where);
-        $column = max(0, min($numCols - 1, intdiv($local->x, $colWidth)));
-        $newItem = IntMath::add(
-            IntMath::add($this->topItem, $this->bounds->height() * $column),
-            $local->y,
-        );
-        $this->focusItemNum($newItem);
-        $this->drawView();
-        if ($mouse->doubleClick && $this->range > $newItem) {
-            $this->selectItem($newItem);
+        if ($event->what === EventType::MouseDown) {
+            $this->mouseAutoCount = 0;
+            $newItem = $this->itemAt($mouse->where) ?? $this->focused;
+            $this->focusItemNum($newItem);
+            $this->drawView();
+            if ($mouse->doubleClick && $this->range > $newItem) {
+                $this->selectItem($newItem);
+            } else {
+                $this->setState(State::Dragging, true);
+            }
+            $this->clearEvent($event);
+
+            return;
+        }
+
+        if (! $this->getState(State::Dragging)) {
+            return;
+        }
+
+        $newItem = $this->itemAt($mouse->where);
+        if ($newItem === null && $event->what === EventType::MouseAuto) {
+            $this->mouseAutoCount++;
+            if ($this->mouseAutoCount === 4) {
+                $this->mouseAutoCount = 0;
+                $newItem = $this->autoScrollItem($mouse->where);
+            }
+        } elseif ($newItem !== null) {
+            $this->mouseAutoCount = 0;
+        }
+        if ($newItem !== null) {
+            $this->focusItemNum($newItem);
+            $this->drawView();
+        }
+        if ($event->what === EventType::MouseUp) {
+            if ($mouse->doubleClick && $newItem !== null && $newItem < $this->range) {
+                $this->selectItem($newItem);
+            }
+            $this->setState(State::Dragging, false);
         }
         $this->clearEvent($event);
     }
@@ -230,15 +273,17 @@ abstract class ListViewer extends View
         $height = max(1, $this->bounds->height());
         $numCols = $this->effectiveColumnCount();
         $pageSize = $height * $numCols;
-        $newItem = match ($key->keyCode) {
-            Key::Up->value => IntMath::add($this->focused, -1),
-            Key::Down->value => IntMath::add($this->focused, 1),
-            Key::PageUp->value => IntMath::add($this->focused, -$pageSize),
-            Key::PageDown->value => IntMath::add($this->focused, $pageSize),
-            Key::Home->value => $this->topItem,
-            Key::End->value => IntMath::add($this->topItem, $pageSize - 1),
-            Key::Right->value => $numCols > 1 ? IntMath::add($this->focused, $height) : null,
-            Key::Left->value => $numCols > 1 ? IntMath::add($this->focused, -$height) : null,
+        $newItem = match (true) {
+            $key->keyCode === Key::PageUp->value && ($key->modifiers & KeyModifier::Ctrl) !== 0 => 0,
+            $key->keyCode === Key::PageDown->value && ($key->modifiers & KeyModifier::Ctrl) !== 0 => $this->range - 1,
+            $key->keyCode === Key::Up->value => IntMath::add($this->focused, -1),
+            $key->keyCode === Key::Down->value => IntMath::add($this->focused, 1),
+            $key->keyCode === Key::PageUp->value => IntMath::add($this->focused, -$pageSize),
+            $key->keyCode === Key::PageDown->value => IntMath::add($this->focused, $pageSize),
+            $key->keyCode === Key::Home->value => $this->topItem,
+            $key->keyCode === Key::End->value => IntMath::add($this->topItem, $pageSize - 1),
+            $key->keyCode === Key::Right->value => $numCols > 1 ? IntMath::add($this->focused, $height) : null,
+            $key->keyCode === Key::Left->value => $numCols > 1 ? IntMath::add($this->focused, -$height) : null,
             default => null,
         };
 
@@ -267,6 +312,54 @@ abstract class ListViewer extends View
     private function pageSize(): int
     {
         return max(1, $this->bounds->height()) * $this->effectiveColumnCount();
+    }
+
+    public function setState(int $flag, bool $enable): void
+    {
+        parent::setState($flag, $enable);
+        if (($flag & (State::Selected | State::Active | State::Visible)) !== 0) {
+            $visible = $this->getState(State::Active) && $this->getState(State::Visible);
+            $this->hScrollBar?->setState(State::Visible, $visible);
+            $this->vScrollBar?->setState(State::Visible, $visible);
+            $this->drawView();
+        }
+    }
+
+    private function itemAt(\HelgeSverre\TurboVision\Geometry\Point $where): ?int
+    {
+        if (! $this->mouseInView($where)) {
+            return null;
+        }
+        $numCols = $this->effectiveColumnCount();
+        $colWidth = intdiv($this->bounds->width(), $numCols) + 1;
+        $local = $this->makeLocal($where);
+        $column = max(0, min($numCols - 1, intdiv($local->x, $colWidth)));
+
+        return IntMath::add(
+            IntMath::add($this->topItem, $this->bounds->height() * $column),
+            $local->y,
+        );
+    }
+
+    private function autoScrollItem(\HelgeSverre\TurboVision\Geometry\Point $where): ?int
+    {
+        $local = $this->makeLocal($where);
+        $height = max(1, $this->bounds->height());
+        if ($this->effectiveColumnCount() === 1) {
+            return match (true) {
+                $local->y < 0 => $this->focused - 1,
+                $local->y >= $height => $this->focused + 1,
+                default => null,
+            };
+        }
+
+        return match (true) {
+            $local->x < 0 => $this->focused - $height,
+            $local->x >= $this->bounds->width() => $this->focused + $height,
+            $local->y < 0 => $this->focused - $this->focused % $height,
+            $local->y >= $height => $this->focused - $this->focused % $height + $height - 1,
+            default => null,
+        };
     }
 
 }

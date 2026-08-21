@@ -48,6 +48,7 @@
     "fuzz": "php bin/tv-fuzz",
     "bench": "php benchmarks/core.php",
     "demo": "php examples/php/workbench.php",
+    "demo:kitchensink": "php examples/php/kitchensink.php",
     "demo:workbench": "php examples/php/workbench.php",
     "demo:bios": "php examples/php/bios.php",
     "demo:opencode": "php examples/php/opencode.php",

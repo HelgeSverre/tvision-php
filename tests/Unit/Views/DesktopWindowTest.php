@@ -95,3 +95,48 @@ test('removing the current window restores focus to another window', function ()
 
     expect($desk->current())->toBe($w1);
 });
+
+test('cmNext is consumed but cannot leave a validating current window', function (): void {
+    $desk = deskFor(80, 25);
+    $blocked = new class(Rect::of(0, 0, 20, 6), 'Blocked', 1) extends Window {
+        public bool $allowLeave = false;
+
+        public function valid(int $command): bool
+        {
+            return $this->allowLeave;
+        }
+    };
+    $blocked->options |= State::Validate;
+    $other = new Window(Rect::of(22, 0, 42, 6), 'Other', 2);
+    $desk->insertWindow($blocked);
+    $desk->insertWindow($other);
+    $desk->setCurrent($blocked);
+    $event = Event::command(Cmd::Next);
+
+    $desk->handleEvent($event);
+
+    expect($event->isNothing())->toBeTrue()
+        ->and($desk->current())->toBe($blocked);
+});
+
+test('window cycling skips hidden disabled and non-selectable windows', function (): void {
+    $desk = deskFor(80, 25);
+    $first = new Window(Rect::of(0, 0, 20, 6), 'First', 1);
+    $hidden = new Window(Rect::of(22, 0, 42, 6), 'Hidden', 2);
+    $disabled = new Window(Rect::of(44, 0, 64, 6), 'Disabled', 3);
+    $plain = new Window(Rect::of(0, 7, 20, 13), 'Plain', 4);
+    $last = new Window(Rect::of(22, 7, 42, 13), 'Last', 5);
+    $desk->insertWindow($first);
+    $desk->insertWindow($hidden);
+    $desk->insertWindow($disabled);
+    $desk->insertWindow($plain);
+    $desk->insertWindow($last);
+    $hidden->hide();
+    $disabled->setState(State::Disabled, true);
+    $plain->options &= ~State::Selectable;
+    $desk->setCurrent($first);
+
+    $desk->handleEvent(Event::command(Cmd::Next));
+
+    expect($desk->current())->toBe($last);
+});

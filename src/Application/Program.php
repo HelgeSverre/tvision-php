@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Application;
 
+use HelgeSverre\TurboVision\Commands\CommandSet;
+use HelgeSverre\TurboVision\Commands\CommandTarget;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventType;
+use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Exceptions\InputClosedException;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Menus\MenuBar;
@@ -15,12 +18,14 @@ use HelgeSverre\TurboVision\Menus\StatusLine;
 use HelgeSverre\TurboVision\Terminal\Screen;
 use HelgeSverre\TurboVision\Views\Desktop;
 use HelgeSverre\TurboVision\Views\Group;
+use HelgeSverre\TurboVision\Views\View;
+use HelgeSverre\TurboVision\Views\Window;
 
 /**
  * The application root (faithful to TProgram). A Group that owns the Screen, Desktop,
  * MenuBar and StatusLine, runs the event loop, and dispatches commands. Mutable.
  */
-class Program extends Group
+class Program extends Group implements CommandTarget
 {
     protected Screen $screenObj;
 
@@ -37,6 +42,19 @@ class Program extends Group
     protected array $disabledCommands = [];
 
     protected bool $dirty = true;
+
+    private PaletteMode $paletteMode = PaletteMode::Color;
+
+    /**
+     * An application-supplied root palette. When present it takes precedence over
+     * PaletteMode until cleared, which lets a ColorDialog commit its exact working
+     * palette without losing the user's preferred built-in fallback mode.
+     */
+    private ?Palette $customPalette = null;
+
+    private int $lastHelpContext = -1;
+
+    private bool $screenActive = false;
 
     public function __construct()
     {
@@ -76,13 +94,56 @@ class Program extends Group
 
     /**
      * The application root palette. Every view's remap palette resolves into this
-     * table, where logical indices finally become real attribute bytes. The default
-     * is modern dark; Palettes::CLASSIC_COLOR retains cpAppColor for applications
-     * that explicitly want the original appearance.
+     * table, where logical indices finally become real attribute bytes. An explicit
+     * setPalette() override wins; otherwise the selected PaletteMode supplies the
+     * built-in table (modern dark by default).
      */
     public function getPalette(): ?Palette
     {
-        return Palette::fromBytes(Palettes::COLOR);
+        return $this->customPalette ?? Palette::fromBytes(Palettes::for($this->paletteMode));
+    }
+
+    public function paletteMode(): PaletteMode
+    {
+        return $this->paletteMode;
+    }
+
+    public function setPaletteMode(PaletteMode $mode): void
+    {
+        if ($this->paletteMode === $mode) {
+            return;
+        }
+
+        $this->paletteMode = $mode;
+        $this->dirty = true;
+    }
+
+    /**
+     * Return the explicit root-palette override, if one is active.
+     *
+     * Built-in PaletteMode remains selected in the background and becomes active
+     * again as soon as setPalette(null) clears this override.
+     */
+    public function customPalette(): ?Palette
+    {
+        return $this->customPalette;
+    }
+
+    /**
+     * Set or clear an explicit root-palette override and schedule a redraw.
+     *
+     * Passing null restores the selected PaletteMode. Palette values are immutable,
+     * so retaining the supplied instance is safe and lets callers inspect identity
+     * after a ColorDialog commits it.
+     */
+    public function setPalette(?Palette $palette): void
+    {
+        if ($this->customPalette === $palette) {
+            return;
+        }
+
+        $this->customPalette = $palette;
+        $this->dirty = true;
     }
 
     public function putEvent(Event $event): void
@@ -93,8 +154,99 @@ class Program extends Group
     public function pumpEvent(): ?Event
     {
         $event = $this->getEvent();
+        $resized = $this->reflowIfResized();
+
+        if ($event->isNothing()) {
+            $this->idle();
+        }
+        if ($resized) {
+            $this->present();
+        }
 
         return $event->isNothing() ? null : $event;
+    }
+
+    /** Keep application-level lifecycle commands alive inside blocking modal loops. */
+    public function handleModalEvent(Event $event): ?int
+    {
+        $isCtrlC = $event->what === EventType::KeyDown
+            && $event->asKey()?->keyCode === 0x03;
+        $command = $event->what === EventType::Command
+            ? $event->asMessage()?->command
+            : null;
+        if (! $isCtrlC && ! in_array($command, [Cmd::Quit, Cmd::Help], true)) {
+            return null;
+        }
+
+        $this->handleEvent($event);
+
+        return $this->ended() ? Cmd::Quit : null;
+    }
+
+    /**
+     * Run a modal view over the desktop. Kept View-typed so controls and future
+     * dialog subclasses do not need to inherit a framework-specific dialog base.
+     */
+    public function executeDialog(View $view): int
+    {
+        return ($this->desktop ?? $this)->execView($view);
+    }
+
+    /** Hook for applications with a HelpFile; return null when no help is available. */
+    protected function createHelpView(int $context): ?View
+    {
+        return null;
+    }
+
+    /** Whether the current desktop focus is allowed to move away. */
+    public function canMoveFocus(): bool
+    {
+        return $this->desktop?->valid(Cmd::ReleasedFocus) ?? true;
+    }
+
+    /** Validate a newly-created view before the application takes ownership. */
+    public function validView(?View $view): ?View
+    {
+        return $view !== null && $view->valid(Cmd::Valid) ? $view : null;
+    }
+
+    /** Validate, insert, and select a window; invalid windows are left unowned. */
+    public function insertWindow(Window $window): ?Window
+    {
+        if ($this->desktop === null || ! $this->canMoveFocus() || $this->validView($window) === null) {
+            return null;
+        }
+
+        $this->desktop->insertWindow($window);
+        $this->dirty = true;
+
+        return $window;
+    }
+
+    /**
+     * Temporarily restore the terminal for a child process or shell handoff.
+     * Resume redraws the existing view tree rather than reconstructing it.
+     */
+    public function suspend(): void
+    {
+        if (! $this->screenActive) {
+            return;
+        }
+
+        $this->screenObj->shutdown();
+        $this->screenActive = false;
+    }
+
+    public function resume(): void
+    {
+        if ($this->screenActive) {
+            return;
+        }
+
+        $this->screenObj->init();
+        $this->screenActive = true;
+        $this->reflowDesktop();
+        $this->dirty = true;
     }
 
     // --- lifecycle ---
@@ -128,10 +280,7 @@ class Program extends Group
     {
         // Force the Screen to observe the driver's new size.
         $this->screenObj->pollEvents(0);
-        if ($this->screenObj->wasResized()) {
-            $this->reflowDesktop();
-            $this->dirty = true;
-        }
+        $this->reflowIfResized();
     }
 
     /** Boot the screen and build the child views without entering the loop (for tests). */
@@ -139,9 +288,11 @@ class Program extends Group
     {
         try {
             $this->screenObj->init();
+            $this->screenActive = true;
             $this->layout();
         } catch (\Throwable $exception) {
             $this->screenObj->shutdown();
+            $this->screenActive = false;
 
             throw $exception;
         }
@@ -168,7 +319,9 @@ class Program extends Group
         try {
             $this->endState = 0;
             $this->screenObj->init();
+            $this->screenActive = true;
             $this->layout();
+            $this->idle();
             $this->redraw();
 
             try {
@@ -178,14 +331,13 @@ class Program extends Group
                     // pollEvents() is where Screen observes SIGWINCH. Reflow before
                     // dispatching the event returned by that same poll so mouse hit
                     // testing and view geometry never use the previous terminal size.
-                    if ($this->screenObj->wasResized()) {
-                        $this->reflowDesktop();
-                        $this->dirty = true;
-                    }
+                    $this->reflowIfResized();
 
                     if (! $event->isNothing()) {
                         $this->handleEvent($event);
                         $this->dirty = true;
+                    } else {
+                        $this->idle();
                     }
 
                     if ($this->dirty) {
@@ -199,6 +351,7 @@ class Program extends Group
             }
         } finally {
             $this->screenObj->shutdown();
+            $this->screenActive = false;
         }
 
         return 0;
@@ -239,14 +392,47 @@ class Program extends Group
         if ($this->statusLine !== null) {
             $this->insert($this->statusLine);
         }
+        $this->lastHelpContext = -1;
     }
 
     protected function redraw(): void
     {
         $this->screenObj->clear();
         $this->draw();
+        $this->screenObj->setCursor($this->cursorPosition());
         $this->screenObj->flush();
         $this->dirty = false;
+    }
+
+    /** Consume Screen's resize latch exactly once and reflow the live tree. */
+    private function reflowIfResized(): bool
+    {
+        if (! $this->screenObj->wasResized()) {
+            return false;
+        }
+
+        $this->reflowDesktop();
+        $this->dirty = true;
+
+        return true;
+    }
+
+    /**
+     * Idle ticks refresh status context. Applications may override this for timers
+     * or background work; call parent::idle() to retain context-sensitive status.
+     */
+    public function idle(): void
+    {
+        $helpContext = $this->getHelpCtx();
+        if ($helpContext === $this->lastHelpContext) {
+            return;
+        }
+
+        $this->lastHelpContext = $helpContext;
+        if ($this->statusLine !== null) {
+            $this->statusLine->setHelpContext($helpContext);
+        }
+        $this->dirty = true;
     }
 
     // --- event sourcing ---
@@ -305,6 +491,17 @@ class Program extends Group
             return;
         }
 
+        if ($event->what === EventType::KeyDown) {
+            $windowNumber = $this->altWindowNumber($event);
+            if ($windowNumber !== null) {
+                if ($this->canMoveFocus() && $this->selectWindowNumber($windowNumber)) {
+                    $this->clearEvent($event);
+                }
+
+                return;
+            }
+        }
+
         // Command dispatch handled at the program level.
         if ($event->what === EventType::Command) {
             $message = $event->asMessage();
@@ -312,6 +509,15 @@ class Program extends Group
                 if ($message->command === Cmd::Quit) {
                     $this->endModal(Cmd::Quit);
                     $this->clearEvent($event);
+
+                    return;
+                }
+                if ($message->command === Cmd::Help) {
+                    $help = $this->createHelpView($this->getHelpCtx());
+                    if ($help !== null) {
+                        $this->executeDialog($help);
+                        $this->clearEvent($event);
+                    }
 
                     return;
                 }
@@ -331,6 +537,7 @@ class Program extends Group
         }
 
         unset($this->disabledCommands[$command]);
+        $this->broadcastCommandSetChanged();
         $this->dirty = true;
     }
 
@@ -341,11 +548,68 @@ class Program extends Group
         }
 
         $this->disabledCommands[$command] = true;
+        $this->broadcastCommandSetChanged();
         $this->dirty = true;
     }
 
     public function commandEnabled(int $command): bool
     {
         return ! isset($this->disabledCommands[$command]);
+    }
+
+    public function enableCommands(CommandSet $commands): void
+    {
+        $commands->enableOn($this);
+    }
+
+    public function disableCommands(CommandSet $commands): void
+    {
+        $commands->disableOn($this);
+    }
+
+    private function broadcastCommandSetChanged(): void
+    {
+        parent::handleEvent(Event::broadcast(Cmd::CommandSetChanged));
+    }
+
+    private function altWindowNumber(Event $event): ?int
+    {
+        return match ($event->asKey()?->keyCode) {
+            Key::Alt1->value => 1,
+            Key::Alt2->value => 2,
+            Key::Alt3->value => 3,
+            Key::Alt4->value => 4,
+            Key::Alt5->value => 5,
+            Key::Alt6->value => 6,
+            Key::Alt7->value => 7,
+            Key::Alt8->value => 8,
+            Key::Alt9->value => 9,
+            default => null,
+        };
+    }
+
+    private function selectWindowNumber(int $number): bool
+    {
+        if ($this->desktop === null) {
+            return false;
+        }
+
+        $selection = Event::broadcast(Cmd::SelectWindowNum, $number);
+        $this->desktop->handleEvent($selection);
+        if ($selection->isNothing()) {
+            return true;
+        }
+
+        // Existing Window subclasses need not opt into a special broadcast just
+        // to retain Alt-number selection. Native windows are selected directly.
+        foreach ($this->desktop->subviews() as $view) {
+            if ($view instanceof Window && $view->frameNumber() === $number) {
+                $this->desktop->selectWindow($view);
+
+                return true;
+            }
+        }
+
+        return false;
     }
 }

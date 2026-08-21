@@ -9,7 +9,9 @@ use HelgeSverre\TurboVision\Drawing\Cell;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
+use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
+use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Support\IntMath;
@@ -31,6 +33,16 @@ class View
     public int $options = 0;
 
     public int $growMode = 0;
+
+    /**
+     * Event classes this view accepts. Groups consult this before routing an event
+     * to a child; a plain view deliberately receives only click, key, and command
+     * events, matching TView's historical default.
+     */
+    public int $eventMask = EventMask::MouseDown | EventMask::Keyboard | EventMask::Command;
+
+    /** Application-defined help context, zero meaning no context. */
+    public int $helpCtx = 0;
 
     /** Cursor position in local coordinates (set by setCursor). */
     protected Point $cursor;
@@ -60,6 +72,35 @@ class View
     public function screen(): ?Screen
     {
         return $this->owner?->screen();
+    }
+
+    /**
+     * Present the current back buffer immediately.
+     *
+     * Program normally owns frame presentation, but blocking modal loops cannot
+     * return to Program's outer redraw cycle until they close. Keeping the small
+     * primitive on View lets nested modal hosts display each state without knowing
+     * which concrete object owns the Screen.
+     */
+    public function present(): void
+    {
+        $screen = $this->screen();
+        if ($screen === null) {
+            return;
+        }
+
+        $screen->setCursor($this->cursorPosition());
+        $screen->flush();
+    }
+
+    /**
+     * Give the application root first refusal on lifecycle events received while
+     * a nested Group owns the blocking event loop. A returned command terminates
+     * the current modal scope; null leaves the event for the modal view.
+     */
+    public function handleModalEvent(Event $event): ?int
+    {
+        return $this->owner?->handleModalEvent($event);
     }
 
     /** Sum of every ancestor's bounds->a from this view up to (excluding) the root. */
@@ -111,20 +152,119 @@ class View
         }
     }
 
-    /**
-     * Minimum/maximum size limits. M1 imposes none beyond non-negative; returned as
-     * [minWidth, minHeight, maxWidth, maxHeight].
-     *
-     * @return array{0:int,1:int,2:int,3:int}
-     */
+    /** @return array{0:int,1:int,2:int,3:int} [minWidth, minHeight, maxWidth, maxHeight] */
     public function sizeLimits(): array
     {
+        if (($this->growMode & State::GrowFixed) === 0 && $this->owner !== null) {
+            $extent = $this->owner->getExtent();
+
+            return [0, 0, $extent->width(), $extent->height()];
+        }
+
         return [0, 0, PHP_INT_MAX, PHP_INT_MAX];
+    }
+
+    /** Resize and/or reposition this view, clamping its extent to sizeLimits(). */
+    public function locate(Rect $bounds): void
+    {
+        [$minWidth, $minHeight, $maxWidth, $maxHeight] = $this->sizeLimits();
+        $width = max($minWidth, min($maxWidth, $bounds->width()));
+        $height = max($minHeight, min($maxHeight, $bounds->height()));
+        [$width, $height] = self::fitDrawableSize($width, $height);
+        $located = Rect::of(
+            $bounds->a->x,
+            $bounds->a->y,
+            IntMath::add($bounds->a->x, $width),
+            IntMath::add($bounds->a->y, $height),
+        );
+
+        if (! $located->equals($this->bounds)) {
+            $this->changeBounds($located);
+            // changeBounds paints only the new footprint. Repaint the owner in
+            // Z-order as well so the old footprint is restored by underlying
+            // siblings/backgrounds instead of leaving stale cells behind.
+            if ($this->owner !== null && $this->getState(State::Visible)) {
+                $this->owner->drawView();
+            }
+        }
+    }
+
+    /** Preserve the current size while moving the local origin. */
+    public function moveTo(int $x, int $y): void
+    {
+        $this->locate(Rect::of(
+            $x,
+            $y,
+            IntMath::add($x, $this->bounds->width()),
+            IntMath::add($y, $this->bounds->height()),
+        ));
+    }
+
+    /** Preserve the current origin while growing/shrinking to an extent. */
+    public function growTo(int $width, int $height): void
+    {
+        $this->locate(Rect::of(
+            $this->bounds->a->x,
+            $this->bounds->a->y,
+            IntMath::add($this->bounds->a->x, $width),
+            IntMath::add($this->bounds->a->y, $height),
+        ));
     }
 
     public function setCursor(int $x, int $y): void
     {
         $this->cursor = new Point($x, $y);
+        $this->resetCursor();
+    }
+
+    /** Make this view's local cursor eligible for presentation while focused. */
+    public function showCursor(): void
+    {
+        $this->setState(State::CursorVis, true);
+    }
+
+    /** Hide this view's local cursor without changing its stored position. */
+    public function hideCursor(): void
+    {
+        $this->setState(State::CursorVis, false);
+    }
+
+    /** Request a solid insertion cursor when the terminal supports its default shape. */
+    public function blockCursor(): void
+    {
+        $this->setState(State::CursorIns, true);
+    }
+
+    /** Request the terminal's normal cursor shape. */
+    public function normalCursor(): void
+    {
+        $this->setState(State::CursorIns, false);
+    }
+
+    /**
+     * The absolute cursor position to present, or null when this view is not the
+     * focused visible cursor owner. Groups override this to follow their current
+     * subview.
+     */
+    public function cursorPosition(): ?Point
+    {
+        if (! $this->getState(State::Visible)
+            || ! $this->getState(State::Focused)
+            || ! $this->getState(State::CursorVis)
+            || ! $this->getExtent()->contains($this->cursor)
+        ) {
+            return null;
+        }
+
+        $origin = $this->absoluteOrigin();
+
+        return new Point(IntMath::add($origin->x, $this->cursor->x), IntMath::add($origin->y, $this->cursor->y));
+    }
+
+    /** Refresh the root Screen's desired cursor; actual output is coalesced by flush(). */
+    public function resetCursor(): void
+    {
+        $this->screen()?->setCursor($this->cursorPosition());
     }
 
     /** Translate a global (root-relative) point into this view's local coordinates. */
@@ -142,6 +282,86 @@ class View
     public function mouseInView(Point $global): bool
     {
         return $this->getExtent()->contains($this->makeLocal($global));
+    }
+
+    /** True for a visible view receiving a positional event within its extent. */
+    public function containsMouse(Event $event): bool
+    {
+        $mouse = $event->asMouse();
+
+        return $this->getState(State::Visible) && $mouse !== null && $this->mouseInView($mouse->where);
+    }
+
+    /**
+     * Whether this view paints its whole rectangular extent. Transparent container
+     * views override this so compositing clips against their opaque descendants
+     * instead of treating the container's input region as painted content.
+     */
+    public function isOpaque(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Horizontal screen intervals this view obscures on a row.
+     *
+     * @return list<array{0:int,1:int}>
+     */
+    public function occlusionIntervals(int $globalY, int $minX, int $maxX): array
+    {
+        if (! $this->getState(State::Visible) || ! $this->isOpaque() || $minX >= $maxX) {
+            return [];
+        }
+
+        $origin = $this->absoluteOrigin();
+        $bottom = IntMath::add($origin->y, $this->bounds->height());
+        if ($globalY < $origin->y || $globalY >= $bottom) {
+            return [];
+        }
+
+        $start = max($minX, $origin->x);
+        $end = min($maxX, IntMath::add($origin->x, $this->bounds->width()));
+
+        return $start < $end ? [[$start, $end]] : [];
+    }
+
+    /** Whether at least one screen cell remains visible after higher-Z sibling clipping. */
+    public function exposed(): bool
+    {
+        if (! $this->getState(State::Visible) || $this->screen() === null) {
+            return false;
+        }
+
+        $rect = $this->globalBounds();
+        for ($ancestor = $this->owner; $ancestor !== null; $ancestor = $ancestor->owner) {
+            if (! $ancestor->getState(State::Visible)) {
+                return false;
+            }
+            $rect = $rect->intersect($ancestor->globalBounds());
+        }
+
+        $rect = $rect->intersect(Rect::of(0, 0, $this->screen()->cols(), $this->screen()->rows()));
+        if ($rect->isEmpty()) {
+            return false;
+        }
+
+        for ($y = $rect->a->y; $y < $rect->b->y; $y++) {
+            $coveredTo = $rect->a->x;
+            foreach ($this->siblingOcclusionIntervals($y, $rect->a->x, $rect->b->x) as [$start, $end]) {
+                if ($start > $coveredTo) {
+                    return true;
+                }
+                $coveredTo = max($coveredTo, $end);
+                if ($coveredTo >= $rect->b->x) {
+                    break;
+                }
+            }
+            if ($coveredTo < $rect->b->x) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -233,9 +453,8 @@ class View
     }
 
     /**
-     * Move/resize this view in response to a drag. M2 implements the geometric result
-     * directly (no inner pump loop): $mode selects move vs grow, $limits clamps the
-     * origin, $min/$max clamp the size. Frame/Window drive this from mouse handlers.
+     * Apply a drag result directly: $limits clamps the origin and $min/$max clamp the
+     * size. Frame and Window drive this from their mouse handlers.
      */
     public function dragView(Rect $newBounds, Rect $limits, Point $min, Point $max): void
     {
@@ -244,7 +463,6 @@ class View
 
         $ax = $newBounds->a->x;
         $ay = $newBounds->a->y;
-        // Keep the view fully inside $limits.
         $ax = max($limits->a->x, min(IntMath::subtract($limits->b->x, $w), $ax));
         $ay = max($limits->a->y, min(IntMath::subtract($limits->b->y, $h), $ay));
 
@@ -260,12 +478,120 @@ class View
 
     public function setState(int $flag, bool $enable): void
     {
+        $wasFocused = $this->getState(State::Focused);
         if ($enable) {
             $this->state |= $flag;
         } else {
             $this->state &= ~$flag;
         }
+
+        if (($flag & (State::CursorVis | State::CursorIns | State::Focused | State::Visible)) !== 0) {
+            $this->resetCursor();
+        }
+
+        if (($flag & State::Visible) !== 0 && $this->owner !== null) {
+            // A hidden view has to expose what was beneath it; redraw the owner
+            // rather than attempting partial compositing from a stale back buffer.
+            $this->owner->drawView();
+        }
+
+        $isFocused = $this->getState(State::Focused);
+        if (($flag & State::Focused) !== 0
+            && $wasFocused !== $isFocused
+            && $this->owner instanceof Group
+        ) {
+            // Labels, histories, and other linked controls observe focus changes
+            // through the same broadcasts emitted by the original TView.
+            $this->owner->handleEvent(Event::broadcast(
+                $isFocused ? Cmd::ReceivedFocus : Cmd::ReleasedFocus,
+                $this,
+            ));
+        }
+
+        if ($this->owner instanceof Group) {
+            $this->owner->viewStateChanged($this, $flag, $enable);
+        }
     }
+
+    public function show(): void
+    {
+        $this->setState(State::Visible, true);
+    }
+
+    public function hide(): void
+    {
+        $this->setState(State::Visible, false);
+    }
+
+    /** Ask the owner to make this selectable view its current focus target. */
+    public function focus(): bool
+    {
+        if ($this->owner === null
+            || ($this->options & State::Selectable) === 0
+            || ! $this->getState(State::Visible)
+            || $this->getState(State::Disabled)
+        ) {
+            return false;
+        }
+
+        $this->select();
+
+        return true;
+    }
+
+    /** Select this view and optionally bring top-select views to the front. */
+    public function select(): void
+    {
+        if ($this->owner instanceof Group) {
+            $this->owner->setCurrent($this);
+            if (($this->options & State::TopSelect) !== 0) {
+                $this->makeFirst();
+            }
+        }
+    }
+
+    /** Move this owned view in front of every sibling. */
+    public function makeFirst(): void
+    {
+        if ($this->owner instanceof Group) {
+            $this->owner->reorderInFrontOf($this, null);
+        }
+    }
+
+    /** Move this owned view directly in front of an owned sibling. */
+    public function putInFrontOf(?View $target): void
+    {
+        if ($this->owner instanceof Group) {
+            $this->owner->reorderInFrontOf($this, $target);
+        }
+    }
+
+    /** Returns this view's help context, except while it owns a drag gesture. */
+    public function getHelpCtx(): int
+    {
+        return $this->getState(State::Dragging) ? 1 : $this->helpCtx;
+    }
+
+    /** Whether this view permits the supplied modal command to complete. */
+    public function valid(int $command): bool
+    {
+        return true;
+    }
+
+    /** Size of this view's transferable form datum; zero means no datum. */
+    public function dataSize(): int
+    {
+        return 0;
+    }
+
+    /** Return this view's transferable form datum, if any. */
+    public function getData(): mixed
+    {
+        return null;
+    }
+
+    /** Load this view's transferable form datum. */
+    public function setData(mixed $data): void {}
 
     // --- drawing ---
 
@@ -282,23 +608,15 @@ class View
     /** Draw only if visible and exposed (owned by a Screen-backed root). */
     public function drawView(): void
     {
-        for ($view = $this; $view !== null; $view = $view->owner) {
-            if (! $view->getState(State::Visible)) {
-                return;
-            }
-        }
-        if ($this->screen() === null) {
+        if (! $this->exposed()) {
             return;
         }
 
         $this->draw();
     }
 
-    /** The primary extension point; default no-op. */
-    public function handleEvent(Event $event): void
-    {
-        // no-op
-    }
+    /** The primary event-handling extension point. */
+    public function handleEvent(Event $event): void {}
 
     public function clearEvent(Event $event): void
     {
@@ -323,7 +641,7 @@ class View
      */
     public function endModal(int $command): void
     {
-        // no-op on a plain View; Group overrides
+        $this->owner?->endModal($command);
     }
 
     /**
@@ -512,6 +830,8 @@ class View
         }
 
         $visibleCells = min($count - $firstSource, $width - $targetX);
+        $occluded = $this->siblingOcclusionIntervals($globalY, $clip->a->x, $clip->b->x);
+        $occlusionIndex = 0;
         $blank = new Cell();
         for ($offset = 0; $offset < $visibleCells; $offset++) {
             $sourceX = $firstSource + $offset;
@@ -521,7 +841,63 @@ class View
             if ($globalX < $clip->a->x || $globalX >= $clip->b->x) {
                 continue;
             }
+            while (isset($occluded[$occlusionIndex]) && $globalX >= $occluded[$occlusionIndex][1]) {
+                $occlusionIndex++;
+            }
+            if (isset($occluded[$occlusionIndex])
+                && $globalX >= $occluded[$occlusionIndex][0]
+                && $globalX < $occluded[$occlusionIndex][1]
+            ) {
+                continue;
+            }
             $back->put($globalX, $globalY, $cell);
         }
+    }
+
+    private function globalBounds(): Rect
+    {
+        $origin = $this->absoluteOrigin();
+
+        return Rect::of(
+            $origin->x,
+            $origin->y,
+            IntMath::add($origin->x, $this->bounds->width()),
+            IntMath::add($origin->y, $this->bounds->height()),
+        );
+    }
+
+    /**
+     * Horizontal screen intervals covered by higher-Z siblings at every owner
+     * level. Computing and merging them once per row avoids a sibling-tree walk
+     * for every cell in a large DrawBuffer.
+     *
+     * @return list<array{0:int,1:int}>
+     */
+    private function siblingOcclusionIntervals(int $globalY, int $minX, int $maxX): array
+    {
+        $intervals = [];
+        $child = $this;
+        for ($owner = $this->owner; $owner instanceof Group; $owner = $owner->owner) {
+            foreach ($owner->higherSiblingIntervals($child, $globalY, $minX, $maxX) as $interval) {
+                $intervals[] = $interval;
+            }
+            $child = $owner;
+        }
+        if ($intervals === []) {
+            return [];
+        }
+
+        usort($intervals, static fn (array $left, array $right): int => $left[0] <=> $right[0]);
+        $merged = [];
+        foreach ($intervals as [$start, $end]) {
+            $last = array_key_last($merged);
+            if ($last !== null && $start <= $merged[$last][1]) {
+                $merged[$last][1] = max($merged[$last][1], $end);
+            } else {
+                $merged[] = [$start, $end];
+            }
+        }
+
+        return $merged;
     }
 }

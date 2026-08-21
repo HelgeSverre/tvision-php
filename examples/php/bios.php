@@ -21,6 +21,6 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 use HelgeSverre\TurboVision\Examples\Bios\BiosApp;
 
-if (isset($argv) && realpath($argv[0]) === realpath(__FILE__)) {
-    exit(new BiosApp()->run());
+if (BiosApp::runningAsMain(__FILE__)) {
+    exit((new BiosApp())->run());
 }

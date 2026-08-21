@@ -145,15 +145,15 @@ final class PictureValidator extends Validator
     private function matchNode(PictureNode $node, array $input, int $position): array
     {
         $character = $input[$position] ?? null;
-        if (($node->type === 'literal' || $node->type === 'slot') && $node->value !== null) {
-            return $node->type === 'literal'
+        if (($node->type === PictureNodeType::Literal || $node->type === PictureNodeType::Slot) && $node->value !== null) {
+            return $node->type === PictureNodeType::Literal
                 ? $this->matchLiteral($node->value, $character, $position)
                 : $this->matchSlot($node->value, $character, $position);
         }
-        if ($node->type === 'group') {
+        if ($node->type === PictureNodeType::Group) {
             return $this->matchGroup($node, $input, $position);
         }
-        if ($node->type === 'repeat' && $node->node !== null) {
+        if ($node->type === PictureNodeType::Repeat && $node->node !== null) {
             return $this->matchRepeat($node->node, $input, $position, $node->repeatCount);
         }
 
@@ -355,7 +355,7 @@ final class PictureValidator extends Validator
     {
         $position = 0;
         foreach ($nodes as $node) {
-            if ($node->type === 'literal') {
+            if ($node->type === PictureNodeType::Literal) {
                 if ($position < $consumed) {
                     $position++;
                 } else {
@@ -365,7 +365,7 @@ final class PictureValidator extends Validator
                 }
                 continue;
             }
-            if ($node->type === 'slot') {
+            if ($node->type === PictureNodeType::Slot) {
                 if ($position >= $consumed) {
                     break;
                 }
@@ -402,12 +402,12 @@ final class PictureValidator extends Validator
                     $this->status = self::StatusSyntax;
                     return [];
                 }
-                $nodes[] = new PictureNode('literal', $this->pictureMask[$offset++]);
+                $nodes[] = new PictureNode(PictureNodeType::Literal, $this->pictureMask[$offset++]);
                 continue;
             }
             if ($character === '[' || $character === '{') {
                 $close = $character === '[' ? ']' : '}';
-                $nodes[] = new PictureNode('group', optional: $character === '[', alternatives: $this->parseAlternatives($offset, $close));
+                $nodes[] = new PictureNode(PictureNodeType::Group, optional: $character === '[', alternatives: $this->parseAlternatives($offset, $close));
                 continue;
             }
             if ($character === '*') {
@@ -415,8 +415,8 @@ final class PictureValidator extends Validator
                 continue;
             }
             $nodes[] = in_array($character, ['#', '?', '&', '!', '@'], true)
-                ? new PictureNode('slot', $character)
-                : new PictureNode('literal', $character);
+                ? new PictureNode(PictureNodeType::Slot, $character)
+                : new PictureNode(PictureNodeType::Literal, $character);
         }
 
         return $nodes;
@@ -457,21 +457,21 @@ final class PictureValidator extends Validator
         if ($offset >= $length) {
             $this->status = self::StatusSyntax;
 
-            return new PictureNode('literal', '');
+            return new PictureNode(PictureNodeType::Literal, '');
         }
         $character = $this->pictureMask[$offset++];
         if ($character === ';') {
             if ($offset >= $length) {
                 $this->status = self::StatusSyntax;
 
-                return new PictureNode('literal', '');
+                return new PictureNode(PictureNodeType::Literal, '');
             }
 
-            return new PictureNode('literal', $this->pictureMask[$offset++]);
+            return new PictureNode(PictureNodeType::Literal, $this->pictureMask[$offset++]);
         }
         if ($character === '[' || $character === '{') {
             return new PictureNode(
-                'group',
+                PictureNodeType::Group,
                 optional: $character === '[',
                 alternatives: $this->parseAlternatives($offset, $character === '[' ? ']' : '}'),
             );
@@ -481,8 +481,8 @@ final class PictureValidator extends Validator
         }
 
         return in_array($character, ['#', '?', '&', '!', '@'], true)
-            ? new PictureNode('slot', $character)
-            : new PictureNode('literal', $character);
+            ? new PictureNode(PictureNodeType::Slot, $character)
+            : new PictureNode(PictureNodeType::Literal, $character);
     }
 
     private function parseRepeat(int &$offset): PictureNode
@@ -501,7 +501,7 @@ final class PictureValidator extends Validator
                     $offset++;
                 }
 
-                return new PictureNode('repeat', node: new PictureNode('literal', ''), repeatCount: 0);
+                return new PictureNode(PictureNodeType::Repeat, node: new PictureNode(PictureNodeType::Literal, ''), repeatCount: 0);
             }
             $count = $count * 10 + $digit;
             $offset++;
@@ -510,11 +510,11 @@ final class PictureValidator extends Validator
         if ($offset >= $length) {
             $this->status = self::StatusSyntax;
 
-            return new PictureNode('repeat', node: new PictureNode('literal', ''), repeatCount: $repeatCount);
+            return new PictureNode(PictureNodeType::Repeat, node: new PictureNode(PictureNodeType::Literal, ''), repeatCount: $repeatCount);
         }
 
         return new PictureNode(
-            'repeat',
+            PictureNodeType::Repeat,
             node: $this->parseAtom($offset),
             repeatCount: $repeatCount,
         );

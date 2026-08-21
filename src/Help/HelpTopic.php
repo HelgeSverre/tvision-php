@@ -22,6 +22,11 @@ final class HelpTopic
 
     private int $width = 0;
 
+    /** @var list<array{text:string,offsets:list<int>}>|null memoized word-wrap for layoutCacheWidth */
+    private ?array $layoutCache = null;
+
+    private int $layoutCacheWidth = 0;
+
     /**
      * @param list<HelpParagraph> $paragraphs
      * @param list<CrossRef> $crossRefs
@@ -56,7 +61,12 @@ final class HelpTopic
 
     public function setWidth(int $width): void
     {
-        $this->width = max(1, $width);
+        $width = max(1, $width);
+        if ($this->width === $width && $this->layoutCache !== null) {
+            return;
+        }
+        $this->width = $width;
+        $this->layoutCache = null;
     }
 
     public function getWidth(): int
@@ -173,6 +183,12 @@ final class HelpTopic
     /** @return list<array{text:string,offsets:list<int>}> */
     private function layoutSegments(int $width): array
     {
+        // Word-wrap is O(document) and draw paths call this per reference per
+        // row; one width-keyed cache turns that into a single layout per width.
+        if ($this->layoutCache !== null && $this->layoutCacheWidth === $width) {
+            return $this->layoutCache;
+        }
+
         $result = [];
         $baseOffset = 0;
         foreach ($this->paragraphs as $paragraph) {
@@ -233,6 +249,9 @@ final class HelpTopic
                 }
             }
         }
+
+        $this->layoutCache = $result;
+        $this->layoutCacheWidth = $width;
 
         return $result;
     }

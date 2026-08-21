@@ -17,10 +17,22 @@ final class HelpFile
     /** @var array<int,HelpTopic> */
     private array $topics = [];
 
-    /** @param array<int,HelpTopic> $topics */
+    /**
+     * @param array<int|string, HelpTopic> $topics keyed by help context; string keys
+     *                                      must be canonical integer strings (the load path validates the same way)
+     */
     public function __construct(array $topics = [])
     {
         foreach ($topics as $context => $topic) {
+            // The docblock types promise valid input; these guards run for the
+            // dynamically-constructed case (decoded config, tests) where that
+            // promise cannot be checked statically.
+            if (! is_int($context) && preg_match('/^\d+$/', $context) !== 1) {
+                throw new \InvalidArgumentException("Help context key '{$context}' is not a valid integer context.");
+            }
+            if (! $topic instanceof HelpTopic) { // @phpstan-ignore-line runtime guard for dynamically-built maps
+                throw new \InvalidArgumentException('Help file topics must be ' . HelpTopic::class . ' instances.');
+            }
             $this->putTopic((int) $context, $topic);
         }
     }
@@ -70,7 +82,7 @@ final class HelpFile
 
     public function getTopic(int $context): HelpTopic
     {
-        return $this->topics[$context] ?? $this->invalidTopic($context);
+        return $this->topics[$context] ?? $this->fallbackTopic($context);
     }
 
     public function hasTopic(int $context): bool
@@ -92,7 +104,8 @@ final class HelpFile
         return $this->topics;
     }
 
-    public function invalidTopic(int $context): HelpTopic
+    /** The friendly "no help" fallback shown when a context has no topic. */
+    public function fallbackTopic(int $context): HelpTopic
     {
         return new HelpTopic([new HelpParagraph("No help is available for context {$context}.", false)]);
     }

@@ -15,7 +15,6 @@ require_once __DIR__ . '/../../../vendor/autoload.php';
 
 final class Guide01App extends Application {}
 
-// Auto-run only when executed directly (not when require'd by a test).
-if (isset($argv) && realpath($argv[0]) === realpath(__FILE__)) {
+if (Guide01App::runningAsMain(__FILE__)) {
     exit((new Guide01App())->run());
 }

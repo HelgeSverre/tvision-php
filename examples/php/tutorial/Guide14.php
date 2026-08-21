@@ -54,6 +54,6 @@ class Guide14App extends Guide13App
     }
 }
 
-if (isset($argv) && realpath($argv[0]) === realpath(__FILE__)) {
+if (Guide14App::runningAsMain(__FILE__)) {
     exit((new Guide14App())->run());
 }

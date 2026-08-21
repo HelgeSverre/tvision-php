@@ -13,6 +13,7 @@ use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\KeyModifier;
+use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Support\IntMath;
 
@@ -325,7 +326,7 @@ abstract class ListViewer extends View
         }
     }
 
-    private function itemAt(\HelgeSverre\TurboVision\Geometry\Point $where): ?int
+    private function itemAt(Point $where): ?int
     {
         if (! $this->mouseInView($where)) {
             return null;
@@ -341,7 +342,7 @@ abstract class ListViewer extends View
         );
     }
 
-    private function autoScrollItem(\HelgeSverre\TurboVision\Geometry\Point $where): ?int
+    private function autoScrollItem(Point $where): ?int
     {
         $local = $this->makeLocal($where);
         $height = max(1, $this->bounds->height());

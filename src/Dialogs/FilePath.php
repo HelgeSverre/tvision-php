@@ -102,9 +102,13 @@ final class FilePath
         return $resolved !== false && is_dir($resolved) ? $resolved : self::normalise($path);
     }
 
+    /**
+     * Join with the forward slash this class standardizes on internally;
+     * normalise()/realpath() make the separator choice safe at filesystem time.
+     */
     public static function join(string $directory, string $name): string
     {
-        return rtrim($directory, '/\\') . DIRECTORY_SEPARATOR . ltrim($name, '/\\');
+        return rtrim($directory, '/\\') . '/' . ltrim($name, '/\\');
     }
 
     public static function matches(string $name, string $pattern): bool

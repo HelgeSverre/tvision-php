@@ -29,6 +29,25 @@ class Application extends Program
         parent::__construct();
     }
 
+    /**
+     * Whether $file was the script actually executed — the guard every example
+     * wraps its `exit(new static()->run())` in, so require'ing the file from a
+     * test or tool never hijacks the terminal.
+     */
+    public static function runningAsMain(string $file): bool
+    {
+        $argv = $_SERVER['argv'] ?? null;
+        if (! is_array($argv)) {
+            return false;
+        }
+        $entry = $argv[0] ?? null;
+        if (! is_string($entry)) {
+            return false;
+        }
+
+        return realpath($entry) === realpath($file);
+    }
+
     protected function initScreen(): Screen
     {
         return $this->screenOverride ?? new Screen(new AnsiDriver());

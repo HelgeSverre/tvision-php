@@ -37,6 +37,7 @@ class Memo extends Editor
         return $this->text();
     }
 
+    /** @throws \InvalidArgumentException when the data is not an array of strings */
     public function setData(mixed $data): void
     {
         if (is_string($data)) {

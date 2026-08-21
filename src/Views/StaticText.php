@@ -51,11 +51,7 @@ class StaticText extends View
         $height = $this->bounds->height();
         $attr = $this->mapColor(1);
 
-        $blank = new DrawBuffer($width);
-        $blank->moveChar(0, ' ', $attr, $width);
-        for ($y = 0; $y < $height; $y++) {
-            $this->writeLine(0, $y, $width, 1, $blank);
-        }
+        $this->fillExtent($attr);
 
         $lines = $this->layout($width);
         foreach ($lines as $y => $line) {

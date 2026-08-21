@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Editors;
 
+use HelgeSverre\TurboVision\Support\IntMath;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
@@ -180,8 +181,8 @@ class Editor extends View
     public function setSelect(int $start, int $end, bool $cursorAtStart = false): void
     {
         $limit = $this->length();
-        $this->selStart = max(0, min($limit, $start));
-        $this->selEnd = max(0, min($limit, $end));
+        $this->selStart = IntMath::clamp($start, 0, $limit);
+        $this->selEnd = IntMath::clamp($end, 0, $limit);
         $this->curPtr = $cursorAtStart ? $this->selStart : $this->selEnd;
         $this->buffer->moveTo($this->curPtr);
         $this->trackCursor();
@@ -283,7 +284,7 @@ class Editor extends View
 
     public function deleteRange(int $start, int $end): bool
     {
-        $start = max(0, min($this->length(), $start));
+        $start = IntMath::clamp($start, 0, $this->length());
         $end = max($start, min($this->length(), $end));
         if ($start === $end) {
             return false;
@@ -465,7 +466,7 @@ class Editor extends View
     public function scrollTo(int $x, int $y): void
     {
         $this->deltaX = max(0, $x);
-        $this->deltaY = max(0, min($this->lineCount() - 1, $y));
+        $this->deltaY = IntMath::clamp($y, 0, $this->lineCount() - 1);
         $this->syncChrome();
         $this->drawView();
     }
@@ -473,7 +474,7 @@ class Editor extends View
     /** @return Point zero-based display column/line for a grapheme offset. */
     public function positionOf(int $pointer): Point
     {
-        $pointer = max(0, min($this->length(), $pointer));
+        $pointer = IntMath::clamp($pointer, 0, $this->length());
         $line = $this->lineIndexForPointer($pointer);
         [$start] = $this->lineRanges()[$line];
         $column = $this->displayColumn($start, $pointer);
@@ -503,14 +504,14 @@ class Editor extends View
 
     public function lineStart(int $pointer): int
     {
-        $pointer = max(0, min($this->length(), $pointer));
+        $pointer = IntMath::clamp($pointer, 0, $this->length());
 
         return $this->lineRanges()[$this->lineIndexForPointer($pointer)][0];
     }
 
     public function lineEnd(int $pointer): int
     {
-        $pointer = max(0, min($this->length(), $pointer));
+        $pointer = IntMath::clamp($pointer, 0, $this->length());
         return $this->lineRanges()[$this->lineIndexForPointer($pointer)][1];
     }
 
@@ -683,7 +684,7 @@ class Editor extends View
 
     protected function moveCursor(int $pointer, bool $extend = false): bool
     {
-        $pointer = max(0, min($this->length(), $pointer));
+        $pointer = IntMath::clamp($pointer, 0, $this->length());
         if ($pointer === $this->curPtr && ! $extend && ! $this->hasSelection()) {
             return false;
         }
@@ -1033,7 +1034,7 @@ class Editor extends View
 
     private function previousWord(int $pointer): int
     {
-        $pointer = max(0, min($this->length(), $pointer));
+        $pointer = IntMath::clamp($pointer, 0, $this->length());
         while ($pointer > 0 && $this->isWordGrapheme($this->buffer->graphemeAt($pointer - 1)) === false) {
             $pointer--;
         }
@@ -1046,7 +1047,7 @@ class Editor extends View
 
     private function nextWord(int $pointer): int
     {
-        $pointer = max(0, min($this->length(), $pointer));
+        $pointer = IntMath::clamp($pointer, 0, $this->length());
         while ($pointer < $this->length() && $this->isWordGrapheme($this->buffer->graphemeAt($pointer))) {
             $pointer++;
         }

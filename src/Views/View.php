@@ -104,7 +104,12 @@ class View
         return $this->owner?->handleModalEvent($event);
     }
 
-    /** Sum of every ancestor's bounds->a from this view up to (excluding) the root. */
+    /**
+     * Sum of every ancestor's bounds->a from this view up to (excluding) the
+     * root. NOTE: a root whose own bounds->a is not (0, 0) is invisible to this
+     * walk — offset roots render blank because every clip and blit assumes the
+     * root starts at the screen origin. Keep roots anchored at (0, 0).
+     */
     public function absoluteOrigin(): Point
     {
         $x = $this->bounds->a->x;
@@ -610,14 +615,25 @@ class View
 
     // --- drawing ---
 
+    /**
+     * Fill the view's whole extent with $char in the given color, reusing one
+     * row buffer for every line. The shared primitive behind the default draw(),
+     * Background's pattern fill, and StaticText's clear-then-paint.
+     */
+    protected function fillExtent(int $attr, string $char = ' '): void
+    {
+        $width = $this->bounds->width();
+        $row = new DrawBuffer($width);
+        $row->moveChar(0, $char, $attr, $width);
+        for ($y = 0, $height = $this->bounds->height(); $y < $height; $y++) {
+            $this->writeLine(0, $y, $width, 1, $row);
+        }
+    }
+
     /** Default draw: fill the extent with a blank in the view's normal color. */
     public function draw(): void
     {
-        $b = new DrawBuffer($this->bounds->width());
-        $b->moveChar(0, ' ', $this->mapColor(1), $this->bounds->width());
-        for ($y = 0; $y < $this->bounds->height(); $y++) {
-            $this->writeLine(0, $y, $this->bounds->width(), 1, $b);
-        }
+        $this->fillExtent($this->mapColor(1));
     }
 
     /** Draw only if visible and exposed (owned by a Screen-backed root). */

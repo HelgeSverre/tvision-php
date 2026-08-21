@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Editors;
 
+use HelgeSverre\TurboVision\Support\IntMath;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
 use OutOfRangeException;
 
@@ -60,9 +61,11 @@ final class EditorBuffer
 
     public function moveTo(int $position): void
     {
-        $position = max(0, min($this->length(), $position));
+        $position = IntMath::clamp($position, 0, $this->length());
         while (count($this->before) > $position) {
-            $this->after[] = array_pop($this->before);
+            $moved = array_pop($this->before);
+            \assert($moved !== null);
+            $this->after[] = $moved;
         }
         while (count($this->before) < $position && $this->after !== []) {
             $this->before[] = array_pop($this->after);
@@ -116,7 +119,7 @@ final class EditorBuffer
 
     public function slice(int $offset, ?int $length = null): string
     {
-        $offset = max(0, min($this->length(), $offset));
+        $offset = IntMath::clamp($offset, 0, $this->length());
         $available = $this->length() - $offset;
         $length = min($available, max(0, $length ?? $available));
         if ($length <= 0) {

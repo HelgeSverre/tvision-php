@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Outline;
 
+use HelgeSverre\TurboVision\Support\IntMath;
 use Closure;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
@@ -420,7 +421,7 @@ abstract class OutlineViewer extends Scroller
 
             return;
         }
-        $position = max(0, min($this->limit->y - 1, $position));
+        $position = IntMath::clamp($position, 0, $this->limit->y - 1);
         if ($position !== $this->focused) {
             $this->focused($position);
         }
@@ -440,7 +441,7 @@ abstract class OutlineViewer extends Scroller
             return;
         }
         $max = max(0, $this->limit->y - $this->bounds->height());
-        $y = max(0, min($max, $y));
+        $y = IntMath::clamp($y, 0, $max);
         if ($y !== $this->delta->y) {
             $this->delta = new Point($this->delta->x, $y);
         }

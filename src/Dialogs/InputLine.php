@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HelgeSverre\TurboVision\Dialogs;
 
+use HelgeSverre\TurboVision\Support\IntMath;
 use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Drawing\TerminalText;
@@ -549,7 +550,7 @@ class InputLine extends View
         if ($this->curPos < $this->firstPos) {
             $this->firstPos = $this->curPos;
         }
-        $this->firstPos = max(0, min($this->firstPos, max(0, $this->curPos - $this->visibleWidth() + 1)));
+        $this->firstPos = IntMath::clamp($this->firstPos, 0, max(0, $this->curPos - $this->visibleWidth() + 1));
     }
 
     private function hasSelection(): bool

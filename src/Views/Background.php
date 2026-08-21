@@ -33,13 +33,6 @@ class Background extends View
 
     public function draw(): void
     {
-        $width = $this->bounds->width();
-        $attr = $this->mapColor(1);
-
-        $b = new DrawBuffer($width);
-        $b->moveChar(0, $this->pattern, $attr, $width);
-        for ($y = 0; $y < $this->bounds->height(); $y++) {
-            $this->writeLine(0, $y, $width, 1, $b);
-        }
+        $this->fillExtent($this->mapColor(1), $this->pattern);
     }
 }

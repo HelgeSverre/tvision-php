@@ -290,7 +290,7 @@ final class Terminal extends TextDevice
 
     private function scrollToRow(int $row): void
     {
-        $row = max(0, min($this->maxScrollY(), $row));
+        $row = IntMath::clamp($row, 0, $this->maxScrollY());
         if ($this->getVScrollBar() !== null) {
             parent::scrollTo($this->delta->x, $row);
             return;

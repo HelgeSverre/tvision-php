@@ -25,7 +25,7 @@ use HelgeSverre\TurboVision\Support\IntMath;
  */
 abstract class ListViewer extends View
 {
-    /** cpListViewer: 1=active, 2=inactive, 3=focused, 4=selected, 5=divider. */
+    /** cpListViewer: 1=active, 2=inactive, 3=focused, 4=selected, 5=divider (reserved for subclasses; draw() never paints it). */
     private const string PALETTE = "\x1A\x1A\x1B\x1C\x1D";
 
     public int $focused = 0;

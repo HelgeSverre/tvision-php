@@ -56,6 +56,7 @@ final class RangeValidator extends FilterValidator
         return $this->min < 0 && preg_match('/^-\d*$/D', $input) === 1;
     }
 
+    /** @throws \InvalidArgumentException when the stored value is not scalar during a Valid transfer */
     public function transfer(string &$input, mixed &$value, ValidatorTransfer $operation): int
     {
         if ($operation === ValidatorTransfer::DataSize) {

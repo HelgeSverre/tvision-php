@@ -172,3 +172,51 @@ test('output stream adapter forwards writes, formatted output and flushes', func
 
     expect($terminal->scrollback())->toBe(['build #42 done', '']);
 });
+
+test('invalid UTF-8 bytes cost one fallback glyph each without discarding surrounding output', function (): void {
+    $terminal = new Terminal(Rect::of(0, 0, 40, 5));
+    $terminal->write("caf\xe9 ok \xff MORE\nsecond line");
+
+    expect($terminal->scrollback())->toBe(['caf? ok ? MORE', 'second line']);
+});
+
+test('a multi-byte glyph split across writes still renders intact', function (): void {
+    $terminal = new Terminal(Rect::of(0, 0, 40, 5));
+    $terminal->write('caf');
+    $terminal->write("\xc3");
+    $terminal->write("\xa9 caf\xc3\xa9 done");
+
+    expect($terminal->scrollback())->toBe(['café café done']);
+});
+
+test('an invalid byte at the chunk window edge does not swallow the next write', function (): void {
+    $terminal = new Terminal(Rect::of(0, 0, 200, 5), maxBytes: 65_536);
+    $prefix = str_repeat('a', 8_191);
+
+    $terminal->write($prefix . "\xff");
+    $terminal->write('tail');
+
+    expect($terminal->scrollback())->toBe([$prefix . '?tail']);
+});
+
+test('carriage-return overwrite renders the rewritten line', function (): void {
+    $terminal = new Terminal(Rect::of(0, 0, 40, 5));
+
+    $terminal->write('hello');
+    $terminal->write("\rHE");
+
+    expect($terminal->scrollback())->toBe(['HEllo']);
+});
+
+test('carriage-return rewrite stays linear across many overwritten columns', function (): void {
+    $terminal = new Terminal(Rect::of(0, 0, 60, 5), maxBytes: 1_000_000);
+    $columns = 20_000;
+
+    $started = hrtime(true);
+    $terminal->write(str_repeat('.', $columns));
+    $terminal->write("\r" . str_repeat('#', $columns));
+    $elapsedMs = (hrtime(true) - $started) / 1e6;
+
+    expect($terminal->scrollback()[0])->toBe(str_repeat('#', $columns))
+        ->and($elapsedMs)->toBeLessThan(1500.0);
+});

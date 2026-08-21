@@ -37,6 +37,12 @@ final class Terminal extends TextDevice
     /** UTF-8 parsing window; the final grapheme carries into the next window. */
     private const int INPUT_CHUNK_BYTES = 8_192;
 
+    /** @var array<int,string>|null pending tail-line edits as grapheme cells; null when the ring is authoritative */
+    private ?array $pendingTailCells = null;
+
+    /** Incomplete trailing UTF-8 sequence from the previous write, awaiting continuation bytes. */
+    private string $pendingSequence = '';
+
     /** @var array<int,string> fixed-size logical-line ring */
     private array $ring;
 
@@ -120,6 +126,8 @@ final class Terminal extends TextDevice
     /** @return list<string> retained hard-break lines from oldest to newest. */
     public function scrollback(): array
     {
+        $this->flushPendingTailCells();
+
         $lines = [];
         for ($i = 0; $i < $this->count; $i++) {
             $lines[] = $this->ring[($this->head + $i) % $this->maxLines];
@@ -147,10 +155,7 @@ final class Terminal extends TextDevice
 
         $wasAtBottom = $this->isAtBottom();
         $this->wrap = $wrap;
-        $this->layoutDirty = true;
-        $this->refreshLayout();
-        $this->scrollAfterLayoutChange($wasAtBottom);
-        $this->drawView();
+        $this->relayout($wasAtBottom);
     }
 
     /** Drop every retained line and restore the always-present editable tail. */
@@ -162,6 +167,8 @@ final class Terminal extends TextDevice
         $this->storedBytes = 0;
         $this->cursorColumn = 0;
         $this->tailColumns = 0;
+        $this->pendingTailCells = null;
+        $this->pendingSequence = '';
         $this->pendingCarriageReturn = false;
         $this->appendEmptyLine();
         $this->layoutDirty = true;
@@ -174,7 +181,8 @@ final class Terminal extends TextDevice
      * Append text using practical TTY controls: LF starts a line, CR rewinds
      * the current line, TAB expands to spaces and backspace rewinds one cell.
      * Other control bytes are ignored. Invalid UTF-8 and wide/zero-width glyphs
-     * are rendered as `?`, consistent with all framework drawing APIs.
+     * are rendered as `?`, consistent with all framework drawing APIs — one bad
+     * byte costs one fallback glyph and never discards surrounding output.
      */
     public function doSputn(string $text): int
     {
@@ -188,17 +196,24 @@ final class Terminal extends TextDevice
         $this->writing = true;
         try {
             $this->consumeText($text);
+            $this->flushPendingTailCells();
         } finally {
             $this->writing = false;
             $this->enforceByteBudget();
         }
 
+        $this->relayout($wasAtBottom);
+
+        return $accepted;
+    }
+
+    /** Rebuild derived layout and repaint, following the tail when previously pinned. */
+    private function relayout(bool $wasAtBottom): void
+    {
         $this->layoutDirty = true;
         $this->refreshLayout();
         $this->scrollAfterLayoutChange($wasAtBottom);
         $this->drawView();
-
-        return $accepted;
     }
 
     public function draw(): void
@@ -230,10 +245,7 @@ final class Terminal extends TextDevice
     {
         $wasAtBottom = $this->isAtBottom();
         $this->setBounds($bounds);
-        $this->layoutDirty = true;
-        $this->refreshLayout();
-        $this->scrollAfterLayoutChange($wasAtBottom);
-        $this->drawView();
+        $this->relayout($wasAtBottom);
     }
 
     public function handleEvent(Event $event): void
@@ -371,36 +383,51 @@ final class Terminal extends TextDevice
         $this->pendingCarriageReturn = false;
         $glyph = TerminalText::cellGlyph($glyph);
 
-        if ($this->cursorColumn === $this->tailColumns) {
+        if ($this->cursorColumn === $this->tailColumns && $this->pendingTailCells === null) {
             $slot = ($this->head + $this->count - 1) % $this->maxLines;
             $this->storedBytes -= strlen($this->ring[$slot]);
             $this->ring[$slot] .= $glyph;
             $this->storedBytes += strlen($this->ring[$slot]);
             $this->tailColumns++;
             $this->cursorColumn++;
-            if (! $this->writing) {
-                $this->enforceByteBudget();
-            } elseif ($this->storedBytes > IntMath::add($this->maxBytes, self::RETENTION_OVERRUN_BYTES)) {
-                $this->enforceByteBudget();
-            }
+            $this->enforceWriteBudget();
 
             return;
         }
 
-        $line = $this->tailLine();
-        $cells = TerminalText::graphemes($line);
+        // Overwrite (or append following an overwrite) edits the cached cell
+        // array; the ring string is rebuilt once per write batch, keeping a
+        // long carriage-return rewrite linear instead of quadratic.
+        if ($this->pendingTailCells === null) {
+            $this->pendingTailCells = TerminalText::graphemes($this->tailLine());
+        }
+
+        $cells = $this->pendingTailCells;
         while (count($cells) < $this->cursorColumn) {
             $cells[] = ' ';
         }
         $cells[$this->cursorColumn] = $glyph;
+        $this->pendingTailCells = $cells;
         $this->tailColumns = max($this->tailColumns, $this->cursorColumn + 1);
-        $this->replaceTail(implode('', $cells));
         $this->cursorColumn++;
+    }
+
+    /** Rebuild the tail ring line from pending cell edits (no-op when clean). */
+    private function flushPendingTailCells(): void
+    {
+        if ($this->pendingTailCells === null) {
+            return;
+        }
+
+        $cells = $this->pendingTailCells;
+        $this->pendingTailCells = null;
+        $this->replaceTail(implode('', $cells));
     }
 
     private function newLine(): void
     {
         $this->pendingCarriageReturn = false;
+        $this->flushPendingTailCells();
         $this->appendEmptyLine();
         $this->cursorColumn = 0;
         $this->tailColumns = 0;
@@ -428,6 +455,12 @@ final class Terminal extends TextDevice
         $this->ring[$slot] = $line;
         $this->storedBytes += strlen($line);
 
+        $this->enforceWriteBudget();
+    }
+
+    /** Retention policy: trim immediately outside writes; cap overruns during them. */
+    private function enforceWriteBudget(): void
+    {
         if (! $this->writing) {
             $this->enforceByteBudget();
         } elseif ($this->storedBytes > IntMath::add($this->maxBytes, self::RETENTION_OVERRUN_BYTES)) {
@@ -437,6 +470,8 @@ final class Terminal extends TextDevice
 
     private function enforceByteBudget(): void
     {
+        $this->flushPendingTailCells();
+
         while ($this->storedBytes > $this->maxBytes && $this->count > 1) {
             $this->evictHead();
         }
@@ -480,7 +515,7 @@ final class Terminal extends TextDevice
     /** Consume input in bounded windows without materialising a grapheme array for it all. */
     private function consumeText(string $text): void
     {
-        if (preg_match('/^[\x20-\x7E]*$/D', $text) === 1) {
+        if ($this->pendingSequence === '' && TerminalText::isPrintableAscii($text)) {
             $length = strlen($text);
             for ($offset = 0; $offset < $length; $offset++) {
                 $this->consumeGrapheme($text[$offset]);
@@ -491,22 +526,30 @@ final class Terminal extends TextDevice
 
         $offset = 0;
         $length = strlen($text);
-        $carry = '';
+        $carry = $this->pendingSequence;
+        $this->pendingSequence = '';
         while ($offset < $length) {
             $chunk = mb_strcut($text, $offset, self::INPUT_CHUNK_BYTES, 'UTF-8');
             if ($chunk === '') {
-                // Keep TerminalText's malformed-input contract: a visible fallback,
-                // rather than leaking an invalid sequence into the cell model.
+                // mb_strcut could not extract a window at this offset; skip one
+                // byte as a fallback glyph so consumption always makes progress.
                 $this->consumeGrapheme('?');
+                $offset++;
 
-                return;
+                continue;
             }
             $offset += strlen($chunk);
             $matches = preg_match_all('/\X/u', $carry . $chunk, $graphemes);
             if ($matches === false) {
-                $this->consumeGrapheme('?');
+                // Invalid UTF-8 somewhere in this window: fall back to a byte-wise
+                // scan so one bad byte costs one '?' glyph instead of discarding
+                // everything around it.
+                [$pieces, $carry] = self::lossyPieces($carry . $chunk);
+                foreach ($pieces as $piece) {
+                    $this->consumeGrapheme($piece);
+                }
 
-                return;
+                continue;
             }
             $pending = array_pop($graphemes[0]) ?? '';
             foreach ($graphemes[0] as $grapheme) {
@@ -514,9 +557,85 @@ final class Terminal extends TextDevice
             }
             $carry = $pending;
         }
+
+        // A trailing fragment is only an incomplete UTF-8 sequence if it fails
+        // validation; anything complete renders now instead of waiting for the
+        // next write. Incomplete sequences await their continuation bytes.
+        if ($carry !== '' && preg_match('//u', $carry) !== 1) {
+            $this->pendingSequence = $carry;
+
+            return;
+        }
         if ($carry !== '') {
             $this->consumeGrapheme($carry);
         }
+    }
+
+    /**
+     * Byte-wise lossy decode for windows the grapheme regex rejects: valid UTF-8
+     * sequences pass through intact, each invalid byte becomes '?'. Returns
+     * `[pieces..., carry]` where a trailing incomplete sequence is held back as a
+     * carry string for the next window instead of being mangled into '?'s.
+     *
+     * @return array{0: list<string>, 1: string}
+     */
+    private static function lossyPieces(string $bytes): array
+    {
+        $length = strlen($bytes);
+
+        // Hold back an incomplete trailing sequence (at most 3 bytes of it).
+        $consumedLength = $length;
+        for ($index = max(0, $length - 3); $index < $length; $index++) {
+            $byte = ord($bytes[$index]);
+            if ($byte < 0x80 || ($byte & 0xC0) !== 0x80) {
+                $expected = match (true) {
+                    $byte >= 0xF0 => 4,
+                    $byte >= 0xE0 => 3,
+                    $byte >= 0xC0 => 2,
+                    default => 1,
+                };
+                if ($expected > 1 && ($length - $index) < $expected) {
+                    $consumedLength = $index;
+                }
+
+                break;
+            }
+        }
+
+        $pieces = [];
+        $index = 0;
+        while ($index < $consumedLength) {
+            $byte = ord($bytes[$index]);
+            if ($byte < 0x80) {
+                $pieces[] = $bytes[$index];
+                $index++;
+
+                continue;
+            }
+
+            $expected = match (true) {
+                $byte >= 0xF0 => 4,
+                $byte >= 0xE0 => 3,
+                $byte >= 0xC0 => 2,
+                default => 1,
+            };
+            $sequence = substr($bytes, $index, $expected);
+            if (
+                $expected > 1
+                && strlen($sequence) === $expected
+                && preg_match('//u', $sequence) === 1
+            ) {
+                $pieces[] = $sequence;
+                $index += $expected;
+
+                continue;
+            }
+
+            $pieces[] = '?';
+            $index++;
+        }
+
+        return [$pieces, substr($bytes, $consumedLength)];
     }
 
     private function consumeGrapheme(string $grapheme): void

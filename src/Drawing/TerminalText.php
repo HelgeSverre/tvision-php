@@ -73,7 +73,7 @@ final class TerminalText
         return $glyph;
     }
 
-    private static function isPrintableAscii(string $text): bool
+    public static function isPrintableAscii(string $text): bool
     {
         return preg_match('/^[\x20-\x7E]*$/D', $text) === 1;
     }

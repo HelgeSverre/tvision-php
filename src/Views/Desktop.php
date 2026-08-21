@@ -147,9 +147,9 @@ class Desktop extends Group
 
     private function fitsMinimumSize(View $view, Rect $bounds): bool
     {
-        [$minWidth, $minHeight] = $view->sizeLimits();
+        $limits = $view->sizeLimits();
 
-        return $bounds->width() >= $minWidth && $bounds->height() >= $minHeight;
+        return $bounds->width() >= $limits->minWidth && $bounds->height() >= $limits->minHeight;
     }
 
     /** @param list<array{0: View, 1: Rect}> $placements */

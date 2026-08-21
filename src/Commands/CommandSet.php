@@ -13,7 +13,10 @@ namespace HelgeSverre\TurboVision\Commands;
  * framework's standard commands. Methods that would have mutated TCommandSet
  * return a new value instead.
  */
-final readonly class CommandSet
+/**
+ * @implements \IteratorAggregate<int, int>
+ */
+final readonly class CommandSet implements \Countable, \IteratorAggregate
 {
     /** @var array<int, true> */
     private array $commands;
@@ -75,6 +78,12 @@ final readonly class CommandSet
     public function all(): array
     {
         return array_keys($this->commands);
+    }
+
+    /** @return \Traversable<int, int> commands in deterministic numeric order */
+    public function getIterator(): \Traversable
+    {
+        yield from $this->all();
     }
 
     /** Return the commands found in either set. */

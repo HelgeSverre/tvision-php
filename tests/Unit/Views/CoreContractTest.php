@@ -183,7 +183,7 @@ test('geometry conveniences clamp size, route mouse containment, and report expo
         }
     };
     $view = new class(Rect::of(1, 1, 2, 2)) extends View {
-        public function sizeLimits(): array { return [2, 1, 4, 2]; }
+        public function sizeLimits(): \HelgeSverre\TurboVision\Support\SizeLimits { return new \HelgeSverre\TurboVision\Support\SizeLimits(2, 1, 4, 2); }
     };
     $root->insert($view);
 

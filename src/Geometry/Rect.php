@@ -71,4 +71,79 @@ final readonly class Rect
     {
         return $this->a->equals($other->a) && $this->b->equals($other->b);
     }
+
+    /** Whether the two rectangles overlap in a non-empty region. */
+    public function intersects(Rect $other): bool
+    {
+        return ! $this->intersect($other)->isEmpty();
+    }
+
+    /** The smallest rectangle covering both inputs. */
+    public function union(Rect $other): self
+    {
+        return new self(
+            new Point(min($this->a->x, $other->a->x), min($this->a->y, $other->a->y)),
+            new Point(max($this->b->x, $other->b->x), max($this->b->y, $other->b->y)),
+        );
+    }
+
+    /** Whether every part of $other lies inside this rectangle. */
+    public function containsRect(Rect $other): bool
+    {
+        return $this->contains($other->a) && $this->contains(new Point(
+            IntMath::subtract($other->b->x, 1),
+            IntMath::subtract($other->b->y, 1),
+        )) || ($other->isEmpty() && $this->contains($other->a));
+    }
+
+    /**
+     * Shrink (positive deltas) or grow (negative deltas) each edge inward,
+     * mirroring grow()'s outward convention.
+     */
+    public function inset(int $dx, int $dy): self
+    {
+        return $this->grow(-$dx, -$dy);
+    }
+
+    /** A rectangle of this size centered horizontally and vertically inside $container. */
+    public function centeredIn(Rect $container): self
+    {
+        $width = max(0, $this->width());
+        $height = max(0, $this->height());
+        $left = $container->a->x + intdiv(max(0, $container->width() - $width), 2);
+        $top = $container->a->y + intdiv(max(0, $container->height() - $height), 2);
+
+        return Rect::of($left, $top, IntMath::add($left, $width), IntMath::add($top, $height));
+    }
+
+    /** This rectangle's size moved as close to the center of $container without leaving it. */
+    public function clampInto(Rect $container): self
+    {
+        if ($container->isEmpty()) {
+            return new self($container->a, $container->a);
+        }
+        $width = min(max(0, $this->width()), $container->width());
+        $height = min(max(0, $this->height()), $container->height());
+        $left = IntMath::clamp($this->a->x, $container->a->x, IntMath::subtract($container->b->x, $width));
+        $top = IntMath::clamp($this->a->y, $container->a->y, IntMath::subtract($container->b->y, $height));
+
+        return Rect::of($left, $top, IntMath::add($left, $width), IntMath::add($top, $height));
+    }
+
+    /** A rectangle anchored at a corner with the given extent. */
+    public static function fromSize(int $x, int $y, int $width, int $height): self
+    {
+        return Rect::of($x, $y, IntMath::add($x, max(0, $width)), IntMath::add($y, max(0, $height)));
+    }
+
+    /** The (width, height) extent as a Point. */
+    public function size(): Point
+    {
+        return new Point($this->width(), $this->height());
+    }
+
+    public function __toString(): string
+    {
+        return "[{$this->a} - {$this->b}]";
+    }
 }

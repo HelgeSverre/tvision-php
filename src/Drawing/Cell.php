@@ -20,9 +20,31 @@ final readonly class Cell
         $this->attr = $attr;
     }
 
+    /** The default blank cell: a space with attribute 0x07. */
+    public static function blank(): self
+    {
+        return new self();
+    }
+
+    /** The front-buffer "never painted" sentinel; Screen internals only. */
+    public static function sentinel(): self
+    {
+        return new self("\0", -1);
+    }
+
+    /** An Attribute-object flavored constructor. */
     public static function of(string $char, Attribute $attribute): self
     {
         return new self($char, $attribute->toCellValue());
+    }
+
+    /**
+     * A copy of this cell with substituted fields — the immutable-update path
+     * for recoloring or re-glyphing without touching the original.
+     */
+    public function with(string $char, int $attr): self
+    {
+        return new self($char, $attr);
     }
 
     public function equals(Cell $other): bool

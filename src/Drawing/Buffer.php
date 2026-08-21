@@ -6,9 +6,14 @@ namespace HelgeSverre\TurboVision\Drawing;
 
 use HelgeSverre\TurboVision\Geometry\Rect;
 use InvalidArgumentException;
+use Countable;
 
-/** A width x height grid of Cells, stored row-major. The screen back/front buffer. */
-final class Buffer
+/**
+ * A width x height grid of Cells, stored row-major. The screen back/front buffer.
+ *
+ * @implements \IteratorAggregate<int, list<Cell>>
+ */
+final class Buffer implements \Countable, \IteratorAggregate
 {
     /** Guard against terminal dimensions turning into a process-killing allocation. */
     public const int MAX_CELLS = 1_000_000;
@@ -59,6 +64,31 @@ final class Buffer
     public function cells(): array
     {
         return $this->cells;
+    }
+
+    /** One full row of cells (blank-padded when $y is out of bounds).
+     * @return list<Cell>
+     */
+    public function row(int $y): array
+    {
+        if ($y < 0 || $y >= $this->height) {
+            return array_fill(0, max(0, $this->width), new Cell());
+        }
+
+        return array_slice($this->cells, $y * $this->width, $this->width);
+    }
+
+    public function count(): int
+    {
+        return $this->height;
+    }
+
+    /** Iterate rows: yields [$y => list<Cell>] top to bottom. */
+    public function getIterator(): \Generator
+    {
+        for ($y = 0; $y < $this->height; $y++) {
+            yield $y => $this->row($y);
+        }
     }
 
     /** Cheap copy-on-write snapshot; Cell instances are immutable. */

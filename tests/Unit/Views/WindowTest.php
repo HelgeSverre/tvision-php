@@ -51,7 +51,8 @@ test('the palette can be switched to gray', function (): void {
 
 test('sizeLimits enforces the 16x6 minimum window size', function (): void {
     $w = new Window(Rect::of(0, 0, 26, 7), 'Demo', 1);
-    [$minW, $minH, $maxW, $maxH] = $w->sizeLimits();
+    $limits = $w->sizeLimits();
+    [$minW, $minH, $maxW, $maxH] = [$limits->minWidth, $limits->minHeight, $limits->maxWidth, $limits->maxHeight];
 
     expect($minW)->toBe(16)
         ->and($minH)->toBe(6);

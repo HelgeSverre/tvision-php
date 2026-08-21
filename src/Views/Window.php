@@ -14,6 +14,7 @@ use HelgeSverre\TurboVision\Events\Key;
 use HelgeSverre\TurboVision\Events\MouseEvent;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Support\SizeLimits;
 use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarOrientation;
 use HelgeSverre\TurboVision\Views\ScrollBar\ScrollBarPart;
 use HelgeSverre\TurboVision\Views\Window\WindowFlags;
@@ -89,22 +90,24 @@ class Window extends Group implements FrameOwner
 
     public function frameIsZoomed(): bool
     {
-        [$minW, $minH, $maxW, $maxH] = $this->sizeLimits();
+        $limits = $this->sizeLimits();
 
-        return $this->bounds->width() === $maxW && $this->bounds->height() === $maxH;
+        return $this->bounds->width() === $limits->maxWidth && $this->bounds->height() === $limits->maxHeight;
     }
 
     // --- title, number, palette ---
 
-    public function setPalette(int $index): void
+    public function setPalette(int $index): static
     {
         $index = WindowPalette::normalize($index);
         if ($this->paletteIndex === $index) {
-            return;
+            return $this;
         }
 
         $this->paletteIndex = $index;
         $this->drawView();
+
+        return $this;
     }
 
     public function paletteIndex(): int
@@ -112,14 +115,16 @@ class Window extends Group implements FrameOwner
         return $this->paletteIndex;
     }
 
-    public function setTitle(string $title): void
+    public function setTitle(string $title): static
     {
         if ($this->title === $title) {
-            return;
+            return $this;
         }
 
         $this->title = $title;
         $this->frame?->drawView();
+
+        return $this;
     }
 
     public function getTitle(): string
@@ -127,20 +132,22 @@ class Window extends Group implements FrameOwner
         return $this->title;
     }
 
-    public function setNumber(int $number): void
+    public function setNumber(int $number): static
     {
         if ($this->number === $number) {
-            return;
+            return $this;
         }
 
         $this->number = $number;
         $this->frame?->drawView();
+
+        return $this;
     }
 
-    public function setFlags(int $flags): void
+    public function setFlags(int $flags): static
     {
         if ($this->flags === $flags) {
-            return;
+            return $this;
         }
 
         $selected = $this->getState(State::Selected);
@@ -152,6 +159,8 @@ class Window extends Group implements FrameOwner
             $this->setWindowCommands(true);
         }
         $this->frame?->drawView();
+
+        return $this;
     }
 
     public function getPalette(): ?Palette
@@ -162,17 +171,17 @@ class Window extends Group implements FrameOwner
     // --- geometry ---
 
     /** Faithful min window size 16x6; max is the desktop extent if owned, else unbounded. */
-    public function sizeLimits(): array
+    public function sizeLimits(): SizeLimits
     {
-        $maxW = PHP_INT_MAX;
-        $maxH = PHP_INT_MAX;
+        $maxWidth = PHP_INT_MAX;
+        $maxHeight = PHP_INT_MAX;
         if ($this->owner !== null) {
-            $ext = $this->owner->getExtent();
-            $maxW = $ext->width();
-            $maxH = $ext->height();
+            $extent = $this->owner->getExtent();
+            $maxWidth = $extent->width();
+            $maxHeight = $extent->height();
         }
 
-        return [16, 6, $maxW, $maxH];
+        return new SizeLimits(16, 6, $maxWidth, $maxHeight);
     }
 
     /**
@@ -357,14 +366,14 @@ class Window extends Group implements FrameOwner
             return;
         }
 
-        [$minW, $minH, $maxW, $maxH] = $this->sizeLimits();
+        $limits = $this->sizeLimits();
 
-        if ($this->bounds->width() !== $maxW || $this->bounds->height() !== $maxH) {
+        if ($this->bounds->width() !== $limits->maxWidth || $this->bounds->height() !== $limits->maxHeight) {
             $this->zoomRect = $this->bounds;
             $extent = $this->owner->getExtent();
             $originX = $extent->a->x;
             $originY = $extent->a->y;
-            $this->changeBounds(Rect::of($originX, $originY, $originX + $maxW, $originY + $maxH));
+            $this->changeBounds(Rect::of($originX, $originY, $originX + $limits->maxWidth, $originY + $limits->maxHeight));
         } else {
             $this->changeBounds($this->zoomRect);
         }
@@ -374,8 +383,8 @@ class Window extends Group implements FrameOwner
     public function resizeTo(Rect $newBounds): void
     {
         $limits = $this->owner?->getExtent() ?? $this->getBounds();
-        [$minW, $minH, $maxW, $maxH] = $this->sizeLimits();
-        $this->dragView($newBounds, $limits, new Point($minW, $minH), new Point($maxW, $maxH));
+        $sizeLimits = $this->sizeLimits();
+        $this->dragView($newBounds, $limits, new Point($sizeLimits->minWidth, $sizeLimits->minHeight), new Point($sizeLimits->maxWidth, $sizeLimits->maxHeight));
     }
 
     public function setState(int $flag, bool $enable): void

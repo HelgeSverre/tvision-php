@@ -37,8 +37,7 @@ final class IntMath
     }
 
     public static function multiply(int $left, int $right): int
-    {
-        if ($left === 0 || $right === 0) {
+    {        if ($left === 0 || $right === 0) {
             return 0;
         }
 
@@ -59,6 +58,25 @@ final class IntMath
         }
 
         return $left * $right;
+    }
+
+    /**
+     * Saturating clamp: $value confined to [$min, $max]. Out-of-range inputs
+     * snap to the nearest bound instead of promoting anything to float.
+     */
+    public static function clamp(int $value, int $min, int $max): int
+    {
+        if ($max < $min) {
+            return $min;
+        }
+        if ($value < $min) {
+            return $min;
+        }
+        if ($value > $max) {
+            return $max;
+        }
+
+        return $value;
     }
 
     private function __construct() {}

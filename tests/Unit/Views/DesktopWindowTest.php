@@ -140,3 +140,26 @@ test('window cycling skips hidden disabled and non-selectable windows', function
 
     expect($desk->current())->toBe($last);
 });
+
+test('removing a visible window repaints the exposed area immediately', function (): void {
+    $withBoth = deskFor(40, 12);
+    $back = new Window(Rect::of(0, 0, 20, 8), 'Back', 1);
+    $front = new Window(Rect::of(4, 2, 24, 10), 'Front', 2);
+    $withBoth->insertWindow($back);
+    $withBoth->insertWindow($front);
+    $withBoth->drawView();
+
+    $onlyBack = deskFor(40, 12);
+    $back2 = new Window(Rect::of(0, 0, 20, 8), 'Back', 1);
+    $onlyBack->insertWindow($back2);
+    $onlyBack->drawView();
+
+    // Removing the front window must expose the back window right away: the
+    // painted result equals a tree that never contained the front window.
+    $withBoth->remove($front);
+
+    $rowsA = $withBoth->screen()?->back()->rows();
+    $rowsB = $onlyBack->screen()?->back()->rows();
+
+    expect($rowsA)->toBe($rowsB);
+});

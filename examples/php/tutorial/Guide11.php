@@ -16,6 +16,7 @@ use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Menus\MenuBar;
 use HelgeSverre\TurboVision\Menus\MenuItem;
 use HelgeSverre\TurboVision\Menus\SubMenu;
+use HelgeSverre\TurboVision\Support\SizeLimits;
 use HelgeSverre\TurboVision\Views\Window;
 
 require_once __DIR__ . '/Guide09.php';
@@ -24,12 +25,12 @@ const CM_G11_NEW_DIALOG = Cmd::FirstSafeUser + 2; // original cmNewDialog = 202
 
 final class Guide11Window extends Guide09Window
 {
-    public function sizeLimits(): array
+    public function sizeLimits(): SizeLimits
     {
-        [$minW, $minH, $maxW, $maxH] = parent::sizeLimits();
+        $limits = parent::sizeLimits();
         $leftWidth = $this->leftPane?->getBounds()->width() ?? 0;
 
-        return [max($minW, $leftWidth + 9), $minH, $maxW, $maxH];
+        return new SizeLimits(max($limits->minWidth, $leftWidth + 9), $limits->minHeight, $limits->maxWidth, $limits->maxHeight);
     }
 }
 

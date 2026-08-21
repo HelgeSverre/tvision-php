@@ -11,6 +11,7 @@ use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Exceptions\InputClosedException;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Support\IntMath;
 use InvalidArgumentException;
 
 /**
@@ -81,6 +82,7 @@ class Group extends View
         }
 
         $wasCurrent = $this->currentView === $view;
+        $wasVisible = ($view->state & State::Visible) !== 0;
         array_splice($this->children, $index, 1);
         if ($wasCurrent) {
             $view->setState(State::Focused | State::Selected, false);
@@ -91,12 +93,45 @@ class Group extends View
         if ($wasCurrent) {
             $this->focusReplacement($index);
         }
+
+        // A visible child just vacated (or uncovered) screen area. Redraw the
+        // group so what remains underneath is painted immediately — otherwise
+        // the removed view's pixels linger in modal loops and programmatic
+        // removals until some unrelated event forces a redraw.
+        if ($wasVisible && $this->screen() !== null) {
+            $this->drawView();
+        }
     }
 
     /** @return list<View> */
     public function subviews(): array
     {
         return $this->children;
+    }
+
+    /**
+     * Iterate child views in insertion order (= z-order bottom to top).
+     *
+     * @return \ArrayIterator<int, View>
+     */
+    public function getIterator(): \ArrayIterator
+    {
+        return new \ArrayIterator($this->children);
+    }
+
+    /** The child windows (Desktop convenience; empty for non-desktop groups).
+     * @return list<Window>
+     */
+    public function windows(): array
+    {
+        $windows = [];
+        foreach ($this->children as $child) {
+            if ($child instanceof Window) {
+                $windows[] = $child;
+            }
+        }
+
+        return $windows;
     }
 
     /** Detach every child while preserving the ownership invariants. */
@@ -338,13 +373,13 @@ class Group extends View
         }
 
         $origin = $this->absoluteOrigin();
-        $bottom = \HelgeSverre\TurboVision\Support\IntMath::add($origin->y, $this->bounds->height());
+        $bottom = IntMath::add($origin->y, $this->bounds->height());
         if ($globalY < $origin->y || $globalY >= $bottom) {
             return [];
         }
 
         $start = max($minX, $origin->x);
-        $end = min($maxX, \HelgeSverre\TurboVision\Support\IntMath::add($origin->x, $this->bounds->width()));
+        $end = min($maxX, IntMath::add($origin->x, $this->bounds->width()));
         if ($start >= $end) {
             return [];
         }
@@ -485,7 +520,7 @@ class Group extends View
     /** Validate all controls, except focus-release validation targets the current one. */
     public function valid(int $command): bool
     {
-        if ($command === \HelgeSverre\TurboVision\Events\Cmd::ReleasedFocus) {
+        if ($command === Cmd::ReleasedFocus) {
             return $this->currentView === null
                 || ($this->currentView->options & State::Validate) === 0
                 || $this->currentView->valid($command);

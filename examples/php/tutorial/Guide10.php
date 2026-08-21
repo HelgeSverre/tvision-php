@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 use HelgeSverre\TurboVision\Geometry\Rect;
+use HelgeSverre\TurboVision\Support\SizeLimits;
 use HelgeSverre\TurboVision\Views\Window;
 
 require_once __DIR__ . '/Guide09.php';
@@ -15,12 +16,12 @@ require_once __DIR__ . '/Guide09.php';
 final class Guide10Window extends Guide09Window
 {
     /** Floor minimum width at the left pane width + 9 (faithful to tvguid10). */
-    public function sizeLimits(): array
+    public function sizeLimits(): SizeLimits
     {
-        [$minW, $minH, $maxW, $maxH] = parent::sizeLimits();
+        $limits = parent::sizeLimits();
         $leftWidth = $this->leftPane?->getBounds()->width() ?? 0;
 
-        return [max($minW, $leftWidth + 9), $minH, $maxW, $maxH];
+        return new SizeLimits(max($limits->minWidth, $leftWidth + 9), $limits->minHeight, $limits->maxWidth, $limits->maxHeight);
     }
 }
 

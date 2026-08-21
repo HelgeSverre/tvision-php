@@ -93,6 +93,41 @@ final class DrawBuffer
     }
 
     /** @return Cell[] the row's cells, indexed by column */
+    /** Write one cell at column $x (ignored when out of range). */
+    public function putCell(int $x, Cell $cell): void
+    {
+        if ($x < 0 || $x >= $this->width) {
+            return;
+        }
+        $this->cells[$x] = $cell;
+    }
+
+    /** The cell at column $x, or a blank when out of range. */
+    public function cellAt(int $x): Cell
+    {
+        return $this->cells[$x] ?? new Cell();
+    }
+
+    /** Copy $count cells starting at $srcX of $source into this row from $destX. */
+    public function moveBuffer(int $destX, self $source, int $srcX, int $count): void
+    {
+        for ($i = 0; $i < $count; $i++) {
+            $this->putCell($destX + $i, $source->cellAt($srcX + $i));
+        }
+    }
+
+    /** The visible text of the row (attributes ignored). */
+    public function __toString(): string
+    {
+        $text = '';
+        foreach ($this->cells as $cell) {
+            $text .= $cell->char;
+        }
+
+        return $text;
+    }
+
+    /** @return array<array-key, Cell> */
     public function cells(): array
     {
         return $this->cells;

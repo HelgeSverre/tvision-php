@@ -15,6 +15,7 @@ use HelgeSverre\TurboVision\Events\EventMask;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Support\IntMath;
+use HelgeSverre\TurboVision\Support\SizeLimits;
 use HelgeSverre\TurboVision\Terminal\Screen;
 use InvalidArgumentException;
 
@@ -152,24 +153,23 @@ class View
         }
     }
 
-    /** @return array{0:int,1:int,2:int,3:int} [minWidth, minHeight, maxWidth, maxHeight] */
-    public function sizeLimits(): array
+    public function sizeLimits(): SizeLimits
     {
         if (($this->growMode & State::GrowFixed) === 0 && $this->owner !== null) {
             $extent = $this->owner->getExtent();
 
-            return [0, 0, $extent->width(), $extent->height()];
+            return new SizeLimits(0, 0, $extent->width(), $extent->height());
         }
 
-        return [0, 0, PHP_INT_MAX, PHP_INT_MAX];
+        return new SizeLimits();
     }
 
     /** Resize and/or reposition this view, clamping its extent to sizeLimits(). */
     public function locate(Rect $bounds): void
     {
-        [$minWidth, $minHeight, $maxWidth, $maxHeight] = $this->sizeLimits();
-        $width = max($minWidth, min($maxWidth, $bounds->width()));
-        $height = max($minHeight, min($maxHeight, $bounds->height()));
+        $limits = $this->sizeLimits();
+        $width = $limits->clampWidth($bounds->width());
+        $height = $limits->clampHeight($bounds->height());
         [$width, $height] = self::fitDrawableSize($width, $height);
         $located = Rect::of(
             $bounds->a->x,
@@ -275,6 +275,21 @@ class View
         return new Point(
             IntMath::subtract($global->x, $origin->x),
             IntMath::subtract($global->y, $origin->y),
+        );
+    }
+
+    /**
+     * The inverse of makeLocal(): translate a point in this view's local
+     * coordinates into root-relative (global) space. Any drag implementation
+     * needs this to convert local anchors into screen coordinates.
+     */
+    public function localToGlobal(Point $local): Point
+    {
+        $origin = $this->absoluteOrigin();
+
+        return new Point(
+            IntMath::add($origin->x, $local->x),
+            IntMath::add($origin->y, $local->y),
         );
     }
 
@@ -402,9 +417,9 @@ class View
             $by = $this->growCoordinate($by, $ownerHeight, $delta->y);
         }
 
-        [$minWidth, $minHeight, $maxWidth, $maxHeight] = $this->sizeLimits();
-        $width = max($minWidth, min($maxWidth, IntMath::subtract($bx, $ax)));
-        $height = max($minHeight, min($maxHeight, IntMath::subtract($by, $ay)));
+        $limits = $this->sizeLimits();
+        $width = $limits->clampWidth(IntMath::subtract($bx, $ax));
+        $height = $limits->clampHeight(IntMath::subtract($by, $ay));
         [$width, $height] = self::fitDrawableSize($width, $height);
 
         $bx = IntMath::add($ax, max(0, $width));

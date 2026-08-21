@@ -74,9 +74,9 @@ test('relative resize fits generated child bounds to the drawable-cell budget', 
 
 test('calcBounds applies the view size limits after growing', function (): void {
     $view = new class(Rect::of(0, 0, 10, 5)) extends View {
-        public function sizeLimits(): array
+        public function sizeLimits(): \HelgeSverre\TurboVision\Support\SizeLimits
         {
-            return [4, 3, 12, 8];
+            return new \HelgeSverre\TurboVision\Support\SizeLimits(4, 3, 12, 8);
         }
     };
     $view->growMode = State::GrowHiX | State::GrowHiY;

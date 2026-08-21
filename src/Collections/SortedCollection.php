@@ -59,6 +59,49 @@ class SortedCollection implements Countable, IteratorAggregate
         return $low;
     }
 
+    /**
+     * Binary search for an equivalent item; returns its index or null. Equivalence
+     * means the comparator returns 0 — the same rule insertion uses.
+     *
+     * @param T $item
+     */
+    public function search(mixed $item): ?int
+    {
+        $low = 0;
+        $high = count($this->items);
+
+        while ($low < $high) {
+            $middle = $low + intdiv($high - $low, 2);
+            $order = ($this->compare)($this->items[$middle], $item);
+            if ($order === 0) {
+                return $middle;
+            }
+            if ($order < 0) {
+                $low = $middle + 1;
+            } else {
+                $high = $middle;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Remove the first equivalent item; returns whether one was found.
+     *
+     * @param T $item
+     */
+    public function remove(mixed $item): bool
+    {
+        $index = $this->search($item);
+        if ($index === null) {
+            return false;
+        }
+        array_splice($this->items, $index, 1);
+
+        return true;
+    }
+
     /** @param iterable<T> $items */
     public function replace(iterable $items): void
     {

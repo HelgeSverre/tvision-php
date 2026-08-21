@@ -15,7 +15,8 @@ test('Guide10 enforces a minimum width via sizeLimits', function (): void {
     $app->openNewWindowForTest();
 
     $win = $app->lastWindowForTest();
-    [$minW, $minH] = $win->sizeLimits();
+    $limits = $win->sizeLimits();
+    [$minW, $minH] = [$limits->minWidth, $limits->minHeight];
 
     // minWidth = left interior width + 9; with a 26-wide window the left pane is ~13 wide.
     expect($minW)->toBeGreaterThan(16);   // larger than the default 16 minimum
@@ -28,7 +29,7 @@ test('Guide10 refuses to shrink below the minimum width', function (): void {
     $app->openNewWindowForTest();
     $win = $app->lastWindowForTest();
 
-    [$minW] = $win->sizeLimits();
+    $minW = $win->sizeLimits()->minWidth;
     $win->resizeTo(Rect::of(0, 0, 4, 4)); // try to shrink tiny
 
     expect($win->getBounds()->width())->toBe($minW);

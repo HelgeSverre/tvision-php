@@ -352,10 +352,7 @@ class Editor extends View
                 if ($at === $this->curPtr && $this->hasSelection()) {
                     $at++;
                 }
-                if ($at > $last || ! $this->matchesAt($haystack, $query, $at, $options)) {
-                    continue;
-                }
-                if (($options & SearchOptions::WholeWordsOnly) !== 0 && ! $this->isWholeWordMatch($haystack, $at, count($query))) {
+                if ($at > $last || ! $this->isSearchMatchAt($haystack, $query, $at, $options)) {
                     continue;
                 }
                 $this->setSelect($at, $at + count($query), false);
@@ -405,10 +402,7 @@ class Editor extends View
         $out = [];
         $changed = 0;
         for ($at = 0, $len = count($haystack), $qLen = count($query); $at < $len;) {
-            if ($at <= $len - $qLen
-                && $this->matchesAt($haystack, $query, $at, $options)
-                && ((($options & SearchOptions::WholeWordsOnly) === 0) || $this->isWholeWordMatch($haystack, $at, $qLen))
-            ) {
+            if ($this->isSearchMatchAt($haystack, $query, $at, $options)) {
                 array_push($out, ...$replacement);
                 $at += $qLen;
                 $changed++;
@@ -440,7 +434,130 @@ class Editor extends View
         $this->replaceStr = $request->replace;
         $this->editorFlags = $request->options;
 
-        return $this->replaceAll($request->find, $request->replace, $request->options);
+        if (($request->options & SearchOptions::DoReplace) === 0) {
+            $this->find(new FindRequest($request->find, $request->options));
+
+            return 0;
+        }
+        if (($request->options & SearchOptions::ReplaceAll) !== 0) {
+            return ($request->options & SearchOptions::PromptOnReplace) !== 0
+                ? $this->replaceAllWithPrompts($request)
+                : $this->replaceAll($request->find, $request->replace, $request->options);
+        }
+
+        if (! $this->find(new FindRequest($request->find, $request->options))) {
+            return 0;
+        }
+        if (($request->options & SearchOptions::PromptOnReplace) !== 0) {
+            $version = $this->buffer->version();
+            $decision = $this->replacePromptDecision($request);
+            if ($this->buffer->version() !== $version || $decision !== Cmd::Yes) {
+                return 0;
+            }
+        }
+
+        if ($request->replace === '') {
+            $this->deleteSelect();
+        } else {
+            $this->insertText($request->replace);
+        }
+
+        return 1;
+    }
+
+    private function replaceAllWithPrompts(ReplaceRequest $request): int
+    {
+        if ($request->find === '') {
+            return 0;
+        }
+
+        $haystack = TerminalText::graphemes($this->text());
+        $query = TerminalText::graphemes($request->find);
+        if ($query === [] || count($query) > count($haystack)) {
+            return 0;
+        }
+
+        $replacement = TerminalText::graphemes($request->replace);
+        $version = $this->buffer->version();
+        $before = $this->stateSnapshot();
+        $out = [];
+        $changed = 0;
+        $finalCursor = $this->curPtr;
+        $finalSelection = null;
+        $length = count($haystack);
+        $queryLength = count($query);
+        for ($at = 0; $at < $length;) {
+            $matches = $this->isSearchMatchAt($haystack, $query, $at, $request->options);
+            if (! $matches) {
+                $out[] = $haystack[$at++];
+
+                continue;
+            }
+
+            $this->setSelect($at, $at + $queryLength, false);
+            $decision = $this->replacePromptDecision($request, $at);
+            if ($this->buffer->version() !== $version) {
+                return 0;
+            }
+            if ($decision === Cmd::Cancel) {
+                $finalSelection = [count($out), count($out) + $queryLength];
+                for (; $at < $length; $at++) {
+                    $out[] = $haystack[$at];
+                }
+                $finalCursor = $finalSelection[1];
+
+                break;
+            }
+            if ($decision === Cmd::Yes) {
+                foreach ($replacement as $grapheme) {
+                    $out[] = $grapheme;
+                }
+                $changed++;
+            } else {
+                for ($queryOffset = 0; $queryOffset < $queryLength; $queryOffset++) {
+                    $out[] = $haystack[$at + $queryOffset];
+                }
+            }
+            $at += $queryLength;
+            $finalCursor = count($out);
+            $finalSelection = null;
+        }
+
+        if ($changed === 0) {
+            return 0;
+        }
+
+        $replacementText = implode('', $out);
+        $this->buffer->setText($replacementText);
+        $this->curPtr = min($finalCursor, count($out));
+        if ($finalSelection === null) {
+            $this->selStart = $this->curPtr;
+            $this->selEnd = $this->curPtr;
+        } else {
+            $this->selStart = $finalSelection[0];
+            $this->selEnd = $finalSelection[1];
+        }
+        $this->modified = true;
+        $this->recordEdit(0, implode('', $haystack), count($haystack), $replacementText, count($out), $before);
+        $this->afterMutation();
+
+        return $changed;
+    }
+
+    private function replacePromptDecision(ReplaceRequest $request, ?int $offset = null): int
+    {
+        $offset ??= min($this->selStart, $this->selEnd);
+        $position = $this->positionOf($offset);
+        $decision = $this->notify(EditorDialogKind::ReplacePrompt, [
+            'find' => $request->find,
+            'replace' => $request->replace,
+            'match' => $this->selectedText(),
+            'offset' => $offset,
+            'line' => $position->y,
+            'column' => $position->x,
+        ]);
+
+        return in_array($decision, [Cmd::Yes, Cmd::No], true) ? $decision : Cmd::Cancel;
     }
 
     /** @param null|Closure(EditorDialogRequest):int $handler */
@@ -589,7 +706,7 @@ class Editor extends View
             Cmd::Paste => $this->paste(),
             Cmd::Clear => $this->deleteSelect(),
             Cmd::Find, Cmd::SearchAgain => $this->searchAgain(),
-            Cmd::Replace => $this->replaceAll($this->findStr, $this->replaceStr, $this->editorFlags) > 0,
+            Cmd::Replace => $this->replace(new ReplaceRequest($this->findStr, $this->replaceStr, $this->editorFlags)) > 0,
             Cmd::CharLeft => $this->moveCursor($this->curPtr - 1),
             Cmd::CharRight => $this->moveCursor($this->curPtr + 1),
             Cmd::WordLeft => $this->moveCursor($this->previousWord($this->curPtr)),
@@ -993,6 +1110,22 @@ class Editor extends View
         }
 
         return $column;
+    }
+
+    /**
+     * @param list<string> $haystack
+     * @param list<string> $query
+     */
+    private function isSearchMatchAt(array $haystack, array $query, int $at, int $options): bool
+    {
+        $queryLength = count($query);
+
+        return $queryLength > 0
+            && $at >= 0
+            && $at <= count($haystack) - $queryLength
+            && $this->matchesAt($haystack, $query, $at, $options)
+            && ((($options & SearchOptions::WholeWordsOnly) === 0)
+                || $this->isWholeWordMatch($haystack, $at, $queryLength));
     }
 
     /**

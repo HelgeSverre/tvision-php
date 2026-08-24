@@ -28,6 +28,7 @@ use HelgeSverre\TurboVision\Dialogs\RadioButtons;
 use HelgeSverre\TurboVision\Drawing\Palette;
 use HelgeSverre\TurboVision\Drivers\AnsiDriver;
 use HelgeSverre\TurboVision\Editors\EditWindow;
+use HelgeSverre\TurboVision\Editors\EditorDialogKind;
 use HelgeSverre\TurboVision\Editors\EditorDialogRequest;
 use HelgeSverre\TurboVision\Editors\FileEditor;
 use HelgeSverre\TurboVision\Editors\FindRequest;
@@ -1091,6 +1092,21 @@ PHP);
     {
         $window->setCloseResolver(fn (FileEditor $editor): bool => $this->resolveEditorChanges($editor));
         $window->editor->setDialogHandler(function (EditorDialogRequest $request): int {
+            if ($request->kind === EditorDialogKind::ReplacePrompt) {
+                $desktop = $this->desktopForTest();
+                if ($desktop === null) {
+                    return Cmd::Cancel;
+                }
+                $match = $request->context['match'] ?? '';
+                $replace = $request->context['replace'] ?? '';
+
+                return MessageBox::show(
+                    $desktop,
+                    sprintf('Replace "%s" with "%s"?', $match, $replace),
+                    MsgBoxFlag::Confirmation | MsgBoxFlag::YesNoCancel,
+                );
+            }
+
             $message = $request->context['message'] ?? 'The editor operation could not be completed.';
             $this->showEditorError(is_string($message) ? $message : 'The editor operation could not be completed.');
 
@@ -1151,7 +1167,10 @@ PHP);
             return;
         }
 
-        $options = $editor->editorFlags | SearchOptions::ReplaceAll;
+        $options = $editor->editorFlags
+            | SearchOptions::DoReplace
+            | SearchOptions::ReplaceAll
+            | SearchOptions::PromptOnReplace;
         $count = $editor->replace(new ReplaceRequest($query, $replacement, $options));
         $this->log(sprintf('Replace changed %d match%s.', $count, $count === 1 ? '' : 'es'));
     }

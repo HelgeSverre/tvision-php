@@ -78,8 +78,114 @@ test('editor exposes typed find and replace value APIs', function (): void {
 
     expect($editor->find(new FindRequest('PEAR', options: 0)))->toBeTrue()
         ->and($editor->selectedText())->toBe('pear')
-        ->and($editor->replace(new ReplaceRequest('pear', 'apple', options: 0)))->toBe(2)
+        ->and($editor->replace(new ReplaceRequest(
+            'pear',
+            'apple',
+            options: SearchOptions::DoReplace | SearchOptions::ReplaceAll,
+        )))->toBe(2)
         ->and($editor->text())->toBe('apple apple');
+});
+
+test('typed replacement can search without changing text or replace one match from the cursor', function (): void {
+    $editor = editorForTest('one two one');
+    $editor->setSelect(4, 4);
+
+    expect($editor->replace(new ReplaceRequest('one', '1', options: 0)))->toBe(0)
+        ->and($editor->selectedText())->toBe('one')
+        ->and($editor->text())->toBe('one two one');
+
+    $editor->setSelect(4, 4);
+    expect($editor->replace(new ReplaceRequest('one', '', options: SearchOptions::DoReplace)))->toBe(1)
+        ->and($editor->text())->toBe('one two ')
+        ->and($editor->undo())->toBeTrue()
+        ->and($editor->text())->toBe('one two one');
+});
+
+test('prompted replace-all honors yes no and cancel with one reversible edit', function (): void {
+    $editor = editorForTest("café CAFÉ\ncafé");
+    $decisions = [Cmd::Yes, Cmd::No, Cmd::Cancel];
+    $contexts = [];
+    $selections = [];
+    $editor->setDialogHandler(function (EditorDialogRequest $request) use ($editor, &$decisions, &$contexts, &$selections): int {
+        $contexts[] = $request->context;
+        $selections[] = $editor->selectedText();
+
+        return array_shift($decisions) ?? Cmd::Cancel;
+    });
+
+    $changed = $editor->replace(new ReplaceRequest(
+        'CAFÉ',
+        '☕',
+        SearchOptions::DoReplace | SearchOptions::ReplaceAll | SearchOptions::PromptOnReplace,
+    ));
+
+    expect($changed)->toBe(1)
+        ->and($editor->text())->toBe("☕ CAFÉ\ncafé")
+        ->and($selections)->toBe(['café', 'CAFÉ', 'café'])
+        ->and(array_column($contexts, 'offset'))->toBe([0, 5, 10])
+        ->and(array_column($contexts, 'line'))->toBe([0, 0, 1])
+        ->and(array_column($contexts, 'column'))->toBe([0, 5, 0])
+        ->and(array_column($contexts, 'find'))->toBe(['CAFÉ', 'CAFÉ', 'CAFÉ'])
+        ->and(array_column($contexts, 'replace'))->toBe(['☕', '☕', '☕'])
+        ->and($editor->undoDepth())->toBe(1)
+        ->and($editor->undo())->toBeTrue()
+        ->and($editor->text())->toBe("café CAFÉ\ncafé");
+});
+
+test('prompted replacement defaults to cancel when no dialog handler is installed', function (): void {
+    $editor = editorForTest('one one');
+
+    expect($editor->replace(new ReplaceRequest(
+        'one',
+        '1',
+        SearchOptions::DoReplace | SearchOptions::ReplaceAll | SearchOptions::PromptOnReplace,
+    )))->toBe(0)
+        ->and($editor->text())->toBe('one one')
+        ->and($editor->selectedText())->toBe('one')
+        ->and($editor->lastDialog?->kind)->toBe(EditorDialogKind::ReplacePrompt);
+});
+
+test('prompted replace-all handles adjacent matches without rescanning replacements', function (): void {
+    $editor = editorForTest('aaaa');
+    $editor->setDialogHandler(static fn (EditorDialogRequest $_request): int => Cmd::Yes);
+
+    expect($editor->replace(new ReplaceRequest(
+        'aa',
+        'aaa',
+        SearchOptions::DoReplace | SearchOptions::ReplaceAll | SearchOptions::PromptOnReplace,
+    )))->toBe(2)
+        ->and($editor->text())->toBe('aaaaaa');
+});
+
+test('replace command dispatch honors the configured prompt flags', function (): void {
+    $editor = editorForTest('one two');
+    $editor->findStr = 'one';
+    $editor->replaceStr = '1';
+    $editor->editorFlags = SearchOptions::DoReplace | SearchOptions::PromptOnReplace;
+    $editor->setSelect(4, 4);
+    $editor->setDialogHandler(static fn (EditorDialogRequest $_request): int => Cmd::Yes);
+    $event = Event::command(Cmd::Replace);
+
+    $editor->handleEvent($event);
+
+    expect($event->isNothing())->toBeTrue()
+        ->and($editor->text())->toBe('1 two');
+});
+
+test('prompted replacement never overwrites a re-entrant handler edit', function (): void {
+    $editor = editorForTest('one one');
+    $editor->setDialogHandler(function (EditorDialogRequest $_request) use ($editor): int {
+        $editor->setText('changed by handler', true);
+
+        return Cmd::Yes;
+    });
+
+    expect($editor->replace(new ReplaceRequest(
+        'one',
+        '1',
+        SearchOptions::DoReplace | SearchOptions::ReplaceAll | SearchOptions::PromptOnReplace,
+    )))->toBe(0)
+        ->and($editor->text())->toBe('changed by handler');
 });
 
 test('editor consumes printable and navigation key events', function (): void {

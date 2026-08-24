@@ -96,10 +96,16 @@ Final state: **Pest 756+ passed / PHPStan max clean** after every commit.
   benchmark justified the change; multi-row writes now reuse invariant screen,
   origin, and ancestor clipping state while computing sibling occlusion per row.
 
-## ⏸ Remaining post-0.1.2 candidates
+## ✅ Completed for 0.2.0
+
+- [x] **SearchOptions replacement flags honored interactively** — typed replace
+  requests now distinguish search-only, replace-one, replace-all, and prompted
+  operation; prompts carry match coordinates and accept Yes/No/Cancel through the
+  existing dialog handler. Kitchen Sink exercises the real modal workflow.
+
+## ⏸ Remaining post-0.2.0 candidates
 
 - [ ] **`focusNext()`/`focusPrevious()` alias removal** — public-API surface decision for the owner.
-- [ ] **SearchOptions::PromptOnReplace honored interactively** — documented as reserved; real implementation wants a prompt-callback design discussion.
 
 ## ✔ Closed decisions (no code change)
 
@@ -114,8 +120,8 @@ Final state: **Pest 756+ passed / PHPStan max clean** after every commit.
 ## Verification
 
 ```
-composer test   # 760 passed, 1 skipped (real-terminal suite opt-in)
+composer test   # 766 passed, 1 skipped (real-terminal suite opt-in)
 composer stan   # PHPStan level max: No errors
-composer fuzz   # 10 seeded suites / 16,128 cases green in the 0.1.2 release pass
+composer fuzz   # 10 seeded suites / 16,128 cases green in the 0.2.0 release pass
 composer bench  # deep 120×30 write through 8 owners: ~40% faster in the 0.1.2 pass
 ```

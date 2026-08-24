@@ -4,6 +4,14 @@ All notable changes to TurboVision for PHP will be documented in this file.
 
 ## Unreleased
 
+## 0.2.0 - 2026-08-24
+
+- Made typed editor replacement honor `DoReplace`, `ReplaceAll`, and
+  `PromptOnReplace`, with structured per-match context and Yes/No/Cancel decisions.
+- Kept explicit `replaceAll()` calls unconditional while making prompted batches
+  one reversible edit across Unicode, adjacent, skipped, and cancelled matches.
+- Added a real per-match replacement confirmation flow to the Kitchen Sink editor.
+
 ## 0.1.2 - 2026-08-24
 
 - Reused invariant screen, origin, and ancestor-clipping context across multi-row

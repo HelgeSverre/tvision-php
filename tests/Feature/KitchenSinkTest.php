@@ -342,6 +342,8 @@ test('editor menu workflows find replace and atomically save an untitled buffer'
 
     queueKitchenSinkInput($app, 'alpha');
     queueKitchenSinkInput($app, 'omega');
+    $app->putEvent(Event::command(Cmd::Yes));
+    $app->putEvent(Event::command(Cmd::Yes));
     $app->dispatchForTest(Event::command(Cmd::Replace));
     expect($editor->text())->toBe('omega omega');
 

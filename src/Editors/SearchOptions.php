@@ -7,11 +7,10 @@ namespace HelgeSverre\TurboVision\Editors;
 /**
  * Editor search/replace flags, retaining the original ef* bit values.
  *
- * Honored today: CaseSensitive, WholeWordsOnly, BackupFiles. Replacement is
- * always whole-document (ReplaceAll semantics); PromptOnReplace and DoReplace
- * are reserved bit values accepted for source compatibility but not yet wired
- * to an interactive prompt — see Editor::setDialogHandler() for the extension
- * point applications can use for custom find/replace UIs.
+ * CaseSensitive and WholeWordsOnly affect matching. ReplaceRequest additionally
+ * honors DoReplace, ReplaceAll, and PromptOnReplace; prompt decisions are supplied
+ * through Editor::setDialogHandler(). BackupFiles is consumed by FileEditor.
+ * Editor::replaceAll() remains an explicit unconditional bulk operation.
  */
 final class SearchOptions
 {

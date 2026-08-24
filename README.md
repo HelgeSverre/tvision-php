@@ -186,7 +186,20 @@ Capabilities can also be forced for unusual terminal setups:
 TVISION_SYNC_UPDATE=1 TVISION_KITTY_KEYBOARD=1 php your-app.php
 ```
 
-## Try it
+## Install
+
+TurboVision is available as a Composer package and requires PHP 8.5 with
+`ext-mbstring`:
+
+```bash
+composer require helgesverre/turbovision:^0.1
+```
+
+The `0.x` series is a preview. It is ready for building applications, but public
+APIs may still change between minor releases as the framework is exercised by
+downstream projects.
+
+## Try it from source
 
 TurboVision currently targets PHP 8.5 on POSIX terminals.
 
@@ -278,4 +291,4 @@ suite, while `composer test` always remains the canonical full verification comm
 This port is based on Sergio Sigala's UNIX port of Turbo Vision 2.0 (TVision 0.8),
 itself a port of Borland's public-domain Turbo Vision. See the
 [reference notes](docs/references/README.md) and
-[upstream copyright](docs/references/UPSTREAM-COPYRIGHT.txt) for details.
+[`NOTICE`](NOTICE) for licensing and attribution details.

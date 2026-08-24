@@ -83,7 +83,11 @@ Final state: **Pest 756+ passed / PHPStan max clean** after every commit.
 - [x] PictureNodeType enum · AnsiDriver::forStdio · injectable decoder clock
 - [x] Application::runningAsMain · Support\Clipboard
 
-## ⏸ Deferred (deliberate, with reasons)
+## ⏸ Post-0.1.0 (deliberate, non-blocking)
+
+The review leftovers below are follow-up work, not release blockers. The 0.1.0
+gate is the tested framework surface documented in README.md; these items can
+land in later 0.x releases without weakening that contract.
 
 - [ ] **Occlusion row-math consolidation** (`View.php` vs `Group.php`) — hottest render path; behavior is test-pinned but the merge deserves a dedicated pass with visual snapshots.
 - [ ] **Desktop's unreachable tile branch** — removal needs the missing `mostEqualDivisors` regression test written first.

@@ -1,0 +1,18 @@
+TurboVision for PHP
+Copyright (c) 2026 Helge Sverre
+
+This project is a clean PHP reimplementation of the Turbo Vision text-mode
+application framework. The PHP implementation is licensed under the MIT
+License; see LICENSE.
+
+Turbo Vision was created by Borland International. Borland released the
+original Turbo Vision source code to the public while retaining its copyright.
+
+The primary behavioral reference for this project is TVision 0.8, Sergio
+Sigala's UNIX port of Turbo Vision 2.0. Sigala's changes are copyright (c) 1997
+Sergio Sigala, Brescia, Italy, and are distributed under the BSD-style terms
+preserved in docs/references/UPSTREAM-COPYRIGHT.txt.
+
+The repository contains upstream C++ reference material and examples under
+docs/references/ and examples/cpp/. Those files retain their original notices
+and terms and are not covered by the MIT license for the PHP implementation.

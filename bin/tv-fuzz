@@ -829,7 +829,7 @@ function fuzzPtyResizeStorm(int $iterations, int $seed): int
     ];
     /** @var array<int, resource> $pipes */
     $pipes = [];
-    $process = @proc_open(['php', $example], $descriptors, $pipes, dirname($example));
+    $process = @proc_open([PHP_BINARY, $example], $descriptors, $pipes, dirname($example));
     if (! is_resource($process)) {
         return 0;
     }

@@ -69,6 +69,55 @@ test('desktop tiles only visible tileable views in the faithful reverse Z-order'
         ->and($windows[3]->getBounds())->toEqual(Rect::of(0, 0, 6, 4));
 });
 
+test('desktop tiling uses the closest exact factor grid in either orientation', function (): void {
+    $cases = [
+        1 => [1, 1],
+        2 => [1, 2],
+        3 => [1, 3],
+        4 => [2, 2],
+        5 => [1, 5],
+        6 => [2, 3],
+        8 => [2, 4],
+        9 => [3, 3],
+        10 => [2, 5],
+        12 => [3, 4],
+    ];
+
+    foreach ($cases as $count => [$rowFirstColumns, $rowFirstRows]) {
+        foreach ([false, true] as $columnsFirst) {
+            $desk = new Desktop(Rect::of(0, 0, 120, 120));
+            $desk->tileColumnsFirst = $columnsFirst;
+            $views = [];
+            for ($i = 0; $i < $count; $i++) {
+                $view = new View(Rect::of(0, 0, 1, 1));
+                $view->options |= State::Tileable;
+                $desk->insert($view);
+                $views[] = $view;
+            }
+
+            $desk->tile($desk->getExtent());
+
+            $columns = $columnsFirst ? $rowFirstRows : $rowFirstColumns;
+            $rows = $columnsFirst ? $rowFirstColumns : $rowFirstRows;
+            $bounds = array_map(static fn (View $view): Rect => $view->getBounds(), $views);
+            $xOrigins = array_values(array_unique(array_map(static fn (Rect $rect): int => $rect->a->x, $bounds)));
+            $yOrigins = array_values(array_unique(array_map(static fn (Rect $rect): int => $rect->a->y, $bounds)));
+
+            expect($xOrigins)->toHaveCount($columns, "{$count} views, columnsFirst=" . (int) $columnsFirst)
+                ->and($yOrigins)->toHaveCount($rows, "{$count} views, columnsFirst=" . (int) $columnsFirst)
+                ->and(array_sum(array_map(static fn (Rect $rect): int => $rect->width() * $rect->height(), $bounds)))
+                ->toBe(120 * 120, "{$count} views must cover the tiling bounds exactly");
+
+            foreach ($bounds as $index => $rect) {
+                expect($desk->getExtent()->containsRect($rect))->toBeTrue();
+                foreach (array_slice($bounds, $index + 1) as $other) {
+                    expect($rect->intersects($other))->toBeFalse();
+                }
+            }
+        }
+    }
+});
+
 test('desktop cascades tileable views and reports arrangements that cannot fit', function (): void {
     $desk = new class(Rect::of(0, 0, 10, 6)) extends Desktop {
         public bool $failed = false;

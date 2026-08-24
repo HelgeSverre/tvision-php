@@ -83,25 +83,33 @@ Final state: **Pest 756+ passed / PHPStan max clean** after every commit.
 - [x] PictureNodeType enum · AnsiDriver::forStdio · injectable decoder clock
 - [x] Application::runningAsMain · Support\Clipboard
 
-## ⏸ Post-0.1.0 (deliberate, non-blocking)
+## ✅ Completed for 0.1.1
 
-The review leftovers below are follow-up work, not release blockers. The 0.1.0
-gate is the tested framework surface documented in README.md; these items can
-land in later 0.x releases without weakening that contract.
+- [x] **Occlusion row-math consolidation** (`View.php` / `Group.php`) — shared
+  overflow-safe row intersection, pinned for opaque and transparent nested views.
+- [x] **Desktop's unreachable tile branch** — exact-factor behavior is covered
+  across prime/composite counts and both orientations; dead uneven-grid path removed.
 
-- [ ] **Occlusion row-math consolidation** (`View.php` vs `Group.php`) — hottest render path; behavior is test-pinned but the merge deserves a dedicated pass with visual snapshots.
-- [ ] **Desktop's unreachable tile branch** — removal needs the missing `mostEqualDivisors` regression test written first.
+## ⏸ Remaining post-0.1.1 candidates
+
 - [ ] **`focusNext()`/`focusPrevious()` alias removal** — public-API surface decision for the owner.
 - [ ] **View::writeRowCells clip-context caching** — LOW perf item; O(rows×depth) recomputation stands until profiling justifies it.
-- [ ] **Remaining one-off inline clamps** (MessageBox/Button/Frame single-use sites) — clamp there adds an import for no readability gain.
-- [ ] **0x07 default-attr sweep to `Cell::blank()`** — named constructors exist; sweeping every draw call is cosmetic churn.
 - [ ] **SearchOptions::PromptOnReplace honored interactively** — documented as reserved; real implementation wants a prompt-callback design discussion.
-- [ ] **calendar.php / studio.php custom guards** — they pass constructor args; genuinely bespoke entry points, not boilerplate.
+
+## ✔ Closed decisions (no code change)
+
+- [x] **Remaining one-off inline clamps** (MessageBox/Button/Frame single-use
+  sites) stay inline; an import would reduce readability.
+- [x] **0x07 default-attr sweep to `Cell::blank()`** is declined; named
+  constructors are available, while changing attribute-bearing draw calls would
+  be cosmetic churn.
+- [x] **calendar.php / studio.php custom guards** remain bespoke because their
+  application constructors require arguments.
 
 ## Verification
 
 ```
-composer test   # 756 passed, 1 skipped (real-terminal suite opt-in), per-commit green
+composer test   # 759 passed, 1 skipped (real-terminal suite opt-in)
 composer stan   # PHPStan level max: No errors
-composer fuzz   # seeded suites available; decoder/screen changes covered by regression tests above
+composer fuzz   # 10 seeded suites / 16,128 cases green in the 0.1.1 release pass
 ```

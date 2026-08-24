@@ -11,7 +11,6 @@ use HelgeSverre\TurboVision\Events\EventType;
 use HelgeSverre\TurboVision\Exceptions\InputClosedException;
 use HelgeSverre\TurboVision\Geometry\Point;
 use HelgeSverre\TurboVision\Geometry\Rect;
-use HelgeSverre\TurboVision\Support\IntMath;
 use InvalidArgumentException;
 
 /**
@@ -368,23 +367,13 @@ class Group extends View
      */
     public function occlusionIntervals(int $globalY, int $minX, int $maxX): array
     {
-        if (! $this->getState(State::Visible) || $minX >= $maxX) {
+        $interval = OcclusionRow::clip($this, $globalY, $minX, $maxX);
+        if ($interval === null) {
             return [];
         }
-
-        $origin = $this->absoluteOrigin();
-        $bottom = IntMath::add($origin->y, $this->bounds->height());
-        if ($globalY < $origin->y || $globalY >= $bottom) {
-            return [];
-        }
-
-        $start = max($minX, $origin->x);
-        $end = min($maxX, IntMath::add($origin->x, $this->bounds->width()));
-        if ($start >= $end) {
-            return [];
-        }
+        [$start, $end] = $interval;
         if ($this->isOpaque()) {
-            return [[$start, $end]];
+            return [$interval];
         }
 
         $intervals = [];

@@ -120,6 +120,41 @@ test('transparent groups occlude only their opaque descendants', function (): vo
     expect($screen->back()->rows()[0])->toBe('AAAABBBBAAAA');
 });
 
+test('row occlusion clips consistently to visibility, extents, and caller bounds', function (): void {
+    $view = new View(Rect::of(-4, 2, 6, 5));
+
+    expect($view->occlusionIntervals(2, 0, 10))->toBe([[0, 6]])
+        ->and($view->occlusionIntervals(4, 3, 5))->toBe([[3, 5]])
+        ->and($view->occlusionIntervals(5, 0, 10))->toBe([])
+        ->and($view->occlusionIntervals(2, 5, 5))->toBe([]);
+
+    $view->hide();
+    expect($view->occlusionIntervals(2, 0, 10))->toBe([]);
+
+    $edge = new View(Rect::of(PHP_INT_MAX - 4, 0, PHP_INT_MAX, 1));
+    expect($edge->occlusionIntervals(0, PHP_INT_MAX - 2, PHP_INT_MAX))
+        ->toBe([[PHP_INT_MAX - 2, PHP_INT_MAX]]);
+});
+
+test('transparent group descendant occlusion is clipped to the group row interval', function (): void {
+    $root = new Group(Rect::of(0, 0, 12, 4));
+    $group = new class(Rect::of(3, 1, 9, 3)) extends Group {
+        public function isOpaque(): bool
+        {
+            return false;
+        }
+    };
+    $left = new View(Rect::of(-2, 0, 5, 2));
+    $right = new View(Rect::of(4, 0, 10, 2));
+    $group->insert($left);
+    $group->insert($right);
+    $root->insert($group);
+
+    expect($group->occlusionIntervals(1, 0, 12))->toBe([[3, 8], [7, 9]])
+        ->and($group->occlusionIntervals(0, 0, 12))->toBe([])
+        ->and($group->occlusionIntervals(3, 0, 12))->toBe([]);
+});
+
 test('exposed is false when higher-Z siblings cover every visible cell', function (): void {
     $screen = new Screen(new HeadlessDriver(4, 1));
     $screen->init();

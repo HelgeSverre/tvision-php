@@ -126,12 +126,11 @@ class Desktop extends Group
             return;
         }
 
-        $leftOver = $count % $columns;
         $placements = [];
         foreach ($tileable as $index => $view) {
             // TDeskTop walks views back-to-front while tileNum counts down.
             $position = $count - $index - 1;
-            $placement = $this->tileRect($position, $bounds, $columns, $rows, $leftOver);
+            $placement = $this->tileRect($position, $bounds, $columns, $rows);
             if (! $this->fitsMinimumSize($view, $placement)) {
                 $this->tileError();
 
@@ -230,26 +229,16 @@ class Desktop extends Group
         return $favorRows ? [$smaller, $larger] : [$larger, $smaller];
     }
 
-    private function tileRect(int $position, Rect $bounds, int $columns, int $rows, int $leftOver): Rect
+    private function tileRect(int $position, Rect $bounds, int $columns, int $rows): Rect
     {
-        $shortColumns = $columns - $leftOver;
-        $shortArea = $shortColumns * $rows;
-        if ($position < $shortArea) {
-            $x = intdiv($position, $rows);
-            $y = $position % $rows;
-            $rowCount = $rows;
-        } else {
-            $longRows = $rows + 1;
-            $x = intdiv($position - $shortArea, $longRows) + $shortColumns;
-            $y = ($position - $shortArea) % $longRows;
-            $rowCount = $longRows;
-        }
+        $x = intdiv($position, $rows);
+        $y = $position % $rows;
 
         return Rect::of(
             $this->divider($bounds->a->x, $bounds->b->x, $columns, $x),
-            $this->divider($bounds->a->y, $bounds->b->y, $rowCount, $y),
+            $this->divider($bounds->a->y, $bounds->b->y, $rows, $y),
             $this->divider($bounds->a->x, $bounds->b->x, $columns, $x + 1),
-            $this->divider($bounds->a->y, $bounds->b->y, $rowCount, $y + 1),
+            $this->divider($bounds->a->y, $bounds->b->y, $rows, $y + 1),
         );
     }
 

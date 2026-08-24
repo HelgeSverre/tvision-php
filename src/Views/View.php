@@ -329,20 +329,9 @@ class View
      */
     public function occlusionIntervals(int $globalY, int $minX, int $maxX): array
     {
-        if (! $this->getState(State::Visible) || ! $this->isOpaque() || $minX >= $maxX) {
-            return [];
-        }
+        $interval = OcclusionRow::clip($this, $globalY, $minX, $maxX);
 
-        $origin = $this->absoluteOrigin();
-        $bottom = IntMath::add($origin->y, $this->bounds->height());
-        if ($globalY < $origin->y || $globalY >= $bottom) {
-            return [];
-        }
-
-        $start = max($minX, $origin->x);
-        $end = min($maxX, IntMath::add($origin->x, $this->bounds->width()));
-
-        return $start < $end ? [[$start, $end]] : [];
+        return $interval === null || ! $this->isOpaque() ? [] : [$interval];
     }
 
     /** Whether at least one screen cell remains visible after higher-Z sibling clipping. */

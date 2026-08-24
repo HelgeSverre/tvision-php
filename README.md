@@ -121,7 +121,7 @@ The repository includes six larger applications built entirely on the framework:
 | **BIOS** | A Phoenix-era setup utility with the iconic cyan/blue/gray palette, tabbed settings, editing, contextual help, and keyboard legends | `composer demo:bios` |
 | **OpenCode UI study** | A source-guided, model-free recreation of OpenCode's centered home, session transcript, prompt composer, model picker, permission, working, and error states | `composer demo:opencode` |
 
-The repository also ships the full `tvguid11`–`tvguid16` tutorial set and focused
+The repository also ships the full `tvguid01`–`tvguid16` tutorial set and focused
 ports of historic acceptance examples for backgrounds, list boxes, validation, text
 devices, life, resource loading, and the editor. They are deliberately small,
 runnable reference applications rather than a claim that every screen of the original
@@ -192,12 +192,25 @@ TurboVision is available as a Composer package and requires PHP 8.5 with
 `ext-mbstring`:
 
 ```bash
-composer require helgesverre/turbovision:^0.1
+composer require helgesverre/turbovision
 ```
 
-The `0.x` series is a preview. It is ready for building applications, but public
-APIs may still change between minor releases as the framework is exercised by
-downstream projects.
+## Documentation
+
+Start by [building an application](site/tutorials/first-application.md), follow the
+[guide](site/tutorials/guide/), browse the [cookbook](site/cookbook/), or use the
+[component catalog](site/reference/component-catalog.md) to find a control. There
+are focused recipes for application structure, events, menus, dialogs, editors,
+testing, help, and persistence.
+
+The Markdown and custom VitePress site live together under [`site/`](site/). To
+run the documentation locally:
+
+```bash
+cd site
+npm install
+npm run dev
+```
 
 ## Try it from source
 

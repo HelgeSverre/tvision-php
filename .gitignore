@@ -9,6 +9,9 @@ composer.lock
 .phpstan.cache/
 /build/
 /coverage/
+/site/node_modules/
+/site/.vitepress/cache/
+/site/.vitepress/dist/
 
 # Turbo Vision runtime logs (TVLOG)
 *.tvlog

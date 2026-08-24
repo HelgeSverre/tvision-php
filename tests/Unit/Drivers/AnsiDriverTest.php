@@ -20,6 +20,22 @@ function memoryStreams(): array
     return [$in, $out];
 }
 
+/** @return resource */
+function interruptedWriteStream(string $scheme)
+{
+    if (! stream_wrapper_register($scheme, InterruptedWriteStream::class)) {
+        throw new RuntimeException("Failed to register {$scheme} stream wrapper.");
+    }
+
+    $stream = fopen("{$scheme}://terminal", 'wb');
+    if ($stream === false) {
+        stream_wrapper_unregister($scheme);
+        throw new RuntimeException("Failed to open {$scheme} test stream.");
+    }
+
+    return $stream;
+}
+
 test('init throws DriverException when STDIN/STDOUT is not a TTY', function (): void {
     [$in, $out] = memoryStreams();
     $driver = new AnsiDriver($in, $out, fn (string $cmd): string => '80 24');
@@ -74,13 +90,11 @@ test('write reports a closed output stream as a driver failure', function (): vo
 });
 
 test('write survives repeated EINTR and transient zero-byte stalls', function (): void {
-    assert(stream_wrapper_register('tv-interrupted-write', InterruptedWriteStream::class));
     InterruptedWriteStream::$interruptsRemaining = 32;
     InterruptedWriteStream::$silentStallsRemaining = 32;
     InterruptedWriteStream::$written = '';
     [$input] = memoryStreams();
-    $output = fopen('tv-interrupted-write://terminal', 'wb');
-    assert($output !== false);
+    $output = interruptedWriteStream('tv-interrupted-write');
 
     try {
         $driver = new AnsiDriver($input, $output, fn (string $cmd): string => '24 80');
@@ -95,12 +109,10 @@ test('write survives repeated EINTR and transient zero-byte stalls', function ()
 });
 
 test('write still fails within a bounded interval when output never makes progress', function (): void {
-    assert(stream_wrapper_register('tv-stalled-write', InterruptedWriteStream::class));
     InterruptedWriteStream::$interruptsRemaining = 0;
     InterruptedWriteStream::$silentStallsRemaining = 1_000;
     [$input] = memoryStreams();
-    $output = fopen('tv-stalled-write://terminal', 'wb');
-    assert($output !== false);
+    $output = interruptedWriteStream('tv-stalled-write');
 
     try {
         $driver = new AnsiDriver($input, $output, fn (string $cmd): string => '24 80');
@@ -115,12 +127,10 @@ test('write still fails within a bounded interval when output never makes progre
 });
 
 test('write bounds an endless sequence of signal interruptions', function (): void {
-    assert(stream_wrapper_register('tv-endless-eintr-write', InterruptedWriteStream::class));
     InterruptedWriteStream::$interruptsRemaining = 1_000;
     InterruptedWriteStream::$silentStallsRemaining = 0;
     [$input] = memoryStreams();
-    $output = fopen('tv-endless-eintr-write://terminal', 'wb');
-    assert($output !== false);
+    $output = interruptedWriteStream('tv-endless-eintr-write');
 
     try {
         $driver = new AnsiDriver($input, $output, fn (string $cmd): string => '24 80');

@@ -90,10 +90,15 @@ Final state: **Pest 756+ passed / PHPStan max clean** after every commit.
 - [x] **Desktop's unreachable tile branch** — exact-factor behavior is covered
   across prime/composite counts and both orientations; dead uneven-grid path removed.
 
-## ⏸ Remaining post-0.1.1 candidates
+## ✅ Completed for 0.1.2
+
+- [x] **View::writeRowCells clip-context caching** — a repeatable deep-view
+  benchmark justified the change; multi-row writes now reuse invariant screen,
+  origin, and ancestor clipping state while computing sibling occlusion per row.
+
+## ⏸ Remaining post-0.1.2 candidates
 
 - [ ] **`focusNext()`/`focusPrevious()` alias removal** — public-API surface decision for the owner.
-- [ ] **View::writeRowCells clip-context caching** — LOW perf item; O(rows×depth) recomputation stands until profiling justifies it.
 - [ ] **SearchOptions::PromptOnReplace honored interactively** — documented as reserved; real implementation wants a prompt-callback design discussion.
 
 ## ✔ Closed decisions (no code change)
@@ -109,7 +114,8 @@ Final state: **Pest 756+ passed / PHPStan max clean** after every commit.
 ## Verification
 
 ```
-composer test   # 759 passed, 1 skipped (real-terminal suite opt-in)
+composer test   # 760 passed, 1 skipped (real-terminal suite opt-in)
 composer stan   # PHPStan level max: No errors
-composer fuzz   # 10 seeded suites / 16,128 cases green in the 0.1.1 release pass
+composer fuzz   # 10 seeded suites / 16,128 cases green in the 0.1.2 release pass
+composer bench  # deep 120×30 write through 8 owners: ~40% faster in the 0.1.2 pass
 ```

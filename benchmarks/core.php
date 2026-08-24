@@ -14,6 +14,8 @@ use HelgeSverre\TurboVision\Geometry\Rect;
 use HelgeSverre\TurboVision\Rendering\DiffPresenter;
 use HelgeSverre\TurboVision\Rendering\HtmlRenderer;
 use HelgeSverre\TurboVision\Terminal\Screen;
+use HelgeSverre\TurboVision\Views\Group;
+use HelgeSverre\TurboVision\Views\View;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -69,6 +71,31 @@ $screen->flush();
 $driver->takeOutput();
 $drawText = str_repeat('Turbo Vision ', 14);
 
+$nestedDriver = new HeadlessDriver(160, 50);
+$nestedScreen = new Screen($nestedDriver);
+$nestedScreen->init();
+$nestedRoot = new class($nestedScreen) extends Group {
+    public function __construct(private readonly Screen $rootScreen)
+    {
+        parent::__construct(Rect::of(0, 0, $rootScreen->cols(), $rootScreen->rows()));
+    }
+
+    public function screen(): Screen
+    {
+        return $this->rootScreen;
+    }
+};
+$nestedOwner = $nestedRoot;
+for ($depth = 0; $depth < 8; $depth++) {
+    $group = new Group(Rect::of(1, 1, 159 - $depth * 2, 49 - $depth * 2));
+    $nestedOwner->insert($group);
+    $nestedOwner = $group;
+}
+$nestedView = new View(Rect::of(1, 1, 121, 31));
+$nestedOwner->insert($nestedView);
+$nestedRow = new DrawBuffer(120);
+$nestedRow->moveChar(0, 'x', 0x1F, 120);
+
 $cases = [
     'text.graphemes.ascii' => [static fn (): array => TerminalText::graphemes($ascii), 1000],
     'text.graphemes.unicode' => [static fn (): array => TerminalText::graphemes($unicode), 1000],
@@ -86,6 +113,10 @@ $cases = [
         $screen->flush();
         $driver->takeOutput();
     }, 100],
+    'view.write-line-120x30-depth8' => [
+        static fn () => $nestedView->writeLine(0, 0, 120, 30, $nestedRow),
+        200,
+    ],
 ];
 
 $results = [];

@@ -767,8 +767,12 @@ class View
         }
 
         $visibleRows = min($h - $skippedRows, $height - $targetY);
+        $context = $this->writeContext();
+        if ($context === null) {
+            return;
+        }
         for ($row = 0; $row < $visibleRows; $row++) {
-            $this->writeRowCells($x, $targetY + $row, $w, $cells);
+            $this->writeRowCellsInContext($x, $targetY + $row, $w, $cells, $context);
         }
     }
 
@@ -795,20 +799,26 @@ class View
      */
     private function writeRowCells(int $localX, int $localY, int $count, array $cells): void
     {
-        if ($count <= 0) {
+        if ($count <= 0 || $localY < 0 || $localY >= $this->bounds->height()) {
             return;
         }
 
-        $screen = $this->screen();
-        if ($screen === null) {
+        $context = $this->writeContext();
+        if ($context === null) {
             return;
         }
-        if ($localY < 0 || $localY >= $this->bounds->height()) {
-            return;
+        $this->writeRowCellsInContext($localX, $localY, $count, $cells, $context);
+    }
+
+    /** @return null|array{origin:Point,back:Buffer,clip:Rect} */
+    private function writeContext(): ?array
+    {
+        $screen = $this->screen();
+        if ($screen === null) {
+            return null;
         }
 
         $origin = $this->absoluteOrigin();
-        $back = $screen->back();
         $clip = Rect::of(
             $origin->x,
             $origin->y,
@@ -827,6 +837,28 @@ class View
             $ancestor = $ancestor->owner;
         }
         $clip = $clip->intersect(Rect::of(0, 0, $screen->cols(), $screen->rows()));
+
+        return ['origin' => $origin, 'back' => $screen->back(), 'clip' => $clip];
+    }
+
+    /**
+     * @param Cell[] $cells
+     * @param array{origin:Point,back:Buffer,clip:Rect} $context
+     */
+    private function writeRowCellsInContext(
+        int $localX,
+        int $localY,
+        int $count,
+        array $cells,
+        array $context,
+    ): void {
+        if ($localY < 0 || $localY >= $this->bounds->height()) {
+            return;
+        }
+
+        $origin = $context['origin'];
+        $back = $context['back'];
+        $clip = $context['clip'];
         $globalY = IntMath::add($origin->y, $localY);
         if ($clip->isEmpty() || $globalY < $clip->a->y || $globalY >= $clip->b->y) {
             return;

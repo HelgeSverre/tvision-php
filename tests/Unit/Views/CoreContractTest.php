@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use HelgeSverre\TurboVision\Drawing\DrawBuffer;
 use HelgeSverre\TurboVision\Events\Cmd;
 use HelgeSverre\TurboVision\Events\Event;
 use HelgeSverre\TurboVision\Events\EventMask;
@@ -83,6 +84,40 @@ test('a rear view direct redraw never paints over higher-Z siblings, including n
     $rear->drawView();
 
     expect($screen->back()->rows()[0])->toBe('░AAABBBBBB░░');
+});
+
+test('multi-row writes reuse clipping while keeping row-specific sibling occlusion', function (): void {
+    $screen = new Screen(new HeadlessDriver(10, 5));
+    $screen->init();
+    $root = new class(Rect::of(0, 0, 10, 5), $screen) extends Group {
+        public function __construct(Rect $bounds, private readonly Screen $rootScreen)
+        {
+            parent::__construct($bounds);
+        }
+
+        public function screen(): Screen
+        {
+            return $this->rootScreen;
+        }
+    };
+    $owner = new Group(Rect::of(2, 1, 8, 4));
+    $rear = new View(Rect::of(-1, -1, 7, 4));
+    $front = new View(Rect::of(2, 1, 4, 2));
+    $row = new DrawBuffer(8);
+    $row->moveChar(0, 'A', 0x07, 8);
+    $owner->insert($rear);
+    $owner->insert($front);
+    $root->insert($owner);
+
+    $rear->writeLine(0, 0, 8, 4, $row);
+
+    expect($screen->back()->rows())->toBe([
+        '          ',
+        '  AAAAAA  ',
+        '  AA  AA  ',
+        '  AAAAAA  ',
+        '          ',
+    ]);
 });
 
 test('transparent groups occlude only their opaque descendants', function (): void {

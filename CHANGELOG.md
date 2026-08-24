@@ -4,6 +4,13 @@ All notable changes to TurboVision for PHP will be documented in this file.
 
 ## Unreleased
 
+## 0.1.2 - 2026-08-24
+
+- Reused invariant screen, origin, and ancestor-clipping context across multi-row
+  view writes while retaining row-specific sibling occlusion.
+- Added a repeatable deep-view rendering benchmark; the targeted 120×30 write
+  through eight nested owners improved by about 40% in the release pass.
+
 ## 0.1.1 - 2026-08-24
 
 - Pinned Desktop tiling across prime and composite view counts in both row-first
